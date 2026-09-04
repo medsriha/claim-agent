@@ -28,17 +28,23 @@ export function Thread({ messages, working, caseId, onRetry }: ThreadProps): Rea
   // Only what the system reports spins. The representative's own line and the screen's own
   // notes are nobody working on anything, so they arrive settled.
   const spins = useMemo(() => messages.map((one) => one.speaker === "system"), [messages]);
-  const { stateOf, arrived } = useReveal(messages.length, spins);
-  const foot = useRef<HTMLDivElement>(null);
+  const { stateOf, progress } = useReveal(messages.length, spins);
+  const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Keeps the newest message in view as the conversation grows. Harmless when nothing
-    // scrolls, and the browser decides whether to animate it.
-    foot.current?.scrollIntoView({ block: "end" });
-  }, [arrived, working]);
+    const box = scroller.current;
+    if (box === null) {
+      return;
+    }
+    // Moved by hand rather than by asking an element to bring itself into view: that would
+    // also scroll every scrollable thing around it, and this is the only region on the page
+    // that should ever move. Runs on both halves of a message's arrival, because a message
+    // settling is what grows it from one line into the whole finding.
+    box.scrollTop = box.scrollHeight;
+  }, [progress, working]);
 
   return (
-    <div className="thread">
+    <div className="thread" ref={scroller}>
       <ol className="turns">
         {messages.map((message, index) => {
           const state = stateOf(index);
@@ -56,8 +62,6 @@ export function Thread({ messages, working, caseId, onRetry }: ThreadProps): Rea
           Screening {caseId}…
         </p>
       )}
-
-      <div ref={foot} />
     </div>
   );
 }

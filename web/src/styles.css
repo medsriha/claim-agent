@@ -189,6 +189,9 @@ p {
 /* Sits below the conversation and stays put while it scrolls. */
 .picker {
   display: flex;
+  /* Never squashed by a long conversation: the row of claims is the way out of whatever is
+     on screen, so it has to keep its height whatever the thread above it is doing. */
+  flex: none;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
@@ -674,6 +677,8 @@ p {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Reaching the end of the conversation must not start scrolling the page behind it. */
+  overscroll-behavior: contain;
   padding: 24px 0 8px;
 }
 

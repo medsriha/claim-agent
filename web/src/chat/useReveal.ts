@@ -38,20 +38,32 @@ function prefersLessMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Where the replay has got to: which message is arriving, and whether it is still busy. */
+/**
+ * Where the replay has got to: which message is arriving, and whether it has settled.
+ *
+ * Whether that message *spins* is deliberately not kept here. It is worked out from the
+ * messages as they stand, because when the answer lands the list grows underneath this
+ * cursor — and a decision made about a message before it existed is a decision made
+ * against an empty list.
+ */
 interface Cursor {
   readonly index: number;
-  readonly working: boolean;
+  readonly settled: boolean;
 }
 
 export interface Replay {
   /** What to draw for the message at this position. */
   readonly stateOf: (index: number) => MessageState;
   /**
-   * How many messages have appeared so far, busy ones included. Changes as the replay
-   * advances, which is what the screen watches to keep the newest message in view.
+   * Counts up on every visible change — a message appearing, and that same message
+   * settling. The screen watches it to keep the newest content in view.
+   *
+   * It has to move on settling as well as on arrival: a message settling is when it grows
+   * from a single spinning line into the whole finding, which is the largest change in
+   * height the conversation ever makes. Watching only for new messages would leave every
+   * settled finding hanging below the bottom of the screen.
    */
-  readonly arrived: number;
+  readonly progress: number;
 }
 
 /**
@@ -70,27 +82,30 @@ export interface Replay {
  *   neither is the system working on anything.
  */
 export function useReveal(messageCount: number, spins: readonly boolean[]): Replay {
-  const [cursor, setCursor] = useState<Cursor>(() => ({
-    index: 0,
-    working: spins[0] ?? false,
-  }));
+  const [cursor, setCursor] = useState<Cursor>({ index: 0, settled: false });
   const lessMotion = prefersLessMotion();
+
+  // Worked out here rather than stored, so it is always read against the messages as they
+  // stand now. The list starts with the representative's line alone and grows when the
+  // answer lands, so a message can reach the cursor before there is anything to ask about
+  // it — and a stored answer would then be the one taken against the shorter list.
+  const working = !cursor.settled && (spins[cursor.index] ?? false);
 
   useEffect(() => {
     if (lessMotion || cursor.index >= messageCount) {
       return undefined;
     }
 
-    const settleThisOne = cursor.working;
+    const stillWorking = !cursor.settled && (spins[cursor.index] ?? false);
     const timer = window.setTimeout(
       () => {
         setCursor((at) =>
-          at.working
-            ? { index: at.index, working: false }
-            : { index: at.index + 1, working: spins[at.index + 1] ?? false },
+          !at.settled && (spins[at.index] ?? false)
+            ? { index: at.index, settled: true }
+            : { index: at.index + 1, settled: false },
         );
       },
-      settleThisOne ? WORKING_MS : BETWEEN_MS,
+      stillWorking ? WORKING_MS : BETWEEN_MS,
     );
 
     // Cleared on the way out, so a conversation replaced part-way through leaves no timer
@@ -101,20 +116,18 @@ export function useReveal(messageCount: number, spins: readonly boolean[]): Repl
   }, [cursor, messageCount, spins, lessMotion]);
 
   const stateOf = (index: number): MessageState => {
-    if (lessMotion) {
-      return "settled";
-    }
-    if (index < cursor.index) {
+    if (lessMotion || index < cursor.index) {
       return "settled";
     }
     if (index > cursor.index) {
       return "hidden";
     }
-    return cursor.working ? "working" : "settled";
+    return working ? "working" : "settled";
   };
 
   return {
     stateOf,
-    arrived: lessMotion ? messageCount : Math.min(cursor.index + 1, messageCount),
+    // Two steps per message — arriving, then settling — so the count moves on both.
+    progress: lessMotion ? messageCount * 2 : cursor.index * 2 + (working ? 0 : 1),
   };
 }
