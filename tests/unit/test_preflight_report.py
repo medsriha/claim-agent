@@ -10,12 +10,12 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from tests.fixtures.shipbob import CASE_1004, without
 
 from claim_agent.domain.models import Case, GateName, TerminalReason
 from claim_agent.policy import Policy
 from claim_agent.preflight.models import ClaimContext, GateResult, TerminalReport
 from claim_agent.preflight.report import build_terminal_report
-from fixtures.shipbob import CASE_1004, without
 
 # What the age check recorded on CASE-1004: delivered 26 December 2025, opened 9 March
 # 2026, 73 days apart. Both dates and the day count are quoted in REQUIREMENTS.md.

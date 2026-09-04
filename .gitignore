@@ -226,3 +226,7 @@ claim_agent.db-shm
 # Captured HTTP transcripts. Kept out of git: the response headers in them end
 # in CRLF, as HTTP requires, and the line-ending hook would rewrite those bytes.
 layer0-http-transcript.txt
+
+# The UI's dependencies and build output. The lock file next to them is committed.
+node_modules/
+web/dist/

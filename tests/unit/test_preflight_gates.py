@@ -15,20 +15,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
-from claim_agent.domain.models import Case, GateName, Order, Shipment, TerminalReason
-from claim_agent.policy import Policy
-from claim_agent.preflight.gates import (
-    check_age,
-    check_claim_type,
-    check_insurance,
-    check_key_information,
-    evaluate_gates,
-    resolve_delivered_date,
-    terminal_reasons,
-)
-from claim_agent.preflight.models import CaseRecord, GateResult
-from fixtures.shipbob import (
+from tests.fixtures.shipbob import (
     CASE_1001,
     CASE_1002,
     CASE_1003,
@@ -45,6 +32,19 @@ from fixtures.shipbob import (
     shipment_payload,
     without,
 )
+
+from claim_agent.domain.models import Case, GateName, Order, Shipment, TerminalReason
+from claim_agent.policy import Policy
+from claim_agent.preflight.gates import (
+    check_age,
+    check_claim_type,
+    check_insurance,
+    check_key_information,
+    evaluate_gates,
+    resolve_delivered_date,
+    terminal_reasons,
+)
+from claim_agent.preflight.models import CaseRecord, GateResult
 
 # A delivery date of our own, for the tests that need to place a claim an exact
 # number of days after it. The sample cases cannot do this: their dates are

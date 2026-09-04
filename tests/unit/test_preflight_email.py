@@ -14,12 +14,12 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from tests.fixtures.shipbob import CASE_1004, without
 
 from claim_agent.domain.models import Case, DraftedEmail, GateName, TerminalReason
 from claim_agent.policy import Policy
 from claim_agent.preflight.email import draft_terminal_email
 from claim_agent.preflight.models import ClaimContext, GateResult
-from fixtures.shipbob import CASE_1004, without
 
 # What the age check recorded on CASE-1004. The two dates and the 73 days between them are
 # quoted in REQUIREMENTS.md; the 60-day limit is the provisional default in the policy.

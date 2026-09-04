@@ -95,8 +95,15 @@ representative has corrected for that merchant before, runs the four checks, and
 *carry on* or *stop, and here is why* — with, in the second case, a write-up for a
 representative and a draft email to the merchant listing every reason.
 
+**There is a screen to see it on.** A web page asks for a case id and lays the answer out: the
+decision, all four checks with the values behind each, what the claim is worth and how old it
+is, and — on a stopped claim — the write-up and the draft email. It is a demonstration: anyone
+who opens it can screen any claim, it decides nothing itself, and it cannot approve or send
+anything. Alongside it there is a stand-in for ShipBob, so the whole thing can be run on a
+laptop without being connected to anything.
+
 Nothing is stored. The answer exists only in the reply, so a representative cannot fetch a
-screening again, and there is no lasting record of one.
+screening again, and there is no lasting record of one. Closing the page loses what it showed.
 
 **Stages 2 to 4 are untouched.** Nothing reads photographs, nothing splits a claim into separate
 products, no AI is involved anywhere yet, and nothing has ever been sent to a merchant or paid
@@ -466,6 +473,122 @@ not been reviewed by anyone who writes to merchants for a living.
 
 ---
 
+### A stand-in for ShipBob
+
+**What it does** — Serves the sample claim records — the case, the parcel and the order — from a
+small program on this machine, so the system has something to read when nobody is connected to
+the real ShipBob.
+
+**Why we need it** — The system reads its three records over the network from ShipBob. In a test
+those reads are intercepted before they leave the process, which is why the test suite has never
+needed a server. But a person clicking through the screen is not a test: the reads are real, and
+without something answering them every claim fails as "ShipBob could not be reached". There was
+no way to see the system work outside a test run.
+
+**How it works**
+
+1. It listens on a port of its own and answers the same three addresses the real ShipBob does:
+   one for a case, one for a parcel, one for an order.
+2. It looks the requested id up among the sample records. If it has one, it returns it exactly as
+   ShipBob would. If it does not, it answers "no such record", which is what makes a claim for a
+   case that does not exist behave correctly rather than merely fail.
+3. It can be asked to hold every answer back for a moment, which is how the slow-and-unreachable
+   behaviour can be seen on purpose rather than only when something genuinely breaks.
+
+**What it connects to** — The system is pointed at it with a single setting, the address it reads
+ShipBob from. Nothing in the system knows or cares that it is a stand-in.
+
+**Choices we made**
+
+- **It serves the very same records the tests use, rather than its own copy.** Two sets of sample
+  data drift apart, and then the screen shows one thing and the tests prove another. There is one
+  definition of what CASE-1001 looks like and both read it.
+- **It is not part of the system.** It sits outside the application's own code and nothing in the
+  application can reach it. It cannot be started by accident in production, because production
+  never runs it.
+- **A missing record is answered properly, not by falling over.** Being able to demonstrate a
+  claim for a case that does not exist matters as much as demonstrating one that does.
+
+**When things go wrong** — Stopping it is the point: with it stopped, the system reports that
+ShipBob is unreachable, which is exactly the failure a representative would see in a real outage.
+
+**Not ready for production** — It is a development tool and nothing more. It holds nine claims,
+has no security of any kind, and does not implement the parts of ShipBob's API this system does
+not read. It must never be reachable from anywhere real.
+
+**Where the code is** — `tools/shipbob_mock.py`, reading `tests/fixtures/shipbob.py`.
+
+---
+
+### The screen a representative uses
+
+**What it does** — Puts a web page in front of the quick checks. A representative types a case
+id and sees what the screening decided: carry on or stop, what each of the four checks found,
+what the claim is worth and how old it is, and — when the claim is stopped — the write-up and the
+draft email waiting for their approval.
+
+**Why we need it** — Everything the system had worked out was reachable only by sending a
+hand-written request and reading the reply as raw data. That is fine for proving the rules are
+right and useless for showing anyone what the system does. The screening already produces
+everything a representative needs; it had nowhere to appear.
+
+**How it works**
+
+1. The representative types a case id and presses the button. There are also buttons for the
+   sample claims, so someone seeing this for the first time does not have to know an id to try.
+2. The page asks the system to screen that claim, and says plainly that it is working while it
+   waits.
+3. The answer comes back and the page lays it out: the decision first and largest, then the four
+   checks, then what was read about the claim, then — on a stopped claim — the reasons, the
+   write-up and the draft email.
+4. Every check is shown, whether it passed or failed, and each one can be opened up to see the
+   exact values it looked at.
+5. If the claim cannot be screened — no such case, or ShipBob unreachable — the page says which
+   of those happened, in a sentence, and offers to try again.
+
+**What it connects to** — It reads from the one screening address the system already offers and
+writes nothing anywhere. It holds nothing between visits: closing the page loses the result,
+because there is nowhere to keep one yet.
+
+**Choices we made**
+
+- **The page decides nothing.** It never works out a verdict, never judges whether a check
+  passed, never re-orders the reasons. Everything it shows was decided by the rules and sent to
+  it. The order the reasons arrive in matters — the first one is the one that heads the
+  merchant's email — so the page shows them in the order it was given and never sorts them.
+- **No arithmetic on money, anywhere on the page.** The value of an order is worked out once, by
+  the rules, and sent as text rather than as a number. The page prints that text. It would be
+  easy to multiply a price by a quantity on screen to show what a line was worth, and that is
+  exactly the habit that ends with a payment built on a rounding error, so the page shows the
+  price and the quantity and stops there.
+- **The draft email is shown as a draft, loudly.** The email's own words never say "draft",
+  deliberately, so that a marker can never reach a merchant. That makes the screen the only place
+  the draft state is visible, so it is stated plainly above the email. There is no send button
+  and nothing behind one.
+- **Failures are shown as sentences a person can act on, never as raw error data.** A claim that
+  cannot be screened is a normal thing to see, not a crash.
+- **It is a demonstration, not a product.** Anyone who opens it can screen any claim: there is no
+  sign-in, no record of who looked, and nothing is kept. The same gaps the system behind it has.
+- **The ShipBob colours are our approximation.** They are gathered in one file and marked as
+  provisional, in the same way the claim thresholds are, so correcting them is one edit. The
+  logo drawn on the page is a stand-in, not ShipBob's real mark.
+
+**When things go wrong** — Three failures are handled and shown differently, because they need
+different things from the person reading: a case that does not exist is a typo to fix, ShipBob
+being unreachable is a wait-and-retry, and the page being unable to reach the system at all
+usually means it is not running. Anything unexpected still ends in a readable sentence rather
+than a blank page.
+
+**Not ready for production** — It is one screen, and it only shows the quick checks, because the
+quick checks are all that exists. It cannot approve anything, send anything, or fetch back a
+screening that has already been run. Nothing it shows is stored. It has never been tried by a
+representative, on a phone, or with a screen reader, and it is not covered by the automated
+checks that run before every push.
+
+**Where the code is** — `web/`, and its entry point `web/src/App.tsx`.
+
+---
+
 ## Future production
 
 This project is an interview exercise. It is not complete and it is not production-hardened,
@@ -478,6 +601,20 @@ corner or spot a risk — writing it down is what separates a known limitation f
 finds in production.
 
 ### Not implemented
+
+- **Any test at all for the screen.** The Python side has 224 tests; the web page has none, and
+  it is not covered by the checks that run before every push either. Both were deliberate — it is
+  a demonstration, and keeping it out of the push loop keeps that loop fast — but it means a
+  change to the screen is only as safe as the person making it. It has also never been tried by a
+  representative, on a phone, or with a screen reader.
+- **Any way for the screen to reach the system other than in development.** The development
+  server forwards requests to the system on the page's behalf, which is what avoids opening an
+  unauthenticated service up to any web page anywhere. A built page served from a real address
+  has no such helper, and nothing has been decided about what it would use instead.
+- **Anything on the screen beyond the quick checks.** It shows what has been built, which is one
+  stage of four. Approving a report, sending an email back with feedback, editing the wording,
+  seeing a claim's separate products — all of those are later requirements with nothing behind
+  them yet.
 
 - **Stages 2, 3 and 4 of the claim pipeline.** The triage that splits a claim into products, the
   per-product investigation, the report the AI produces, the revision loop, and the post-approval
@@ -506,6 +643,15 @@ finds in production.
   by accident, but it does mean later stages start by adding to it.
 
 ### Could break
+
+- **The stand-in for ShipBob is not ShipBob.** It serves nine claims from the same sample records
+  the tests use. Anything the real API does that those records do not show — a field with an
+  unexpected shape, an error we have not seen, a slow response — is not being exercised by
+  clicking through the screen, and a demo that works proves less than it appears to.
+- **The screen shows money exactly as the system sends it, and pads nothing else.** That is
+  deliberate, and it means a figure arriving in an unexpected shape would appear on screen in
+  that shape rather than being quietly tidied up. Tidying it up in the browser is the thing this
+  project most wants to avoid, so the trade was made knowingly.
 
 - **The sample data is mostly invented.** Only one case, one parcel and three orders are quoted in
   full in the requirements; the rest of what the tests run against we made up, because the

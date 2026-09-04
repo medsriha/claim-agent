@@ -13,11 +13,7 @@ from decimal import Decimal
 import httpx
 import pytest
 import respx
-
-from claim_agent.errors import NotFoundError, UpstreamError
-from claim_agent.settings import Settings
-from claim_agent.shipbob.client import ShipBobClient
-from fixtures.shipbob import (
+from tests.fixtures.shipbob import (
     CASE_1001,
     NOT_FOUND_BODY,
     ORDER_1001,
@@ -25,6 +21,10 @@ from fixtures.shipbob import (
     case_payload,
     without,
 )
+
+from claim_agent.errors import NotFoundError, UpstreamError
+from claim_agent.settings import Settings
+from claim_agent.shipbob.client import ShipBobClient
 
 
 @pytest.fixture

@@ -17,12 +17,7 @@ import pytest
 import respx
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
-from claim_agent.app import create_app
-from claim_agent.domain.models import MerchantCorrection
-from claim_agent.settings import Settings
-from claim_agent.storage.merchant_memory import MerchantMemory
-from fixtures.shipbob import (
+from tests.fixtures.shipbob import (
     CASE_1001,
     CASE_1002,
     CASE_1003,
@@ -41,6 +36,11 @@ from fixtures.shipbob import (
     SHIPMENT_1005,
     mock_shipbob,
 )
+
+from claim_agent.app import create_app
+from claim_agent.domain.models import MerchantCorrection
+from claim_agent.settings import Settings
+from claim_agent.storage.merchant_memory import MerchantMemory
 
 pytestmark = pytest.mark.integration
 

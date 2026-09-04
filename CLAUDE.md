@@ -182,7 +182,9 @@ tests/integration/ through the HTTP surface
 web/              React + TypeScript demo UI
   src/api/        typed client for the backend
   src/theme/      ShipBob colours and logo — provisional values
+  src/components/ the pieces a screen is built from
   src/screens/    one screen per thing a rep does
+tools/            development only — a ShipBob stand-in, and demo data
 ```
 
 Layer packages mirror REQUIREMENTS.md so a requirement maps to an obvious place.
@@ -236,9 +238,15 @@ email. There is no request body to send: the case id in the path is the whole in
 - **Show all four checks, always.** The backend returns all four whether they passed or failed,
   so a rep sees what passed rather than inferring it from silence. Do not hide the passing ones.
 
+**How it reaches the API.** Through the Vite dev server, which forwards `/cases` and `/health`
+on to the service. Nothing was added to the backend for it, and in particular no cross-origin
+policy was opened up on a service that has no authentication. The cost is that the proxy is a
+development-server feature: a built UI served from anywhere else would need that solved properly.
+
 **Theme.** Every colour, font and the logo path live in one file under `web/src/theme/`. Those
 hex values are our approximation of ShipBob's public branding, not values ShipBob gave us — the
-file must say so, the same way `policy.py` marks its provisional thresholds.
+file must say so, the same way `policy.py` marks its provisional thresholds. The logo drawn
+there is a stand-in, not ShipBob's real mark.
 
 **Writing it.** [Documenting the code](#documenting-the-code) applies unchanged. TypeScript is
 strict and `any` is not allowed, for the same reason mypy is strict over `src`.
@@ -327,6 +335,8 @@ code like everything else. There is no requirement id to carry, so carry the `UI
 make install    # sync dependencies into .venv
 make hooks      # install git hooks — do this once, before your first commit
 make run        # uvicorn with reload
+make mock       # the ShipBob stand-in on port 8080
+make seed       # sample past rep corrections, so the demo has some to show
 make test       # pytest with coverage
 make lint       # ruff check + format check
 make typecheck  # mypy
@@ -376,15 +386,10 @@ Open engineering choices — decide with the user, then record the outcome here:
   numbers right.
 - **Reimbursement cap semantics** — per claim line or per claim (REQUIREMENTS.md open
   question 2).
-- **How the browser reaches the API.** Nothing configures cross-origin access today; the only
-  middleware the app adds is the one that tags a request with its id. Either add the framework's
-  cross-origin middleware, or proxy the API through the Vite dev server. The proxy is the
-  recommendation: it needs no backend change, and it avoids opening a service that has no
-  authentication to arbitrary origins.
-- **There is no ShipBob mock server in this repo.** The backend makes real HTTP calls to
-  `SHIPBOB_BASE_URL`, and the tests intercept them in-process, so nothing serves those payloads
-  outside a test run. A UI demo needs something at that address — this is the biggest practical
-  blocker to the whole thing working end to end.
+- **How a built UI would reach the API.** Solved for development by the dev-server proxy, and
+  not solved at all for anything else. A UI served from a real address would need either
+  cross-origin middleware or the same origin as the service, and that decision waits until there
+  is somewhere to deploy either of them.
 - **How the Layer 0 report and the Layer 2 report reconcile.** The report shape the UI renders
   today is scoped to Layer 0. Layer 2 has its own requirements (FR-2.1–FR-2.10) that nobody has
   built; TODO.md's FR-0.4 note says the two will need reconciling rather than one being extended.
@@ -398,3 +403,8 @@ Decided:
   and outside the quality gates — see [The UI](#the-ui) and [Quality gates](#quality-gates).
 - **ShipBob's colours and logo are provisional**, kept in one theme file and marked as our
   approximation, so correcting them later is one edit rather than a hunt.
+- **The browser reaches the API through the Vite dev proxy**, not through cross-origin middleware.
+  No backend change, and nothing opened up on a service with no sign-in.
+- **`tools/` holds development-only programs**, typechecked and linted like everything else but
+  unreachable from `src/`. It has the ShipBob stand-in the demo reads from, which serves the very
+  same sample records the tests use so the two can never disagree.

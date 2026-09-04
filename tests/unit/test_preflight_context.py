@@ -13,12 +13,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-
-from claim_agent.domain.models import Case, MerchantCorrection, Order, Shipment
-from claim_agent.policy import Policy
-from claim_agent.preflight.context import build_context
-from claim_agent.preflight.models import CaseRecord, DeliveryDate
-from fixtures.shipbob import (
+from tests.fixtures.shipbob import (
     CASE_1001,
     CASE_1002,
     CASE_1004,
@@ -29,6 +24,11 @@ from fixtures.shipbob import (
     order_line_item,
     order_payload,
 )
+
+from claim_agent.domain.models import Case, MerchantCorrection, Order, Shipment
+from claim_agent.policy import Policy
+from claim_agent.preflight.context import build_context
+from claim_agent.preflight.models import CaseRecord, DeliveryDate
 
 HIGH_VALUE_POLICY = Policy(high_value_order_usd=Decimal("500.00"), high_value_inclusive=True)
 

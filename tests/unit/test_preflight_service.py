@@ -20,17 +20,7 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
-
-from claim_agent.domain.models import GateName, MerchantCorrection, TerminalReason, Verdict
-from claim_agent.errors import NotFoundError, StorageError, UpstreamError
-from claim_agent.policy import Policy
-from claim_agent.preflight.gather import gather_case_record
-from claim_agent.preflight.models import PreflightResult
-from claim_agent.preflight.service import run_preflight
-from claim_agent.settings import Settings
-from claim_agent.shipbob.client import ShipBobClient
-from claim_agent.storage.merchant_memory import MerchantMemory
-from fixtures.shipbob import (
+from tests.fixtures.shipbob import (
     CASE_1001,
     CASE_1004,
     NOT_FOUND_BODY,
@@ -44,6 +34,16 @@ from fixtures.shipbob import (
     shipment_payload,
     without,
 )
+
+from claim_agent.domain.models import GateName, MerchantCorrection, TerminalReason, Verdict
+from claim_agent.errors import NotFoundError, StorageError, UpstreamError
+from claim_agent.policy import Policy
+from claim_agent.preflight.gather import gather_case_record
+from claim_agent.preflight.models import PreflightResult
+from claim_agent.preflight.service import run_preflight
+from claim_agent.settings import Settings
+from claim_agent.shipbob.client import ShipBobClient
+from claim_agent.storage.merchant_memory import MerchantMemory
 
 # When the screen was asked for. Nothing in the layer reads a clock, so this is only a
 # stamp on the answer — which is exactly what the determinism tests below prove.

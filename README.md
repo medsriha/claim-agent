@@ -9,6 +9,7 @@ nothing is sent or paid without human approval.
   feature. Start here if you are new.
 - **How to work on it:** [CLAUDE.md](CLAUDE.md) — conventions and architecture rules.
 - **What is done so far:** [TODO.md](TODO.md) — every requirement id, ticked as it lands.
+- **The demo screen:** [UI-TODO.md](UI-TODO.md) — the UI in `web/`, tracked separately.
 
 ## Quickstart
 
@@ -25,6 +26,26 @@ make run                     # http://127.0.0.1:8000  (docs at /docs)
 curl localhost:8000/health
 ```
 
+## Running the demo
+
+Two one-off steps, then three things running side by side. The screen is at
+<http://localhost:5173>.
+
+```bash
+make mock         # a stand-in for ShipBob, on :8080 — without it every claim fails
+make seed         # once: sample past rep corrections, so the demo has some to show
+make run          # the claims service, on :8000
+make ui-install   # once: install the UI's dependencies
+make ui-dev       # the screen, on :5173, forwarding claim requests to :8000
+```
+
+Try `CASE-1001` for a claim that carries on, `CASE-1004` for one stopped as too old, and
+`CASE-9001` for one stopped as insured. Stop `make mock` and screen anything to see what a
+rep sees when ShipBob cannot be read.
+
+The UI is a demonstration: no sign-in, nothing stored, and nothing it shows can be sent or
+approved. Its ShipBob colours and mark are our own approximation, not ShipBob's.
+
 ## Development
 
 ```bash
@@ -33,10 +54,17 @@ make lint        # ruff check + format check
 make typecheck   # mypy (strict)
 make format      # apply formatting and safe fixes
 make check       # everything CI runs — run before pushing
+
+make ui-lint     # the UI's lint and types
+make ui-build    # build the UI for production
 ```
 
 Pre-commit runs ruff and mypy on commit, pytest on push. CI repeats all of it on `main` and
 on pull requests.
+
+**The UI is deliberately outside all of that.** `make check`, CI and the hooks are Python only,
+which keeps the push loop fast and CI free of Node. Nothing catches a broken UI for you — run
+`make ui-lint` yourself before pushing a change to `web/`.
 
 ## Configuration
 
@@ -54,4 +82,6 @@ src/claim_agent/
   execution/   Layer 3 (post-approval)         storage/  reports, audit, memory
   shipbob/     ShipBob mock API client
 tests/         unit/ (fast, no I/O) and integration/ (through HTTP)
+tools/         development only — the ShipBob stand-in and demo data
+web/           the demo screen (React + TypeScript, Vite)
 ```

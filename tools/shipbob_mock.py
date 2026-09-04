@@ -1,0 +1,224 @@
+"""A stand-in for the ShipBob API, so the system has something to read on a laptop.
+
+The system reads three records over the network: the support case, the parcel and the
+order (FR-0.1). Tests intercept those reads inside the process, which is why the test
+suite has never needed a server. A person clicking through the screen is not a test —
+the reads are real — so without something answering them, every claim fails as "ShipBob
+could not be reached".
+
+This is that something. It answers the same three addresses the real ShipBob does, from
+the same sample records the tests use, so the screen and the tests can never disagree
+about what CASE-1001 looks like.
+
+**It is a development tool.** It holds nine claims, has no security of any kind, and
+implements none of ShipBob's API beyond the three reads this system makes. Nothing in
+`src/` can reach it, and production never runs it.
+
+Run it with `make mock`, which serves it on port 8080 — the address
+`SHIPBOB_BASE_URL` already points at by default.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+from decimal import Decimal
+
+from fastapi import FastAPI, Response
+from tests.fixtures.shipbob import (
+    CASE_1001,
+    CASE_1002,
+    CASE_1003,
+    CASE_1004,
+    CASE_1005,
+    CONSTRUCTED_HIGH_VALUE_CASE,
+    CONSTRUCTED_HIGH_VALUE_ORDER,
+    CONSTRUCTED_HIGH_VALUE_SHIPMENT,
+    CONSTRUCTED_INSURED_CASE,
+    CONSTRUCTED_INSURED_ORDER,
+    CONSTRUCTED_INSURED_SHIPMENT,
+    CONSTRUCTED_INSURED_SUBCATEGORY_CASE,
+    CONSTRUCTED_INSURED_SUBCATEGORY_ORDER,
+    CONSTRUCTED_INSURED_SUBCATEGORY_SHIPMENT,
+    CONSTRUCTED_LOST_IN_TRANSIT_CASE,
+    CONSTRUCTED_LOST_IN_TRANSIT_ORDER,
+    CONSTRUCTED_LOST_IN_TRANSIT_SHIPMENT,
+    NOT_FOUND_BODY,
+    ORDER_1001,
+    ORDER_1002,
+    ORDER_1003,
+    ORDER_1004,
+    ORDER_1005,
+    SHIPMENT_1001,
+    SHIPMENT_1002,
+    SHIPMENT_1003,
+    SHIPMENT_1004,
+    SHIPMENT_1005,
+)
+
+CASES = [
+    CASE_1001,
+    CASE_1002,
+    CASE_1003,
+    CASE_1004,
+    CASE_1005,
+    CONSTRUCTED_INSURED_CASE,
+    CONSTRUCTED_LOST_IN_TRANSIT_CASE,
+    CONSTRUCTED_INSURED_SUBCATEGORY_CASE,
+    CONSTRUCTED_HIGH_VALUE_CASE,
+]
+
+SHIPMENTS = [
+    SHIPMENT_1001,
+    SHIPMENT_1002,
+    SHIPMENT_1003,
+    SHIPMENT_1004,
+    SHIPMENT_1005,
+    CONSTRUCTED_INSURED_SHIPMENT,
+    CONSTRUCTED_LOST_IN_TRANSIT_SHIPMENT,
+    CONSTRUCTED_INSURED_SUBCATEGORY_SHIPMENT,
+    CONSTRUCTED_HIGH_VALUE_SHIPMENT,
+]
+
+ORDERS = [
+    ORDER_1001,
+    ORDER_1002,
+    ORDER_1003,
+    ORDER_1004,
+    ORDER_1005,
+    CONSTRUCTED_INSURED_ORDER,
+    CONSTRUCTED_LOST_IN_TRANSIT_ORDER,
+    CONSTRUCTED_INSURED_SUBCATEGORY_ORDER,
+    CONSTRUCTED_HIGH_VALUE_ORDER,
+]
+
+
+def _by_id(records: list[dict[str, object]], id_field: str) -> dict[str, dict[str, object]]:
+    """Index records by the id they carry, so a lookup does not scan the whole list.
+
+    Raises `ValueError` if two records share an id, which would otherwise mean one of
+    them silently became unreachable.
+    """
+    indexed: dict[str, dict[str, object]] = {}
+    for record in records:
+        record_id = str(record[id_field])
+        if record_id in indexed:
+            raise ValueError(f"Two sample records share the id {record_id}.")
+        indexed[record_id] = record
+    return indexed
+
+
+CASES_BY_ID = _by_id(CASES, "case_id")
+SHIPMENTS_BY_ID = _by_id(SHIPMENTS, "shipment_id")
+ORDERS_BY_ID = _by_id(ORDERS, "order_id")
+
+
+def _as_money(value: object) -> object:
+    """Turn a price into an exact decimal, keeping its cents.
+
+    The sample records write prices as ordinary Python numbers, where 38.00 and 38.0 are
+    the same thing. ShipBob writes money with its cents, and the system is built to read
+    it that way, so restoring the cents here is what makes the stand-in behave like the
+    real API rather than like a rounded copy of it.
+    """
+    if isinstance(value, float | int):
+        return Decimal(str(value)).quantize(Decimal("0.01"))
+    return value
+
+
+def _with_money_restored(record: dict[str, object]) -> dict[str, object]:
+    """Copy an order with every line's price turned back into an exact decimal."""
+    line_items = record.get("line_items")
+    if not isinstance(line_items, list):
+        return record
+    return {
+        **record,
+        "line_items": [
+            {**item, "unit_price": _as_money(item.get("unit_price"))}
+            if isinstance(item, dict)
+            else item
+            for item in line_items
+        ],
+    }
+
+
+def _to_json(value: object) -> str:
+    """Write a record as JSON, with money as a bare number that keeps its cents.
+
+    This exists for one reason: Python's ordinary JSON writer cannot produce `38.00`.
+    Given a float it writes `38.0`, and given an exact decimal it refuses outright. The
+    real API sends money as a plain number *with* its cents, and the system is carefully
+    written to read those cents (see the note in the ShipBob client), so a stand-in that
+    dropped them would quietly stop exercising the thing that matters most about money.
+
+    Everything that is not a decimal is handed to the ordinary writer, so nothing else
+    about the shape of a record changes.
+    """
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        pairs = (f"{json.dumps(str(key))}: {_to_json(item)}" for key, item in value.items())
+        return "{" + ", ".join(pairs) + "}"
+    if isinstance(value, list):
+        return "[" + ", ".join(_to_json(item) for item in value) + "]"
+    return json.dumps(value)
+
+
+def _delay_seconds() -> float:
+    """How long to hold every answer back, in seconds.
+
+    Zero unless `SHIPBOB_MOCK_DELAY_SECONDS` says otherwise. Set it to see the screen's
+    waiting state, or set it above the system's own timeout to see what a representative
+    sees when ShipBob is too slow to answer (NFR-6). An unreadable value means zero:
+    a development tool refusing to start over a typo helps nobody.
+    """
+    raw = os.environ.get("SHIPBOB_MOCK_DELAY_SECONDS", "0")
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 0.0
+
+
+app = FastAPI(
+    title="ShipBob mock API (development stand-in)",
+    description="Serves the sample claim records so the claims agent has something to read.",
+)
+
+
+async def _answer(record: dict[str, object] | None) -> Response:
+    """Send a record back the way ShipBob would, or say there is no such record.
+
+    A missing record is answered as a proper 404 rather than an error, because a claim
+    for a case that does not exist is a normal thing to demonstrate: the system turns
+    that into "ShipBob has no case with this id" for the representative.
+    """
+    delay = _delay_seconds()
+    if delay:
+        await asyncio.sleep(delay)
+    if record is None:
+        return Response(
+            content=_to_json(NOT_FOUND_BODY),
+            status_code=404,
+            media_type="application/json",
+        )
+    return Response(content=_to_json(record), media_type="application/json")
+
+
+@app.get("/cases/{case_id}", summary="Read one support case")
+async def get_case(case_id: str) -> Response:
+    """Return the merchant's claim, or 404 if there is no such case."""
+    return await _answer(CASES_BY_ID.get(case_id))
+
+
+@app.get("/shipments/{shipment_id}", summary="Read one shipment")
+async def get_shipment(shipment_id: str) -> Response:
+    """Return the parcel record, or 404 if there is no such shipment."""
+    return await _answer(SHIPMENTS_BY_ID.get(shipment_id))
+
+
+@app.get("/orders/{order_id}", summary="Read one order")
+async def get_order(order_id: str) -> Response:
+    """Return the order and its line items, or 404 if there is no such order."""
+    record = ORDERS_BY_ID.get(order_id)
+    return await _answer(None if record is None else _with_money_restored(record))
