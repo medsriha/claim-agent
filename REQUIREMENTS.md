@@ -48,6 +48,8 @@ specified separately.
 | **Agent** | The AI component that investigates a case by choosing and calling tools. |
 | **Claim line** | One claimed product within a case. A claim for two damaged items is two claim lines. The unit of investigation, reporting, approval, and payment. |
 | **Report** | The structured output the agent produces for the rep to act on — one per claim line. |
+| **Precedent** | A record of a claim line this system investigated before, kept so a later claim like it can be handled the same way. |
+| **Precedent store** | Where those records are kept and searched. The system writes it itself; no ShipBob endpoint supplies it. |
 
 ## Available data
 
@@ -55,8 +57,10 @@ The system reads from a mock ShipBob API offering: a list of cases, case details
 attachments, shipment details, order details, and invoice generation. It can also send an
 email on a case and submit a reimbursement.
 
-There is **no endpoint for merchant history** and **no endpoint for reading merchant
-replies**. Anything the system needs to remember, it stores itself.
+There is **no endpoint for merchant history**, **no endpoint for reading merchant replies**,
+and **no way to ask how comparable past claims were handled**. Anything the system needs to
+remember, it stores itself — including its own record of every claim line it has investigated
+(FR-S.1).
 
 The full endpoint surface, with example payloads, is in `shipbob-mock-api.md`. Summarised:
 
@@ -81,6 +85,7 @@ scenario, and they are referenced throughout this document as concrete examples.
 ```
 Layer 0   Pre-flight       deterministic  →  screens out claims that cannot be processed
 Layer 1a  Triage           AI agent       →  identifies which products are being claimed for
+   └── precedent retrieval  →  the most similar past claim lines, fetched per line
 Layer 1b  Investigation    AI agent       →  one run per claimed product
 Layer 2   Report           structured     →  one report per product; the rep decides each
    ├── rep gives feedback →  Layer R  same agent, re-run  →  revised report, back to Layer 2
@@ -97,6 +102,11 @@ or approves it, which is the only way out of the loop and into execution.
 
 The principle behind the split: **rules where there is a right answer, the agent where
 there is ambiguity, the human where there is a decision to make.**
+
+Precedent is not a fifth layer. It is a store the system keeps for itself: every claim line
+Layer 1b investigates is written into it, and every later line that resembles one is given it to
+read. It exists because the layers above make each claim *internally* consistent and cannot make
+two separate claims agree with each other. See **Claim precedent** below.
 
 Note the distinction between a recommendation and a decision. The agent produces a
 recommended outcome because the rep needs a starting point and the email cannot be drafted
@@ -812,6 +822,177 @@ that merchant files a claim — the system should improve on the next case, not 
 
 ---
 
+# Claim precedent — finding similar past claims
+
+Consistency is the problem this system exists to solve, and Layers 0 to 2 solve only half of
+it. They make every claim reach the rep examined the same way, against the same rules, in the
+same shape. They do nothing to make today's claim agree with a materially identical claim that
+was handled three weeks ago, because nothing in the system remembers that claim. Two reps can
+still disagree, the same rep can still disagree with herself, and nobody finds out.
+
+The precedent store is that missing memory. Every claim line the agent investigates is written
+down: what was claimed, what the evidence showed, what was recommended, and what the rep did
+about it. When a new claim line is investigated, the most similar past lines are pulled back out
+and handed to the agent as context. The recommendation is then made with sight of how comparable
+claims actually went, and one that departs from them is visible as a departure rather than
+passing unnoticed.
+
+**Precedent informs; it never decides.** A retrieved record is an observation about a different
+claim. It cannot supply evidence this claim lacks, lift the cap, or change a Layer 0 verdict. Its
+job is to make the agent's reasoning consistent and its disagreements visible — not to give the
+agent a second source of authority alongside the evidence.
+
+**Where it sits.** Retrieval runs after triage (FR-1a) and before each per-line investigation
+(FR-1b). Deliberately not inside Layer 0: judging whether two claims are alike means comparing
+meaning rather than matching fields, and that is not the kind of rule Layer 0 is allowed to
+contain (FR-0.6). Keeping it out also keeps ineligible claims free of the cost (NFR-8) — a claim
+stopped at the gates is never searched against the store and never written to it.
+
+**How this differs from merchant memory (FR-3.8).** Merchant memory answers "what has *this
+merchant* been told before?" and is found by `user_id` — an exact match on identity. Precedent
+answers "how has a claim *like this one* been handled?" and is found by what happened, across
+every merchant. A claim may have both, one, or neither. They are two lookups over two questions
+and must reach the rep as two things: merged into one list, a single past case can read as two
+independent confirmations of the same point.
+
+**FR-S.1 — Record every claim line the agent investigates.**
+A precedent record is written for every line that reaches an agent run, whatever state that line
+ends in — recommended and awaiting review, sent back and revised, approved, or abandoned without
+anyone ever looking at it. Recording only approved lines would leave the store empty for as long
+as claims sit in review, and the claims that most need precedent — the early ones — would have
+none at all.
+
+**FR-S.2 — Mark every record with its review state, and keep that mark current.**
+Each record says plainly what a person did about it: approved as recommended, approved after
+revision, sent back with feedback, edited, or never reviewed. The mark changes as the claim moves
+through the review loop, so a record written at recommendation time is updated when the rep acts
+on it.
+
+This mark is the load-bearing part of FR-S.1, not bookkeeping around it. Because unreviewed
+recommendations are stored, the agent will sooner or later be shown its own earlier output as
+precedent. Left unmarked, that closes a loop: the system's first guess about a kind of claim
+becomes a reason to guess the same way again, and repetition starts to look like established
+practice. That is inconsistency's quieter cousin and a harder one to catch, because on the
+surface every claim now agrees with the last one. The review state is what stops "a person
+decided this" and "we once suggested this" from reading alike, and FR-S.7 says what the agent
+must do with the difference.
+
+**FR-S.3 — Record enough to judge whether two claims are really alike.**
+A record holds what the merchant said happened, which product was claimed and what kind of thing
+it is, which of the four evidence items were present and what each assessment concluded, the
+recommended outcome, the amount and whether the cap bound it, and any rep feedback with the
+correction it produced. The test is a human one: someone reading a record should be able to say
+"yes, that is the same situation" or "no, it is not". A precedent nobody can check is worse than
+no precedent, because it still carries weight.
+
+**FR-S.4 — Retrieve on what happened, not on who it happened to.**
+Similarity is over the substance of the claim: the kind of damage, the kind of product, the
+pattern of evidence present and missing, the shape of the merchant's account of it. Not the
+merchant, the case number, the carrier, or the date. A claim's closest precedent will usually
+belong to a different merchant, and that is the intent — a rule applied to one merchant and not
+another is the inconsistency, not the fix for it.
+
+**FR-S.5 — Retrieve once per claim line, between triage and investigation.**
+Each line gets its own retrieval and its own set of records, because from Layer 1b onward each
+line is its own claim (FR-1b.1). How many records come back, and how close a record must be to
+come back at all, are policy values (FR-0.7). Records that are not close enough are not returned:
+a small set, or an empty one, is a correct answer rather than a failure.
+
+**FR-S.6 — Give precedent to the agent as starting context, not as a tool.**
+Precedent arrives with the case, the same way the computed facts of FR-0.5 do. It is not
+something the agent may choose to look up. If it were, two runs of the same claim could differ
+purely in whether the agent thought to search — precisely the run-to-run variance NFR-1 forbids,
+introduced by the feature meant to reduce it.
+
+**FR-S.7 — Weigh a record by its review state.**
+A rep-approved outcome is evidence of how ShipBob actually handles a situation. A record nobody
+reviewed is evidence only of what this system once suggested, and carries no authority. A
+corrected record carries its correction — what the rep changed and why is the precedent, not the
+recommendation they rejected. The agent is given the state alongside every record and must not
+treat an unreviewed one as settled practice.
+
+**FR-S.8 — Never let precedent stand in for evidence, or override a rule.**
+A claim with no photographs does not become approvable because a comparable claim that had
+photographs was approved. Precedent cannot raise the $100 cap, satisfy a missing evidence item,
+reverse a Layer 0 terminal verdict, or change the figure FR-1.21's arithmetic produces. Where
+precedent and the evidence in front of the agent point different ways, the evidence governs and
+the disagreement is reported (FR-S.10).
+
+**FR-S.9 — Say when precedent influenced the recommendation, and which records did.**
+The report names the records relied on and what each one contributed (NFR-3). "Approval is
+recommended" and "approval is recommended partly because four comparable claims were approved"
+are different statements, and the rep is the one deciding, so she is owed the second. She must be
+able to open a cited precedent and disagree with the comparison.
+
+**FR-S.10 — Report a departure from precedent as a concern.**
+When the recommendation differs from how comparable claims were handled, the report says so under
+FR-2.5, naming the records it differs from. This is the most valuable thing the store produces:
+it is the moment an inconsistency becomes visible while it can still be fixed — before a merchant
+is told anything — rather than months later, when two merchants compare the answers they got.
+
+**FR-S.11 — Pin the retrieved set to the run that used it.**
+The report and the audit record (NFR-5) hold exactly which records a run was given. Re-running a
+stored investigation replays that pinned set, and a Layer R revision reuses the set from the run
+it revises rather than retrieving afresh.
+
+Without this the store quietly breaks NFR-1. The store grows between runs, so the same claim
+investigated twice would see different precedent and could produce a different report; and a
+revision could change its recommendation because the store had moved rather than because the rep
+said anything. Pinning is what keeps a report reproducible from the case alone, and what keeps a
+revision answering the feedback it was given (NFR-5a).
+
+**FR-S.12 — Keep precedent out of the merchant email.**
+Precedent is internal. No other merchant's name, product, amount, case, or wording may appear in
+the drafted email, and the email must never offer a past claim as a reason for this one. The rep
+sees precedent; the merchant sees only their own claim.
+
+**FR-S.13 — Treat an empty or unavailable store as an ordinary state.**
+"No similar claims" is the normal answer for the first claim ever filed, and stays the normal
+answer for an unusual one. The investigation proceeds without precedent, and the report says that
+is what happened. If retrieval itself fails, the claim still proceeds (NFR-4) and the report
+distinguishes "no precedent exists" from "precedent could not be read" — reporting the second as
+the first would tell a rep there is no comparable history when in fact nobody looked.
+
+**FR-S.14 — Allow a record to be withdrawn from retrieval.**
+An approval can be wrong, and once it is precedent it is repeated. There must be a way to take a
+record out of retrieval. Withdrawal affects future searches only: the claim's own audit record is
+untouched (NFR-5), and a report that already cited the record still shows what that run was
+given (FR-S.11).
+
+> **Reference — what a record holds, and why none exist yet**
+> ```json
+> {
+>   "precedent_id": "PREC-CASE-1001-COLLAGEN1",
+>   "case_id": "CASE-1001",
+>   "user_id": "334430",
+>   "product": { "name": "Liposomal Tripeptide Collagen", "sku": "COLLAGEN1", "unit_price": 52.00 },
+>   "merchant_account": "Product arrived damaged. Both product and shipping box damaged. Damage due to poor/bad packaging.",
+>   "evidence_present": ["invoice", "damaged_product_photo", "outer_packaging_photo"],
+>   "evidence_missing": ["customer_confirmation"],
+>   "recommended_outcome": "request_info",
+>   "recommended_amount": null,
+>   "review_state": "not_reviewed",
+>   "rep_feedback": null,
+>   "withdrawn": false
+> }
+> ```
+> Illustrative, not specified. No endpoint returns this shape, because no endpoint knows about
+> it — the system writes these records itself, as it does merchant memory (FR-3.8).
+>
+> **The sample data cannot demonstrate this feature.** Five cases exist, each a different
+> scenario for a different `user_id`, so no two of them are alike and the store is empty on the
+> first run of any of them. Showing retrieval working needs constructed history, exactly as
+> FR-3.8's carry-forward does.
+
+**Not specified by ShipBob.** How close two claims must be to count as similar, how many records
+a run should see, how much weight an approved outcome carries against fresh evidence, and how
+long a record stays relevant before a policy change makes it misleading are all judgement calls
+that nobody has ruled on. They belong in the single policy place (FR-0.7) so they can be
+corrected once real guidance exists, and no starting value for any of them should be read as
+ShipBob's position.
+
+---
+
 # Non-functional requirements
 
 **NFR-1 — Consistency.**
@@ -825,8 +1006,15 @@ so they are far more likely to be decided alike. Consistency is therefore a prop
 report, not a constraint on the rep. Anything introducing run-to-run variance in a report
 needs a specific justification.
 
-Per-line isolation extends this: the same product with the same evidence reaches the same
-recommendation regardless of what else was claimed alongside it (FR-1b.4).
+Per-line isolation extends this within a claim: the same product with the same evidence reaches
+the same recommendation regardless of what else was claimed alongside it (FR-1b.4).
+
+Precedent extends it between claims. A line is investigated with sight of how comparable lines
+were handled, and a departure from them is reported rather than passing silently (FR-S.10) — this
+is the only part of the system able to notice two claims disagreeing. It is also the sharpest
+risk to this requirement, because the store grows: without care, the same claim investigated
+twice would see different precedent and could produce a different report. FR-S.11 is what
+prevents that, by pinning the records a run was given to that run.
 
 **NFR-2 — Constrained model output.**
 Every AI response conforms to a defined schema — classifications, judgments, structured
@@ -864,4 +1052,5 @@ calls rather than stated policy and may need to change once real guidance exists
 **NFR-8 — Cost discipline.**
 Ineligible cases must not incur AI costs. Image analysis, the most expensive operation,
 runs only on attachments that need it and is not repeated for the same attachment within a
-case.
+case. Precedent is retrieved once per claim line and only for claims that passed the gates; a
+claim stopped in Layer 0 is never searched against the store and never written to it.

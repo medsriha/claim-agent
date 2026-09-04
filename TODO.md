@@ -1,6 +1,6 @@
 # Requirement tracker
 
-Every requirement in [REQUIREMENTS.md](REQUIREMENTS.md) — all 83 — by id only.
+Every requirement in [REQUIREMENTS.md](REQUIREMENTS.md) — all 97 — by id only.
 
 There are no descriptions here on purpose: REQUIREMENTS.md already holds them, and a second
 copy would drift out of step with the first. Look the id up there.
@@ -198,6 +198,23 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
 - [ ] FR-3.6
 - [ ] FR-3.7
 - [ ] FR-3.8
+
+## Claim precedent — finding similar past claims
+
+- [ ] FR-S.1
+- [ ] FR-S.2
+- [ ] FR-S.3
+- [ ] FR-S.4
+- [ ] FR-S.5
+- [ ] FR-S.6
+- [ ] FR-S.7
+- [ ] FR-S.8
+- [ ] FR-S.9
+- [ ] FR-S.10
+- [ ] FR-S.11
+- [ ] FR-S.12
+- [ ] FR-S.13
+- [ ] FR-S.14
 
 ## Non-functional requirements
 

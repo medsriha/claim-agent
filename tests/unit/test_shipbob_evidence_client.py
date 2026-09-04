@@ -70,7 +70,10 @@ async def test_listing_attachments_gives_back_the_images_on_the_case(
         "ATT-CASE-1003-02",
         "ATT-CASE-1003-03",
     ]
-    assert attachments[0].url.endswith("01_Inv.png")
+    # A real ShipBob attachment link is a signed Azure URL, so the file name sits in the
+    # middle of it rather than at the end. Asserted as a fragment for that reason, not
+    # because the assertion was loosened to fit.
+    assert "/case-1003/01_Inv.png?" in attachments[0].url
 
 
 async def test_a_file_name_and_type_are_carried_and_nothing_is_read_into_them(

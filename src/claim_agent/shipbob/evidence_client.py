@@ -167,10 +167,28 @@ class EvidenceClient:
         )
 
         if response.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
-            # Any refusal of this shape is treated as "ShipBob will not price this
-            # shipment", whatever short code comes with it, because a refusal aimed at
-            # this one request will be refused again next time. The code ShipBob gave goes
-            # to the logs, where an engineer can see which refusal it was.
+            # One status, two very different meanings, and telling them apart matters.
+            # ShipBob answers "I will not price this shipment" with a 422, and a web
+            # framework answers "your request was malformed" with the same 422. Both ids
+            # above are required arguments, so a complaint about the request can only mean
+            # a mistake in our own code — and reporting our own bug to a rep as a settled
+            # refusal would send a good claim to a person while hiding the defect that
+            # caused it. A body shaped like a validation complaint is therefore treated as
+            # a fault rather than an answer.
+            if _looks_like_a_complaint_about_our_request(response):
+                logger.warning(
+                    "shipbob_refused_our_invoice_request",
+                    shipment_id=shipment_id,
+                    status_code=response.status_code,
+                )
+                raise UpstreamError(
+                    "ShipBob would not accept the request for an invoice.",
+                    details={"resource": "invoice", **context},
+                )
+
+            # Otherwise it is ShipBob's own refusal, whatever short code comes with it,
+            # because a refusal aimed at this one shipment will be refused again next
+            # time. The code goes to the logs, where an engineer can see which it was.
             logger.warning(
                 "shipbob_invoice_unavailable",
                 shipment_id=shipment_id,
@@ -378,6 +396,27 @@ def _parse(
             f"The {resource} ShipBob returned could not be read.",
             details={"resource": resource, **context},
         ) from exc
+
+
+def _looks_like_a_complaint_about_our_request(response: httpx.Response) -> bool:
+    """Say whether a refusal is about the request we sent rather than about the shipment.
+
+    A web framework rejecting a malformed request writes a `detail` field listing what was
+    wrong with it, and carries no `error` code of ShipBob's own. ShipBob's refusal to
+    price a shipment is the other way round. That is the only difference available, and it
+    is a guess about a shape nobody has documented — but the guess is the safe way round:
+    a real refusal misread as a fault gets tried again and then reaches a person anyway,
+    whereas a fault misread as a refusal quietly hides a mistake in our own code.
+    """
+    try:
+        body = json.loads(response.text)
+    except json.JSONDecodeError:
+        return False
+
+    if not isinstance(body, dict):
+        return False
+
+    return "detail" in body and "error" not in body
 
 
 def _reported_code(response: httpx.Response) -> str | None:

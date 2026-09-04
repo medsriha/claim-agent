@@ -69,6 +69,29 @@ class ConfigurationError(ClaimAgentError):
     code = "configuration_error"
 
 
+class ModelOutputRejectedError(ClaimAgentError):
+    """The model answered in a way it is not allowed to, so its answer was thrown away.
+
+    Not a fault of the provider's and not a fault of the caller's: the model was
+    reached, it replied, and the reply broke a rule the system does not bend. The
+    case this exists for is money — the model writes the wording of a merchant
+    email and may never write a figure in it, because no monetary amount may come
+    from model output (FR-1.21). An email describing itself as a draft is the other
+    case, since a rep has to read the exact words that would be sent (FR-1.17).
+
+    Deliberately **not** a kind of `UpstreamError`, for a reason worth stating
+    plainly: the model wrapper tries again on any of those. A reply that broke a
+    rule would then be silently re-asked rather than stopping the run, and the
+    second answer might break the rule differently. It also sends a reader
+    somewhere useless — nothing is unreachable, and no amount of waiting mends it.
+
+    The claim goes to a person, carrying what was established (NFR-4).
+    """
+
+    status_code = 502
+    code = "model_output_rejected"
+
+
 class InvoiceUnavailableError(ClaimAgentError):
     """ShipBob will not price this shipment, and asking again will not change that.
 

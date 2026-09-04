@@ -237,6 +237,11 @@ class StructuredModel:
         Comes back with whatever the library produced, which the caller then
         checks is really the form that was asked for.
 
+        A plain timeout is handled separately from those marks, because NFR-4 names
+        a timeout outright and one can reach us without the library having labelled
+        it. Anything else unexpected is deliberately left to travel: a mistake in
+        our own code should look like a mistake, not like the provider being down.
+
         Raises:
             UpstreamError: the call failed in a way another try might mend. This
                 is the only exception the retry loop above acts on.
@@ -244,6 +249,17 @@ class StructuredModel:
         try:
             structured = self._chat.with_structured_output(schema)
             return await structured.ainvoke(prompt)
+        except TimeoutError as exc:
+            # A timeout is named in NFR-4 as something that has to end with a person,
+            # and it does not always arrive dressed as one of the library's own
+            # conditions — a provider client, or our own timeout, can raise the plain
+            # built-in. Left to travel as it is, it would escape this wrapper entirely
+            # and the run above would have to catch anything at all to stay safe.
+            logger.warning("model_call_timed_out", form=schema.__name__)
+            raise UpstreamError(
+                "The model provider did not answer in time.",
+                details={"form": schema.__name__},
+            ) from exc
         except ModelError as exc:
             if not exc.is_retryable:
                 # Handed to the caller untouched, so that the retry loop does not
