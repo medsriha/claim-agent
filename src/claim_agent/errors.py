@@ -47,3 +47,16 @@ class UpstreamError(ClaimAgentError):
 
     status_code = 502
     code = "upstream_unavailable"
+
+
+class StorageError(ClaimAgentError):
+    """Our own store could not be read or written.
+
+    Kept apart from `UpstreamError` because the two send a reader looking in
+    different places: one means an outside system is having trouble, this one
+    means ours is. Reporting a full disk as "ShipBob is unavailable" would waste
+    the first hour of working out what went wrong.
+    """
+
+    status_code = 503
+    code = "storage_unavailable"

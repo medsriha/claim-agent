@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 from claim_agent.domain.models import MerchantCorrection
-from claim_agent.errors import ClaimAgentError
+from claim_agent.errors import StorageError
 from claim_agent.storage.database import initialise
 from claim_agent.storage.merchant_memory import MerchantMemory
 
@@ -167,14 +167,18 @@ def test_a_file_that_is_not_a_database_is_reported_as_a_handled_failure(tmp_path
     database.write_bytes(b"this file is not a database")
     memory = MerchantMemory(database)
 
-    with pytest.raises(ClaimAgentError) as reading:
+    with pytest.raises(StorageError) as reading:
         memory.corrections_for(BEST_PAW_NUTRITION)
-    with pytest.raises(ClaimAgentError) as writing:
+    with pytest.raises(StorageError) as writing:
         memory.record_correction(a_correction())
 
     # The caller is told the store failed, not which library or file was involved.
     assert "sqlite" not in str(reading.value).lower()
     assert "sqlite" not in str(writing.value).lower()
+    # Our own store failing must not be reported as ShipBob being unavailable, or the
+    # first hour of working out what went wrong is spent looking at the wrong system.
+    assert reading.value.code == "storage_unavailable"
+    assert reading.value.status_code == 503
 
 
 def test_a_database_path_that_cannot_be_used_is_reported_as_a_handled_failure(
@@ -185,5 +189,5 @@ def test_a_database_path_that_cannot_be_used_is_reported_as_a_handled_failure(
     blocking_file.write_text("something else lives here")
     memory = MerchantMemory(blocking_file / "claims.db")
 
-    with pytest.raises(ClaimAgentError):
+    with pytest.raises(StorageError):
         memory.corrections_for(BEST_PAW_NUTRITION)

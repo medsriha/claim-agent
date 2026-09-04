@@ -89,13 +89,18 @@ better informed.
 
 ## What exists today
 
-Stage 1, the quick checks, is being built now. The records it works on, the shapes it produces,
-and the sample data it is tested against are in place; the checks themselves, the connection to
-ShipBob, and the merchant memory are next. Stages 2 to 4 are untouched.
+**Stage 1, the quick checks, is built and working.** A claim can be screened over the web today:
+the system reads the case, the parcel and the order from ShipBob, remembers what a
+representative has corrected for that merchant before, runs the four checks, and answers either
+*carry on* or *stop, and here is why* — with, in the second case, a write-up for a
+representative and a draft email to the merchant listing every reason.
 
-The sections below are written before the code they describe, then corrected once it works. A
-section may therefore describe something still being built — [What exists
-today](#what-exists-today) is the honest list.
+Nothing is stored. The answer exists only in the reply, so a representative cannot fetch a
+screening again, and there is no lasting record of one.
+
+**Stages 2 to 4 are untouched.** Nothing reads photographs, nothing splits a claim into separate
+products, no AI is involved anywhere yet, and nothing has ever been sent to a merchant or paid
+out. The parts of the system that could do those things do not exist.
 
 For what that leaves missing or fragile, see [Future production](#future-production).
 
@@ -226,6 +231,13 @@ checks. Nothing else calls it yet.
   growing pause. Three is a guess, and it is a setting rather than a fixed number.
 - **We do not try again when the answer will not change.** A missing record or a reply we cannot
   read is a real answer; repeating the question only wastes time.
+- **"There is no such parcel" and "we could not reach ShipBob" are kept strictly apart.** This is
+  the most important rule in this part of the system. The first is a fact about the claim, and
+  the claim goes on to be screened and the merchant told what was missing. The second is a fact
+  about today, and it stops the screen with an error a person sees. If the two were treated
+  alike, a passing outage would close a perfectly good claim and send its merchant an email
+  saying their claim was missing information — an email nobody can take back, caused by nothing
+  worse than a timeout.
 
 **When things go wrong** — A case that does not exist is reported as not found. A parcel or an
 order that does not exist is not an error: the claim simply lacks something, and the checks below
@@ -238,7 +250,8 @@ because the full description of ShipBob's endpoints is not in this repository. I
 replies differ, our reading of them is wrong. There is no circuit breaker: if ShipBob is down,
 every claim keeps trying and keeps failing.
 
-**Where the code is** — `src/claim_agent/shipbob/client.py`, `src/claim_agent/domain/models.py`.
+**Where the code is** — `src/claim_agent/shipbob/client.py`,
+`src/claim_agent/preflight/gather.py`, `src/claim_agent/domain/models.py`.
 
 ---
 
@@ -277,7 +290,10 @@ context. Nothing writes to it yet; representative feedback is a later stage.
   empty list.
 
 **When things go wrong** — A missing database file is created on first use. A claim whose case
-has no merchant identifier gets no notes and carries on; it is not treated as a failure.
+has no merchant identifier gets no notes and carries on; it is not treated as a failure. A
+database that cannot be read stops the claim with its own distinct message, deliberately not the
+one used when ShipBob is unavailable: telling somebody an outside system is down when the problem
+is our own disk wastes the first hour of finding out what went wrong.
 
 **Not ready for production** — One file on one machine. A second copy of the service would not
 see the first one's notes, and there is no backup. The read blocks the request while it happens;
@@ -438,57 +454,127 @@ This project is an interview exercise. It is not complete and it is not producti
 and it does not need to be. What matters is that the gaps are **known** rather than missed, so
 this section keeps an honest list of them.
 
-Three kinds of entry: things we did not build, things that could break under real use, and
-things worth improving later. Add to it the moment you cut a corner or spot a risk — writing it
-down is what separates a known limitation from a bug someone finds in production.
+Four kinds of entry: things we did not build, things that could break under real use, things
+worth improving later, and questions only ShipBob can answer. Add to it the moment you cut a
+corner or spot a risk — writing it down is what separates a known limitation from a bug someone
+finds in production.
 
 ### Not implemented
 
-- **All four stages of the claim pipeline.** The pre-flight checks, the triage that splits a
-  claim into products, the per-product investigation, the report, the revision loop, and the
-  post-approval sending are all still empty. Only the foundation exists.
-- **Anywhere to store anything.** Reports, their versions, rep feedback, merchant history, and
-  the audit trail have no home yet, and no storage technology has been chosen. Several
-  requirements depend on remembering things across cases, so this blocks more than it looks.
-- **Any connection to ShipBob.** Nothing calls the ShipBob system yet. The full description of
-  its endpoints (`shipbob-mock-api.md`) is also absent from this repository, so some payload
-  shapes are unknown.
-- **Any access control.** The service has no authentication, no authorisation, and no notion of
-  which rep is acting. In production this decides real payments, so it cannot ship without one.
+- **Stages 2, 3 and 4 of the claim pipeline.** The triage that splits a claim into products, the
+  per-product investigation, the report the AI produces, the revision loop, and the post-approval
+  sending are all still empty. Only the quick checks exist.
+- **Anywhere to keep a screening.** The answer exists only in the reply to the request that asked
+  for it. A representative cannot fetch it again, nothing records what was decided or when, and a
+  restart loses everything — which also means there is no ordered history of a claim, something
+  the requirements ask for outright.
+- **Nothing writes down a representative's corrections.** Merchant memory can be read and can be
+  written, and the screen reads it, but no part of the system puts anything in it yet, because
+  the part that would is in a later stage. In practice the system does not yet learn between
+  claims — the machinery is there and the input is not.
+- **Any access control.** Anyone who can reach the service can screen any case id and read back
+  the merchant's name, contact address, their description of what happened, and what the order
+  was worth. There is no sign-in, no notion of which representative is acting, and no limit on
+  how fast someone can ask.
+- **Any way to tell one duplicate request from another.** Two identical screening requests do the
+  work twice. Harmless while nothing is stored and nothing is sent; not harmless later.
+- **No sign-in to ShipBob.** The mock needs no credentials, so we send none. The real system
+  would.
+- **Nobody who writes to merchants has read the emails.** The wording, the tone, and the sign-off
+  are all our invention. They should be reviewed by whoever owns customer communications before a
+  single one is sent.
+- **Only the three reads the checks need.** There is no way to fetch attachments, generate an
+  invoice, send an email or pay anyone — deliberately, so the cheap stage cannot become expensive
+  by accident, but it does mean later stages start by adding to it.
 
 ### Could break
 
-- **The claim thresholds are guesses.** Only the $100 cap is a real ShipBob figure. If the age
-  limit or the high-value threshold is wrong, the system will confidently reject claims it
-  should accept, or accept ones it should not. They need confirming before anyone relies on
-  them.
-- **The same claim could get two different answers.** The requirements demand that an identical
-  claim always produces an identical report, but AI models can word things differently between
-  runs. Any part of the report that comes from the model, rather than from fixed arithmetic,
-  is a place where that promise can quietly fail. It needs testing by running the same claim
-  repeatedly, not by assuming.
-- **A slow or unavailable ShipBob system.** There is no retry, no back-off, and no circuit
-  breaker. As written, one timeout would fail a claim outright and leave the rep with an error
-  and no way to resume.
-- **Sending twice.** A double-click, a refresh, or a retry after a network blip must not send a
-  second email or pay a merchant twice. Preventing that needs a stored record of what has
-  already been sent — which does not exist yet, because storage does not.
-- **Losing work on restart.** Until reports are stored somewhere durable, anything held only in
-  memory disappears when the service restarts, and a second copy of the service would not see
-  the first one's work.
-- **Cost.** Reading images is the expensive operation. Without a cache keyed to each attachment,
-  a re-run or a revision could pay to look at the same photo repeatedly.
+- **The sample data is mostly invented.** Only one case, one parcel and three orders are quoted in
+  full in the requirements; the rest of what the tests run against we made up, because the
+  document describing ShipBob's replies is not in this repository. Our tests can pass here and
+  still fail against the real system if a field name or a status word differs. Every invented
+  identifier starts with a 9, so real and made-up data can be told apart at a glance, but that is
+  a convention, not a guarantee.
+- **Three behaviours have never run against real data.** No sample parcel is insured, no sample
+  complaint is the wrong type, and no sample order comes near the high-value figure. All three
+  are proven only by cases we constructed. If the real system words any of them differently, we
+  would turn away claims we should accept and never know.
+- **The claim thresholds are guesses.** Only the $100 cap is a real ShipBob figure. The age limit,
+  whether the last day counts, the high-value figure, the shortest acceptable description, and
+  the order the reasons are ranked in are all placeholders. They can be changed without touching
+  code, which is not the same as being right.
+- **One stopped claim, several reasons, one label.** "Missing information" covers three different
+  problems: a detail absent from the claim, a record ShipBob could not give us, and no delivery
+  date on either record. A merchant can therefore be asked to send something they cannot send,
+  because the real problem was never theirs. A separate reason for "we could not assess this"
+  would be more honest.
+- **The checks and the merchant email are joined by plain text.** The email lifts values out of
+  what each check recorded, by name. Rename one and the email quietly degrades to a vaguer
+  sentence rather than failing a test. Worse, the wording the check uses for a missing item lands
+  word for word in front of a merchant, and nothing in the checks guards that.
+- **Two delivery dates that disagree are recorded and then ignored.** We use the claim's own date
+  and note the disagreement. If the two were months apart, the claim's age would be decided on one
+  of them with nobody looking. There is no ShipBob rule for this.
+- **A claim filed before it was delivered passes.** That is impossible and does happen in real
+  data. It passes the age check with a sentence, when it should probably reach a person.
+- **A slow or unavailable ShipBob.** Each read is tried up to three times, but the budget is per
+  read, not per claim: three reads against a hanging system can take about a minute and a half
+  before anyone is told. There is no circuit breaker, so during an outage every claim pays the
+  full wait before failing. A "too many requests" reply is not retried at all and the system
+  ignores how long it was asked to wait.
+- **Every client retries in step.** We deliberately left the pauses between attempts fixed so that
+  a run is repeatable. Under real load that means many clients coming back at the same instant and
+  hitting a struggling system together.
+- **The database is one file on one machine.** A second copy of the service has a different memory
+  and neither knows about the other. Nothing is backed up. Two writers at once wait five seconds
+  and then fail the claim. And there is no way to change the shape of the stored data later: the
+  table is only created if absent, so a future change would silently do nothing.
+- **Reading merchant memory blocks everything else.** The database is read in the middle of
+  handling a request, so under load every screening queues behind the same file. Fine for a local
+  file; not fine for a real one.
+- **Every price is assumed to be in dollars.** Nothing in ShipBob's data says what currency an
+  order is in, so we add the numbers up and call the total dollars. A non-dollar order would be
+  compared against a dollar threshold and nobody would notice.
+- **Nothing limits how much a merchant's history can grow.** Corrections are never trimmed,
+  de-duplicated or capped, and the whole list is handed to the AI as context in a later stage. A
+  long-standing merchant could eventually swamp it.
+- **Connections are opened by building the service, not by starting it.** Anything that builds a
+  service and never runs it — every test does — leaves a connection pool open. Harmless in a
+  short-lived process; it would accumulate in a long-lived one that rebuilt services.
 
 ### Would improve
 
+- **A record of every screening, and the ability to fetch one back.** This is the single biggest
+  gap: it blocks an audit trail, protection against doing something twice, and a representative
+  simply reopening what they were looking at yesterday.
+- **A reason of its own for "we could not assess this claim",** separate from "the merchant left
+  something out", so nobody is asked for information that would not have helped.
 - **A readiness check as well as a liveness check.** The current health check only says the
-  process is alive. It does not say whether ShipBob or the model is reachable, which is what a
-  deployment system actually needs to know before sending traffic.
-- **Metrics and tracing.** Logs are structured, but there is no measurement of how long a claim
-  takes, how often the agent escalates, or what a case costs to investigate. Those numbers are
-  how you would know the system is working.
-- **A minimum test coverage bar in CI.** Coverage is measured and reported but nothing fails
-  when it drops. Worth turning on once there is real code to cover.
+  process is alive, not whether it can reach ShipBob or its database — which is what a deployment
+  system actually needs to know.
+- **Measurements.** Nothing records how long a claim takes to screen, how often reads are retried,
+  or how many claims are stopped and for which reason. Those numbers are how anyone would know
+  the thresholds are wrong.
+- **One vocabulary, checked.** Merchant-facing wording is now consistent, but nothing enforces it
+  across the files that contribute to a single email.
+- **Bounding what a representative types.** Their corrections are free text that will one day be
+  put in front of an AI. Deciding now what a safe length and shape looks like is cheaper than
+  discovering it later.
+- **A minimum test coverage bar in CI.** Coverage is measured and reported but nothing fails when
+  it drops.
 - **Dependency vulnerability scanning**, and testing against more than one Python version.
 - **A container image and a deployment path.** There is currently no defined way to run this
   anywhere but a developer's laptop.
+
+### Questions for whoever owns the requirements
+
+- **The requirements refer to "open question 2" and "open question 3" but contain no list of open
+  questions.** Neither affects the quick checks, but both are cited as unresolved and nobody can
+  look them up.
+- **Does a claim filed exactly on the age limit still count?** We say yes. It is a coin flip.
+- **What should happen when neither the claim nor the parcel records a delivery date?** We stop
+  the claim and call it missing information. This is the decision we are least sure of.
+- **When a claim fails several checks at once, which reason should the merchant be told first?**
+  We lead with insurance, then age, then wrong type, then missing information, on the reasoning
+  that a merchant with a live insurance route should hear about it rather than be told their
+  claim was late. Nobody has confirmed that.

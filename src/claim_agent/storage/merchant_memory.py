@@ -82,7 +82,7 @@ class MerchantMemory:
             nothing on file.
 
         Raises:
-            UpstreamError: The store could not be read. A broken store is not
+            StorageError: The store could not be read. A broken store is not
                 allowed to look like a merchant with a clean record (NFR-4).
         """
         if user_id is None:
@@ -112,7 +112,7 @@ class MerchantMemory:
                 correctly.
 
         Raises:
-            UpstreamError: The store could not be written.
+            StorageError: The store could not be written.
         """
         initialise(self._database_path)
         with connect(self._database_path) as connection:

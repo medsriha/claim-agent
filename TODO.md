@@ -23,18 +23,61 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
 
 ## Layer 0 — Deterministic pre-flight
 
-- [ ] FR-0.1
-- [ ] FR-0.2
-- [ ] FR-0.3
-- [ ] FR-0.4
-- [ ] FR-0.5
-- [ ] FR-0.6
+- [x] FR-0.1 — A reader for the three ShipBob records, and a gather step that fetches the case,
+  then the shipment and order together.
+  - **Conclusion:** the case is read first because it names the other two; those two run
+    concurrently. Attachments are unreachable from here by construction, not by convention.
+  - **Be aware:** the one rule not to break is that a 404 on the shipment or order becomes an
+    empty record, while an upstream failure propagates. Widening that `except` would let a
+    timeout close a good claim and email its merchant. There is a test that fails if you do.
+
+- [x] FR-0.2 — The four gates, always all four, each recording what it looked at.
+  - **Conclusion:** no short-circuiting, so a rep sees every reason a claim was stopped, not just
+    the first one found. The claim-type match is exact after case and spacing are normalised —
+    deliberately not a prefix, or `"Claim | Damaged in Transit - Insured"` would be let through.
+  - **Be aware:** `missing_key_information` currently covers three different problems, including
+    "neither record has a delivery date", which a merchant cannot fix. See DESIGN.md.
+
+- [x] FR-0.3 — `PROCEED`, or `TERMINAL` with every reason, ranked.
+  - **Conclusion:** reasons are ordered by a configurable ranking, never by iterating a set, so
+    the same claim always reports them in the same order.
+  - **Be aware:** the ranking (insured, too old, wrong type, missing information) is our
+    judgement, not a ShipBob rule, and it decides which reason heads the merchant's email.
+
+- [x] FR-0.4 — A stopped claim produces a rep-facing report and a drafted merchant email listing
+  every reason it was declined.
+  - **Conclusion:** written from fixed sentences with the claim's real numbers filled in — no AI,
+    so an ineligible claim costs three reads and nothing more (NFR-8). The report carries all four
+    gate results, so a rep can see what passed rather than infer it from silence.
+  - **Be aware:** this report shape is scoped to Layer 0. Layer 2 has its own requirements
+    (FR-2.1–FR-2.10) that nobody has built yet; the two will need reconciling rather than this one
+    being extended. Nothing is stored and nothing is sent — the email is a draft on an object, and
+    the word "draft" is deliberately absent from its text so a marker can never reach a merchant.
+
+- [x] FR-0.5 — Order value, high-value flag, days since delivery, and the merchant's past
+  corrections, computed once and passed on.
+  - **Conclusion:** money is exact throughout — parsed off the wire as a decimal so `38.00` keeps
+    its cents, and rendered as `"90.00"` rather than a float.
+  - **Be aware:** `days_since_delivery` counts delivery to *case creation*, not to today, so the
+    number matches the age gate and never goes stale. An unreadable order gives an unknown value,
+    which is deliberately different from an order worth nothing.
+
+- [x] FR-0.6 — The same claim always produces the same answer.
+  - **Conclusion:** no clock is read anywhere in the layer — the timestamp is passed in from the
+    HTTP edge — and the age check compares two dates that both come from ShipBob, so a claim that
+    was 73 days old when filed is 73 days old forever. Proven by screening the same case with
+    timestamps a decade apart and comparing the output byte for byte.
+  - **Be aware:** the hazards that had to be designed around were float money, locale-dependent
+    month names, and set iteration. All three are avoided deliberately and will look like
+    over-engineering to someone who has not hit them.
+
 - [x] FR-0.7 — Claim thresholds live in `policy.py`, apart from process settings in `settings.py`.
   - **Conclusion:** every threshold used to judge a claim is in one file and overridable by
     environment variable. Nothing is hardcoded anywhere else.
-  - **Be aware:** only the $100 cap is a real ShipBob figure. The age limit, high-value
-    threshold, confidence threshold and step budgets are placeholders we invented so the code runs
-    — they need sign-off before production.
+  - **Be aware:** only the $100 cap is a real ShipBob figure. The age limit and whether it is
+    inclusive, the high-value threshold, the claim-type wording, the minimum description length,
+    the reason ranking, the confidence threshold and the step budgets are placeholders we invented
+    so the code runs — they need sign-off before production.
 
 ## Layer 1a — Triage: splitting the claim into lines
 
@@ -132,6 +175,7 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
 - [ ] NFR-6
 - [x] NFR-7 — Policy values are read from the environment with a `POLICY_` prefix.
   - **Conclusion:** changing a threshold needs no code change and no redeploy of logic.
-  - **Be aware:** the values are wired up but nothing consumes them yet, so this is proven only
-    by its own tests. Re-check it when Layer 0 lands.
+  - **Be aware:** now genuinely consumed, which was the open question here. Raising
+    `POLICY_MAX_CLAIM_AGE_DAYS` to 90 turns CASE-1004 from stopped into carried-on, end to end
+    over HTTP — that is the demonstration, not the unit test.
 - [ ] NFR-8

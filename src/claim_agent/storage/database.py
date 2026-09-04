@@ -23,7 +23,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from claim_agent.errors import UpstreamError
+from claim_agent.errors import StorageError
 from claim_agent.observability import get_logger
 
 logger = get_logger(__name__)
@@ -70,7 +70,7 @@ def connect(path: Path) -> Iterator[sqlite3.Connection]:
         An open connection whose rows can be read by column name.
 
     Raises:
-        UpstreamError: The database could not be opened, read or written — the
+        StorageError: The database could not be opened, read or written — the
             file is not a database, the disk is full, the path is unusable. The
             failure is translated here so that no caller has to know this service
             stores anything in SQLite, and so that a broken store fails loudly
@@ -91,9 +91,7 @@ def connect(path: Path) -> Iterator[sqlite3.Connection]:
         # The path is logged rather than returned. It says something about the
         # machine this runs on, and error responses leave the building.
         logger.error("claim_database_unavailable", database_path=str(path), error=str(failure))
-        raise UpstreamError(
-            "The store of past claim corrections could not be reached."
-        ) from failure
+        raise StorageError("The store of past claim corrections could not be reached.") from failure
     finally:
         if connection is not None:
             connection.close()
@@ -112,7 +110,7 @@ def initialise(path: Path) -> None:
         path: The database file. It is created, along with its folder, if absent.
 
     Raises:
-        UpstreamError: The database could not be created or opened.
+        StorageError: The database could not be created or opened.
     """
     with connect(path) as connection:
         connection.executescript(_SCHEMA)
