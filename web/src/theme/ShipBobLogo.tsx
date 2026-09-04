@@ -1,33 +1,32 @@
 /**
- * The mark in the top-left corner.
+ * The ShipBob logo: the isometric box mark, and the wordmark beside it.
  *
- * A stand-in, not ShipBob's real logo — drawn here so the demo needs no asset file.
- * Replace it with the real mark before this goes in front of anyone.
+ * The mark's outline was traced from the logo artwork rather than drawn by eye, so its
+ * proportions are the real ones. The wordmark is set in the page's own typeface, which is
+ * not the typeface ShipBob uses — swap both for the official asset before this goes in
+ * front of anyone outside the team.
  */
 export function ShipBobLogo(): React.JSX.Element {
   return (
     <span className="logo">
       <svg
-        className="logo-glyph"
-        viewBox="0 0 32 32"
+        className="logo-mark"
+        viewBox="0 0 100 100"
         role="img"
         aria-label="ShipBob"
         focusable="false"
       >
-        {/* A parcel seen from the front: the box, then the tape down the middle. */}
-        <rect x="3" y="8" width="26" height="18" rx="3" fill="currentColor" />
-        <path d="M3 13.5h26" stroke="var(--sb-on-brand)" strokeWidth="1.6" opacity="0.55" />
-        <path d="M16 8v18" stroke="var(--sb-on-brand)" strokeWidth="1.6" opacity="0.55" />
-        {/* The flap, lifted, to keep it from reading as a plain rectangle. */}
         <path
-          d="M8 8 11 3h10l3 5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinejoin="round"
+          fill="currentColor"
+          d="M47.29 0.0 L52.47 0.0 L54.82 1.18 L80.0 16.71 L68.24 23.76 L49.65 12.71 L25.88 27.53
+          L50.12 42.12 L83.06 22.12 L86.59 21.65 L90.12 23.29 L92.0 26.12 L92.0 72.94 L90.12 76.47
+          L87.06 78.82 L54.82 98.35 L51.29 99.76 L48.24 99.76 L44.94 98.35 L12.71 78.82 L8.71
+          75.29 L7.76 73.18 L7.76 38.35 L19.53 45.41 L19.53 68.24 L49.88 86.82 L80.24 68.24 L80.0
+          38.35 L55.06 53.41 L52.0 54.82 L48.94 55.06 L44.71 53.41 L10.12 32.47 L7.76 29.65 L7.76
+          25.18 L9.65 22.59 L47.06 0.24 Z"
         />
       </svg>
-      <span className="logo-word">shipbob</span>
+      <span className="logo-word">ShipBob</span>
     </span>
   );
 }

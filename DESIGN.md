@@ -518,6 +518,11 @@ not read. It must never be reachable from anywhere real.
 
 **Where the code is** — `tools/shipbob_mock.py`, reading `tests/fixtures/shipbob.py`.
 
+Note that the past-corrections part of the screening has nothing to show on a fresh machine.
+Nothing writes a correction yet — the part of the system that captures a representative's edits
+has not been built — so every claim reports none on file. That is the honest answer, and it is
+what the screen displays.
+
 ---
 
 ### The screen a representative uses
@@ -558,8 +563,15 @@ writes nothing anywhere. It holds nothing between visits.
 - **The draft email is marked as a draft.** The email's own words never say so, deliberately, so
   that a marker can never reach a merchant — which leaves the screen as the only place that state
   is visible. There is no send button and nothing behind one.
-- **The ShipBob colours are our approximation**, gathered in one file and marked provisional the
-  same way the claim thresholds are. The logo is a stand-in, not ShipBob's real mark.
+- **Nothing on the page is invented.** It shows what the screening returned and nothing else. A
+  merchant with no past corrections shows an empty list, because that is what the system knows —
+  writing sample history into the store to make the panel look fuller would put fabricated
+  content on screen that a reader could not tell from the real thing. The system's own words are
+  reshaped to read rather than restated: the page shows "Claim too old" where the rules say
+  `claim_too_old`, and never a phrase of its own choosing.
+- **The ShipBob look is taken from the real logo.** The two brand colours are sampled from the
+  artwork and the box mark's outline is traced from it. The wordmark is set in the page's own
+  typeface, which is not the one ShipBob uses.
 
 **When things go wrong** — Three failures are handled separately because they need different
 things from the reader: a case that does not exist is a typo, ShipBob being unreachable is a
@@ -567,7 +579,8 @@ wait, and the system not answering usually means it is not running.
 
 **Not ready for production** — One screen, showing the quick checks, because that is all that
 exists. It cannot approve, send, or fetch back a screening. Nothing it shows is stored. It has
-no sign-in, no tests, and has never been tried by a representative or with a screen reader.
+no sign-in, no tests, and has never been tried by a representative or with a screen reader. The
+wordmark is not ShipBob's typeface.
 
 **Where the code is** — `web/`, entry point `web/src/App.tsx`.
 

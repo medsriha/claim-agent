@@ -5,7 +5,7 @@
  * insurance check ran and cleared rather than inferring it from silence. Each can be
  * opened to reveal the values it looked at, so a finding can be checked, not just trusted.
  */
-import { gateLabel, humaniseKey } from "../display";
+import { humanise } from "../display";
 import type { GateResult } from "../api/types";
 
 interface GateListProps {
@@ -34,7 +34,7 @@ function GateCard({ gate }: { gate: GateResult }): React.JSX.Element {
         <span className="gate-mark" aria-hidden="true">
           {gate.passed ? "✓" : "✕"}
         </span>
-        <h4 className="gate-name">{gateLabel(gate.gate)}</h4>
+        <h4 className="gate-name">{humanise(gate.gate)}</h4>
         <span className="gate-state">{gate.passed ? "Passed" : "Failed"}</span>
       </div>
 
@@ -46,7 +46,7 @@ function GateCard({ gate }: { gate: GateResult }): React.JSX.Element {
           <dl className="observed-list">
             {observed.map(([key, value]) => (
               <div key={key} className="observed-row">
-                <dt className="observed-key">{humaniseKey(key)}</dt>
+                <dt className="observed-key">{humanise(key)}</dt>
                 {/* An empty value is a real answer here — "nothing was missing" — so it is
                     drawn rather than left as blank space that reads like a bug. */}
                 <dd className="observed-value">{value === "" ? "—" : value}</dd>

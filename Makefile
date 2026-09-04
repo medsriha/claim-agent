@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install hooks run mock seed test lint format typecheck check \
+.PHONY: help install hooks run mock test lint format typecheck check \
         ui-install ui-dev ui-build ui-lint
 
 help: ## Show available commands
@@ -16,9 +16,6 @@ run: ## Run the API with reload
 
 mock: ## Run the ShipBob stand-in on port 8080
 	uv run uvicorn tools.shipbob_mock:app --port 8080 --reload
-
-seed: ## Add sample past rep corrections, so the demo has some to show
-	uv run python -m tools.seed_demo_memory
 
 test: ## Run the test suite
 	uv run pytest

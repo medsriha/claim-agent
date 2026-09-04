@@ -23,10 +23,12 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
   - **Be aware:** the type-aware eslint rules are pointed only at the TypeScript files; applied
     to everything they make the eslint config itself fail to lint.
 
-- [x] UI-2 — The ShipBob look: one token file, a logo, values marked provisional.
+- [x] UI-2 — The ShipBob look: one token file and the logo.
   - **Conclusion:** every colour is a custom property in `web/src/theme/shipbob.css`, and the
-    stylesheet beside it holds no literal colour at all.
-  - **Be aware:** the values are our approximation and the logo is a drawn stand-in.
+    stylesheet beside it holds no literal colour at all. The brand blue and navy are sampled
+    from the logo artwork and the box mark is traced from it, so neither is guesswork.
+  - **Be aware:** the wordmark is set in the page's own typeface, not ShipBob's. Swap both the
+    mark and the wordmark for the official asset before this is seen outside the team.
 
 - [x] UI-3 — A typed client: types mirroring the result and the error shape, in one place.
   - **Conclusion:** `api/types.ts` mirrors the service field for field; `api/client.ts` is the
@@ -42,6 +44,10 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
     demonstrates would be the page asserting an outcome it does not decide.
 
 - [x] UI-6 — The verdict, with the reasons in the order the service ranked them.
+  - **Conclusion:** the verdict and the reasons are the service's own values, reshaped to read —
+    `claim_too_old` becomes "Claim too old". There is no table of our own wording anywhere, so
+    the screen can only show what the service actually said, and a value we have never seen
+    still reads.
   - **Be aware:** never sorted on screen. The first reason heads the merchant's email.
 
 - [x] UI-7 — The four checks, all shown, each opening to reveal the values it looked at.
@@ -49,8 +55,9 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
     drawn as a dash rather than blank space that reads like a bug.
 
 - [x] UI-8 — The claim in numbers, and past rep corrections.
-  - **Be aware:** nothing writes corrections yet, so on a fresh machine this is always empty.
-    `make seed` puts a few in.
+  - **Be aware:** nothing writes corrections yet — that is FR-3.8, a later stage — so this list
+    is always empty. It shows the empty state the endpoint actually returns. Do not seed it with
+    invented history to make the demo look fuller.
 
 - [x] UI-9 — The stopped-claim findings and the drafted email, marked as a draft.
   - **Conclusion:** the draft note sits above the email because the email's own words never say
@@ -60,14 +67,14 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
   - **Conclusion:** the explanation comes from the service where it sent one.
   - **Be aware:** a result and a failure are never on screen together.
 
-- [x] UI-11 — Something to run it against: `tools/shipbob_mock.py` and `tools/seed_demo_memory.py`.
+- [x] UI-11 — Something to run it against: `tools/shipbob_mock.py`.
   - **Conclusion:** the stand-in serves the same fixtures the tests use, so the screen and the
     tests cannot disagree about what CASE-1001 looks like.
   - **Be aware:** it restores the cents on every price first — the fixtures hold them as ordinary
     numbers, and without that the demo would stop exercising the exact-money handling. Importing
     from `tests/` also meant making `tests/` a package and its imports absolute.
 
-- [x] UI-12 — `make ui-install`, `ui-dev`, `ui-build`, `ui-lint`, plus `mock` and `seed`.
+- [x] UI-12 — `make ui-install`, `ui-dev`, `ui-build`, `ui-lint`, plus `mock`.
   - **Be aware:** deliberately not part of `make check` or CI, so nothing catches a broken UI.
 
 ## Reference — what the endpoint returns

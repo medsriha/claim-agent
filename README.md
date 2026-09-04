@@ -28,12 +28,11 @@ curl localhost:8000/health
 
 ## Running the demo
 
-Two one-off steps, then three things running side by side. The screen is at
+One one-off step, then three things running side by side. The screen is at
 <http://localhost:5173>.
 
 ```bash
 make mock         # a stand-in for ShipBob, on :8080 — without it every claim fails
-make seed         # once: sample past rep corrections, so the demo has some to show
 make run          # the claims service, on :8000
 make ui-install   # once: install the UI's dependencies
 make ui-dev       # the screen, on :5173, forwarding claim requests to :8000
@@ -44,7 +43,8 @@ Try `CASE-1001` for a claim that carries on, `CASE-1004` for one stopped as too 
 rep sees when ShipBob cannot be read.
 
 The UI is a demonstration: no sign-in, nothing stored, and nothing it shows can be sent or
-approved. Its ShipBob colours and mark are our own approximation, not ShipBob's.
+approved. It displays what the endpoint returns and nothing else — no sample data is seeded
+anywhere, so a merchant with no past corrections shows an empty list.
 
 ## Development
 

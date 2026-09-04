@@ -1,31 +1,31 @@
 /**
  * Every colour, typeface and measurement the ShipBob look is made of.
  *
- * PROVISIONAL: our approximation of ShipBob's public branding, not values ShipBob gave
- * us. Gathered here so correcting them is one edit. Nothing outside this file writes a
+ * The brand blue and the navy are sampled straight from the ShipBob logo artwork, so
+ * those two are exact. Everything else — the greys, the pass and stop colours, the
+ * spacing — is ours, chosen to sit beside them. Nothing outside this file writes a
  * colour, so a wrong shade can never hide in a component.
  */
 
 :root {
-  /* Brand. The blue carries the header, the buttons and anything being pointed at. */
-  --sb-brand: #1c4ef5;
-  --sb-brand-strong: #1338c4;
-  --sb-brand-tint: #eef2ff;
+  /* Sampled from the logo: the mark's blue and the wordmark's navy. */
+  --sb-brand: #175cff;
+  --sb-ink: #09083a;
 
-  /* Text. Near-black navy rather than true black, which reads harshly on a screen. */
-  --sb-ink: #0d1b2a;
-  --sb-ink-soft: #5b6b7f;
-  --sb-ink-faint: #8794a5;
+  /* Ours, derived to sit with the two above. */
+  --sb-brand-strong: #0f45c4;
+  --sb-brand-tint: #eaf0ff;
+  --sb-ink-soft: #4a4f6b;
+  --sb-ink-faint: #7b809a;
   --sb-on-brand: #ffffff;
 
-  /* Surfaces. The page sits on the canvas; cards sit on the surface above it. */
-  --sb-canvas: #f4f6fa;
+  --sb-canvas: #f5f6fa;
   --sb-surface: #ffffff;
-  --sb-line: #dbe2ec;
+  --sb-line: #dcdfeb;
 
-  /* Outcomes. A check that passed, a check that stopped the claim, something to notice.
-     Each has a tint for the background behind it, so a state never rests on colour
-     alone — every one of them carries words on the screen as well. */
+  /* A check that passed, a check that stopped the claim, something to notice. Each has a
+     tint for the background behind it, and each carries words too — no state on this
+     page rests on colour alone. */
   --sb-pass: #0b7a4b;
   --sb-pass-tint: #e7f4ee;
   --sb-stop: #c62828;
@@ -33,15 +33,13 @@
   --sb-flag: #9a6400;
   --sb-flag-tint: #fdf4e3;
 
-  /* Type. A system stack: it needs no download, so the screen never flashes unstyled
-     text while a font arrives, and it looks native wherever it is opened. */
+  /* A system stack: nothing to download, so no flash of unstyled text. */
   --sb-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
   --sb-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* Shape. Two radii and two shadows, so everything on the page agrees with itself. */
   --sb-radius: 10px;
   --sb-radius-small: 6px;
-  --sb-shadow: 0 1px 2px rgb(13 27 42 / 6%), 0 4px 12px rgb(13 27 42 / 6%);
-  --sb-shadow-raised: 0 2px 4px rgb(13 27 42 / 8%), 0 12px 28px rgb(13 27 42 / 10%);
+  --sb-shadow: 0 1px 2px rgb(9 8 58 / 6%), 0 4px 12px rgb(9 8 58 / 6%);
+  --sb-shadow-raised: 0 2px 4px rgb(9 8 58 / 8%), 0 12px 28px rgb(9 8 58 / 10%);
 }

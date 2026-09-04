@@ -232,14 +232,22 @@ answer.
 - **Say as little as possible on screen.** Almost every sentence a rep reads should have come
   from the service. The UI adds labels, not commentary — it is a window onto the rules, and prose
   explaining itself is noise in front of them.
+- **Never invent data, and never seed any.** The screen shows what the endpoint returned and
+  nothing else. An empty list is shown as empty. Do not write sample records into the store to
+  make a panel look fuller — fabricated content on screen is indistinguishable from real
+  history, and a reader has no way to tell. This applies to the service's own values too: a
+  verdict, a check name or a stop reason is reshaped to read (`claim_too_old` becomes "Claim too
+  old"), never swapped for wording of ours.
 
 **How it reaches the API.** Through the Vite dev proxy, which forwards `/cases` and `/health`.
 No backend change, and no cross-origin policy opened on a service with no authentication. That
 is a dev-server feature: a built UI served elsewhere would need it solved properly.
 
-**Theme.** Every colour, font and the logo live in one file under `web/src/theme/`. The values
-are our approximation of ShipBob's public branding, not values ShipBob gave us — the file says
-so, the same way `policy.py` marks its provisional thresholds. The logo is a stand-in.
+**Theme.** Every colour and font lives in one file under `web/src/theme/`. The brand blue
+(`#175CFF`) and navy (`#09083A`) are sampled from ShipBob's logo artwork and the mark's outline
+is traced from it, so both are the real thing; the greys and the pass/stop colours are ours. The
+wordmark is set in the page's own typeface, which is not ShipBob's — swap both for the official
+asset before this is seen outside the team.
 
 **Writing it.** [Documenting the code](#documenting-the-code) applies, in proportion: the UI is a
 demo, so a component gets a short docstring saying what it is for, not an essay. TypeScript is
@@ -330,7 +338,6 @@ make install    # sync dependencies into .venv
 make hooks      # install git hooks — do this once, before your first commit
 make run        # uvicorn with reload
 make mock       # the ShipBob stand-in on port 8080
-make seed       # sample past rep corrections, so the demo has some to show
 make test       # pytest with coverage
 make lint       # ruff check + format check
 make typecheck  # mypy

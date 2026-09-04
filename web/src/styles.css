@@ -45,8 +45,8 @@ p {
 /* --- Header ------------------------------------------------------------- */
 
 .header {
-  background: var(--sb-brand);
-  color: var(--sb-on-brand);
+  background: var(--sb-surface);
+  border-bottom: 1px solid var(--sb-line);
 }
 
 .header-inner {
@@ -61,33 +61,36 @@ p {
 .logo {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  color: var(--sb-on-brand);
+  gap: 10px;
 }
 
-.logo-glyph {
-  width: 27px;
-  height: 27px;
+.logo-mark {
+  width: 26px;
+  height: 26px;
+  color: var(--sb-brand);
 }
 
 .logo-word {
   font-size: 21px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  color: var(--sb-ink);
 }
 
 .header-title {
   padding-left: 16px;
-  border-left: 1px solid currentcolor;
+  border-left: 1px solid var(--sb-line);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--sb-ink-soft);
 }
 
 .header-tag {
   margin-left: auto;
   padding: 3px 10px;
-  border: 1px solid currentcolor;
   border-radius: 999px;
+  background: var(--sb-brand-tint);
+  color: var(--sb-brand);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -252,14 +255,9 @@ p {
 
 .failure-message {
   margin-top: 8px;
-  font-weight: 600;
-}
-
-.failure-suggestion {
-  margin-top: 6px;
   margin-bottom: 14px;
-  color: var(--sb-ink-soft);
   max-width: 68ch;
+  font-weight: 600;
 }
 
 /* --- Verdict ------------------------------------------------------------ */
@@ -296,11 +294,11 @@ p {
 }
 
 .verdict-badge {
-  padding: 4px 12px;
+  padding: 5px 14px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--sb-on-brand);
 }
@@ -311,10 +309,6 @@ p {
 
 .verdict-stopped .verdict-badge {
   background: var(--sb-stop);
-}
-
-.verdict-title {
-  font-size: 20px;
 }
 
 .verdict-case {

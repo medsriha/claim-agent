@@ -1,41 +1,24 @@
 /**
  * Turning values the service sends into words on screen.
  *
- * Presentation only — nothing here decides anything about a claim, and nothing here does
- * arithmetic on money. The money function pads a figure for display and never adds,
- * multiplies or rounds.
+ * Presentation only. Nothing here decides anything about a claim, and nothing here
+ * invents wording: names the service sends — `claim_too_old`, `key_information` — are
+ * reshaped mechanically into readable text, never swapped for a phrase of our own.
+ *
+ * Nothing here does arithmetic on money either. The money function pads a figure for
+ * display and never adds, multiplies or rounds.
  */
-import type { GateName, TerminalReason } from "./api/types";
 
-/** The four checks, in words a rep would use rather than the service's own names. */
-const GATE_LABELS: Record<GateName, string> = {
-  age: "Age of the claim",
-  claim_type: "Kind of claim",
-  key_information: "Key information",
-  insurance: "Insurance",
-};
-
-/** Why a claim was stopped, in one short phrase. */
-const REASON_LABELS: Record<TerminalReason, string> = {
-  shipment_insured: "The parcel was insured",
-  claim_too_old: "Filed too long after delivery",
-  wrong_claim_type: "Not a damaged-in-transit claim",
-  missing_key_information: "Key information is missing",
-};
-
-/** The name of one of the four checks. */
-export function gateLabel(gate: GateName): string {
-  return GATE_LABELS[gate];
-}
-
-/** The short phrase for why a claim was stopped. */
-export function reasonLabel(reason: TerminalReason): string {
-  return REASON_LABELS[reason];
-}
-
-/** Turn a field name into a label: `days_since_delivery` becomes "Days since delivery". */
-export function humaniseKey(key: string): string {
-  const words = key.split("_").join(" ");
+/**
+ * Turn a name the service sent into readable text: `days_since_delivery` becomes
+ * "Days since delivery", `claim_too_old` becomes "Claim too old".
+ *
+ * Used for field names, check names and stop reasons alike. Doing it mechanically rather
+ * than looking each one up in a table of our own wording means the screen can only ever
+ * show what the service actually said, and a value we have never seen still reads.
+ */
+export function humanise(name: string): string {
+  const words = name.split("_").join(" ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
