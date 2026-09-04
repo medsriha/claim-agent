@@ -31,6 +31,20 @@ make ui-install   # once: install the UI's dependencies
 make ui-dev       # the screen, on :5173, forwarding claim requests to :8000
 ```
 
+## Restarting the backend
+
+`make run` watches the code, so editing a `.py` file restarts it for you. Restart by hand for
+anything else — `Ctrl+C`, then `make run` again:
+
+```bash
+lsof -ti:8000 | xargs kill    # only if the port is still held
+```
+
+Two things a restart is actually needed for. **`.env` changes** are not picked up: settings and
+policy are read once at startup and the file watcher only watches Python. And a restart
+**discards any threshold changed through the admin panel** — those live in memory only, so
+every value goes back to what `.env` says.
+
 ## Development
 
 ```bash
