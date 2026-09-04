@@ -172,34 +172,41 @@ def test_the_email_names_every_reason_the_claim_was_declined() -> None:
     """FR-0.4: a merchant told only the first reason fixes nothing and files again."""
     email = draft(
         reasons=(
-            TerminalReason.SHIPMENT_INSURED,
             TerminalReason.CLAIM_TOO_OLD,
             TerminalReason.WRONG_CLAIM_TYPE,
             TerminalReason.MISSING_KEY_INFORMATION,
         ),
-        gates=all_gates(insurance=insurance_gate(passed=False)),
     )
 
-    assert "insurance" in email.body
     assert "73 days" in email.body
     assert "damaged in transit" in email.body
     assert "the parcel's id" in email.body
 
 
-def test_the_reasons_appear_in_the_order_they_were_ranked() -> None:
-    """FR-0.4: the strongest reason is the one to lead with, in the body as in the subject."""
-    email = draft(
-        reasons=(TerminalReason.SHIPMENT_INSURED, TerminalReason.CLAIM_TOO_OLD),
-        gates=all_gates(insurance=insurance_gate(passed=False)),
-    )
+def test_being_insured_is_never_explained_to_a_merchant() -> None:
+    """FR-0.2: an insured claim is routed out to its insurance, not answered by us.
 
-    assert email.body.index("insurance") < email.body.index("73 days")
+    Nothing should ask this file to write that sentence, so being handed it is a
+    mistake in our own code — and one that would put a paragraph in front of a
+    merchant about a process that is not ours to describe.
+    """
+    with pytest.raises(ValueError, match="never explained to the merchant"):
+        draft(
+            reasons=(TerminalReason.SHIPMENT_INSURED,),
+            gates=all_gates(insurance=insurance_gate(passed=False)),
+        )
+
+
+def test_the_reasons_appear_in_the_order_the_email_was_given_them() -> None:
+    """FR-0.4: the order decides the paragraphs, and the first one names the subject."""
+    email = draft(reasons=(TerminalReason.WRONG_CLAIM_TYPE, TerminalReason.CLAIM_TOO_OLD))
+
+    assert email.body.index("damaged in transit") < email.body.index("73 days")
 
 
 @pytest.mark.parametrize(
     ("leading_reason", "expected_in_subject"),
     [
-        (TerminalReason.SHIPMENT_INSURED, "insured"),
         (TerminalReason.CLAIM_TOO_OLD, "too long after delivery"),
         (TerminalReason.WRONG_CLAIM_TYPE, "not a damage-in-transit claim"),
         (TerminalReason.MISSING_KEY_INFORMATION, "details are missing"),
@@ -225,7 +232,6 @@ def test_the_subject_line_comes_from_the_leading_reason(
             TerminalReason.CLAIM_TOO_OLD,
             ("26 December 2025", "9 March 2026", "73 days", "60 days"),
         ),
-        (TerminalReason.SHIPMENT_INSURED, ("insured", "insurance claim process")),
         (TerminalReason.WRONG_CLAIM_TYPE, ("damaged in transit", "Claim | Lost in Transit")),
         (
             TerminalReason.MISSING_KEY_INFORMATION,

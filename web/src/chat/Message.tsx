@@ -6,6 +6,7 @@
  * draws were settled when the conversation was laid out.
  */
 import { EmailComposer } from "./EmailComposer";
+import { EscalationAction } from "./EscalationAction";
 import type { MessageState } from "./useReveal";
 import { ClaimRead, OrderRead, ParcelRead } from "../components/CaseReads";
 import { ClaimNumbers } from "../components/ClaimNumbers";
@@ -124,6 +125,13 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
       return (
         <div className="bubble">
           <EmailComposer email={body.email} />
+        </div>
+      );
+
+    case "escalation":
+      return (
+        <div className="bubble">
+          <EscalationAction />
         </div>
       );
 

@@ -60,7 +60,44 @@ INSURANCE_PASSED = GateResult(
     observed={"is_insured": "false"},
 )
 
+INSURANCE_FAILED = GateResult(
+    gate=GateName.INSURANCE,
+    passed=False,
+    reason=TerminalReason.SHIPMENT_INSURED,
+    explanation=(
+        "This shipment was insured, and insured shipments are claimed on their insurance "
+        "through a different process."
+    ),
+    observed={"is_insured": "true"},
+)
+
+AGE_PASSED = GateResult(
+    gate=GateName.AGE,
+    passed=True,
+    explanation="The claim was opened 2 days after delivery, within the 60 day limit.",
+    observed={"days_since_delivery": "2", "age_limit_days": "60"},
+)
+
+KEY_INFORMATION_PASSED = GateResult(
+    gate=GateName.KEY_INFORMATION,
+    passed=True,
+    explanation="The claim names a parcel and an order, and the merchant described what happened.",
+    observed={"missing": ""},
+)
+
 ALL_FOUR_GATES = (AGE_FAILED, CLAIM_TYPE_PASSED, KEY_INFORMATION_FAILED, INSURANCE_PASSED)
+
+# An insured claim with nothing else wrong with it: the only thing stopping it is the
+# one thing a merchant is never written to about.
+ONLY_INSURED_GATES = (AGE_PASSED, CLAIM_TYPE_PASSED, KEY_INFORMATION_PASSED, INSURANCE_FAILED)
+
+# Insured and too old at once, which is the case where a representative has a choice.
+INSURED_AND_TOO_OLD_GATES = (
+    AGE_FAILED,
+    CLAIM_TYPE_PASSED,
+    KEY_INFORMATION_PASSED,
+    INSURANCE_FAILED,
+)
 
 
 def make_context(**overrides: Any) -> ClaimContext:
@@ -97,6 +134,7 @@ def test_a_stopped_claim_produces_a_write_up_carrying_a_drafted_email() -> None:
     report = build()
 
     assert report.case_id == "CASE-1004"
+    assert report.drafted_email is not None
     assert report.drafted_email.body
     assert report.requires_rep_approval is True
 
@@ -115,6 +153,7 @@ def test_a_case_naming_no_merchant_still_produces_a_write_up() -> None:
 
     assert report.account_name is None
     assert report.user_id is None
+    assert report.drafted_email is not None
     assert report.drafted_email.body
 
 
@@ -139,13 +178,14 @@ def test_the_write_up_keeps_the_checks_that_passed_as_well() -> None:
     assert [gate.passed for gate in report.gates] == [False, True, False, True]
 
 
-def test_the_reasons_are_kept_in_the_order_they_were_ranked() -> None:
-    """FR-0.4: the first reason is the one the email leads with, so the order matters."""
+def test_the_reasons_are_kept_in_the_order_they_arrived_in() -> None:
+    """FR-0.4: the report must not reorder them — the first names the email's subject."""
     reasons = (TerminalReason.CLAIM_TOO_OLD, TerminalReason.MISSING_KEY_INFORMATION)
 
     report = build(reasons=reasons)
 
     assert report.reasons == reasons
+    assert report.drafted_email is not None
     assert "opened too long after delivery" in report.drafted_email.subject
 
 
@@ -165,6 +205,7 @@ def test_the_write_up_names_no_amount_of_money() -> None:
     would read as an offer nobody has made.
     """
     report = build()
+    assert report.drafted_email is not None
     written = " ".join([*report.findings, report.drafted_email.subject, report.drafted_email.body])
 
     assert "$" not in written
@@ -175,3 +216,71 @@ def test_a_stopped_claim_with_no_reason_at_all_is_refused() -> None:
     """FR-0.4: a claim stopped for nothing anyone can name would reach a rep as a blank."""
     with pytest.raises(ValueError, match="at least one reason"):
         build(reasons=())
+
+
+def test_an_insured_claim_is_escalated_and_carries_no_merchant_email() -> None:
+    """FR-0.2: an insured claim is routed out, not answered, so there is nothing to send.
+
+    Insured shipments are claimed on their insurance, through a process that is not
+    ours. Nobody writes to the merchant about that, so the write-up hands a
+    representative an escalation instead of an email.
+    """
+    report = build(reasons=(TerminalReason.SHIPMENT_INSURED,), gates=ONLY_INSURED_GATES)
+
+    assert report.requires_escalation is True
+    assert report.drafted_email is None
+    assert report.findings == (INSURANCE_FAILED.explanation,)
+
+
+def test_a_claim_both_insured_and_too_old_carries_the_email_and_the_escalation() -> None:
+    """FR-0.2, FR-0.4: the representative chooses, and is given both things to choose from.
+
+    Being too old is something a merchant can be told. Being insured is not. A claim
+    that is both therefore produces an email about its age *and* an escalation, and
+    nothing here decides which of the two a representative acts on.
+    """
+    report = build(
+        reasons=(TerminalReason.SHIPMENT_INSURED, TerminalReason.CLAIM_TOO_OLD),
+        gates=INSURED_AND_TOO_OLD_GATES,
+    )
+
+    assert report.requires_escalation is True
+    assert report.drafted_email is not None
+    assert "73 days" in report.drafted_email.body
+
+
+def test_the_merchant_email_never_mentions_the_insurance() -> None:
+    """FR-0.2: whichever else fails, the insurance is not the merchant's business here.
+
+    The subject line is the interesting half. It is taken from the first reason a
+    merchant can be told about, so on a claim led by being insured it has to skip past
+    that one rather than announce it.
+    """
+    report = build(
+        reasons=(TerminalReason.SHIPMENT_INSURED, TerminalReason.CLAIM_TOO_OLD),
+        gates=INSURED_AND_TOO_OLD_GATES,
+    )
+
+    assert report.drafted_email is not None
+    assert "insur" not in report.drafted_email.subject.lower()
+    assert "insur" not in report.drafted_email.body.lower()
+
+
+def test_a_claim_stopped_by_anything_else_needs_no_escalation() -> None:
+    """FR-0.4: an ordinary stopped claim is closed with an explanation, and that is all."""
+    report = build()
+
+    assert report.requires_escalation is False
+    assert report.drafted_email is not None
+
+
+def test_the_insurance_finding_still_reaches_the_representative() -> None:
+    """NFR-3: the reason it was routed out has to be readable, or the escalation is a shrug.
+
+    The sentence a representative reads is the insurance check's own. It is the only
+    place that reason is written down now that no email carries it.
+    """
+    report = build(reasons=(TerminalReason.SHIPMENT_INSURED,), gates=ONLY_INSURED_GATES)
+
+    assert "insured" in report.findings[0]
+    assert report.reasons[0] is TerminalReason.SHIPMENT_INSURED

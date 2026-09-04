@@ -40,10 +40,18 @@ def build_terminal_report(
     and drafts the merchant's email to go with it. Nothing is sent and nothing is
     closed here: the result is something to read and approve.
 
+    An insured claim is the one that comes out differently. Being insured is not
+    something we write to a merchant about — those claims are routed out to the
+    insurance process instead (FR-0.2) — so it is left out of the email and the
+    write-up is marked as needing escalation. A claim that is only insured therefore
+    carries no email at all; a claim that is insured *and* too old carries both the
+    escalation and an email about its age, and the representative chooses.
+
     Args:
         case: The claim's support case, which names the merchant and the case id.
-        reasons: Every reason the claim was stopped, already de-duplicated and already
-            ranked, strongest first. The first is the one the email leads with.
+        reasons: Every reason the claim was stopped, already de-duplicated, insured
+            first when it applies. The first reason a merchant can be told about
+            names the email's subject line.
         gates: All four eligibility check results, passed and failed alike. The failed
             ones become the summary a representative reads; all four are kept.
         context: The facts worked out about the claim up front — what the order was
@@ -55,13 +63,23 @@ def build_terminal_report(
     Returns:
         The write-up, marked as needing a representative's approval. Its summary holds
         one sentence for each check that failed, in the order the checks were handed
-        over; a claim stopped by two checks therefore has two sentences.
+        over; a claim stopped by two checks therefore has two sentences. The drafted
+        email is absent when the only thing stopping the claim is that it was insured.
 
     Raises:
-        ValueError: if `reasons` is empty, raised while drafting the email. A claim
-            stopped for nothing anyone can name is a mistake in our own code, and it
-            has to stop here rather than reach a representative as a blank explanation.
+        ValueError: if `reasons` is empty. A claim stopped for nothing anyone can name
+            is a mistake in our own code, and it has to stop here rather than reach a
+            representative as a blank explanation.
     """
+    if not reasons:
+        raise ValueError("A stopped claim needs at least one reason to write up.")
+
+    insured = TerminalReason.SHIPMENT_INSURED in reasons
+    # What is left once being insured is taken out: the reasons a merchant can
+    # actually be written to about. An insured claim with nothing else wrong with it
+    # leaves none, and gets no email.
+    tellable = tuple(reason for reason in reasons if reason is not TerminalReason.SHIPMENT_INSURED)
+
     return TerminalReport(
         case_id=case.case_id,
         account_name=case.account_name,
@@ -70,5 +88,8 @@ def build_terminal_report(
         findings=tuple(gate.explanation for gate in gates if not gate.passed),
         gates=tuple(gates),
         context=context,
-        drafted_email=draft_terminal_email(case, reasons, gates, context, policy),
+        drafted_email=(
+            draft_terminal_email(case, tellable, gates, context, policy) if tellable else None
+        ),
+        requires_escalation=insured,
     )

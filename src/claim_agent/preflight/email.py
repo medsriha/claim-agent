@@ -11,9 +11,17 @@ process has to cost almost nothing (NFR-8), and the same claim has to produce th
 same email every time it is screened (FR-0.6). There is no model, no clock and no
 randomness in this file, and there should never be one.
 
-The email lists **every** reason the claim was declined, not only the strongest.
-A merchant told just "too old", who fixes nothing and files again, has been failed
-by the explanation.
+The email lists **every** reason the claim was declined that a merchant can be told
+about, not only the first one. A merchant told just "too old", who fixes nothing and
+files again, has been failed by the explanation. The order the reasons arrive in
+therefore decides emphasis — which paragraph is read first, and which reason names
+the subject — and never which of them the merchant gets to hear about.
+
+**Being insured is not one of those reasons, and never reaches this file.** An
+insured shipment is claimed on its insurance, through a process that is not ours, so
+it is routed out for someone else to pick up rather than answered by us (FR-0.2).
+The write-up marks it for escalation; nobody writes to the merchant about it. A claim
+that is both insured and too old still gets this email about its age.
 
 The word "draft" never appears in the text. A representative has to read the exact
 wording that would be sent (FR-2.7), so a marker inside the body is a marker that
@@ -55,6 +63,18 @@ from the host. This is not an oversight — do not replace it with a date format
 string.
 """
 
+_INSURED_NEVER_EMAILED = (
+    "An insured shipment is escalated to the insurance process, never explained to the "
+    "merchant, so it must not reach the email."
+)
+"""Why both branches below refuse rather than write anything.
+
+Neither can be reached: the write-up takes being insured out of the reasons before it
+drafts an email (FR-0.2). They exist because leaving them out would mean matching the
+reasons loosely, and then a fifth reason added one day would slip through unwritten
+instead of failing the type check.
+"""
+
 SIGN_OFF = "Thanks,\nShipBob Support"
 """How every one of these emails ends.
 
@@ -71,7 +91,7 @@ def draft_terminal_email(
 ) -> DraftedEmail:
     """Write the merchant the explanation for a claim that cannot be processed (FR-0.4).
 
-    The subject comes from the first reason, which is the one to lead with. The body
+    The subject names the first reason, the one the policy puts first. The body
     greets the merchant, says the claim cannot be processed, then gives one short
     paragraph per reason in the order they were handed over, and ends by inviting a
     reply. Real values go into those paragraphs — the delivery date, the day count,
@@ -82,7 +102,8 @@ def draft_terminal_email(
         case: The claim's support case. Its contact address, merchant name and case
             id all appear in the email.
         reasons: Every reason the claim was declined, already de-duplicated and
-            already ranked, strongest first. All of them are explained.
+            already in the order the email should explain them. All of them are
+            explained; the first also names the subject line.
         gates: All four eligibility check results, passed and failed alike. Two of
             the paragraphs read the values a check recorded, so the checks are
             searched by name rather than assumed to be in any particular position.
@@ -124,14 +145,15 @@ def draft_terminal_email(
 
 
 def _subject(case: Case, leading_reason: TerminalReason) -> str:
-    """Write the subject line, naming the case and the main reason it was declined.
+    """Write the subject line, naming the case and the first of its reasons.
 
-    Only the leading reason appears. A subject listing all of them would be unreadable
-    in an inbox, and the body carries the full picture.
+    Only the first reason appears, the one the policy's email order puts there. A
+    subject listing all of them would be unreadable in an inbox, and the body carries
+    the full picture.
     """
     match leading_reason:
         case TerminalReason.SHIPMENT_INSURED:
-            return f"Your claim {case.case_id}: this shipment was insured"
+            raise ValueError(_INSURED_NEVER_EMAILED)
         case TerminalReason.CLAIM_TOO_OLD:
             return f"Your claim {case.case_id}: opened too long after delivery"
         case TerminalReason.WRONG_CLAIM_TYPE:
@@ -165,28 +187,13 @@ def _reason_paragraph(
     """
     match reason:
         case TerminalReason.SHIPMENT_INSURED:
-            return _insured_paragraph()
+            raise ValueError(_INSURED_NEVER_EMAILED)
         case TerminalReason.CLAIM_TOO_OLD:
             return _too_old_paragraph(case, _observed(gates, GateName.AGE), context, policy)
         case TerminalReason.WRONG_CLAIM_TYPE:
             return _wrong_type_paragraph(case)
         case TerminalReason.MISSING_KEY_INFORMATION:
             return _missing_information_paragraph(_observed(gates, GateName.KEY_INFORMATION))
-
-
-def _insured_paragraph() -> str:
-    """Explain that an insured shipment is settled somewhere else entirely.
-
-    This one is worth saying warmly, because it is not a refusal: the merchant still
-    has a live route to being paid, and pointing them at it is the whole value of the
-    email.
-    """
-    return (
-        "This shipment was insured. Insured shipments are settled through the insurance "
-        "claim process rather than by our claims team, so this one has to go that way "
-        "instead. That route is still open to you, and if you are not sure how to start "
-        "it, reply here and we will point you to the right place."
-    )
 
 
 def _too_old_paragraph(

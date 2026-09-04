@@ -36,6 +36,7 @@ from tests.fixtures.shipbob import (
 from claim_agent.domain.models import Case, GateName, Order, Shipment, TerminalReason
 from claim_agent.policy import Policy
 from claim_agent.preflight.gates import (
+    EMAIL_REASON_ORDER,
     check_age,
     check_claim_type,
     check_insurance,
@@ -546,16 +547,21 @@ def test_fr_0_2_a_claim_that_clears_everything_has_no_reason_to_be_stopped() -> 
     gates = evaluate_gates(record, resolve_delivered_date(record), Policy())
 
     assert all(gate.passed for gate in gates)
-    assert terminal_reasons(gates, Policy()) == ()
+    assert terminal_reasons(gates) == ()
 
 
-def test_fr_0_3_reasons_come_back_in_the_ranked_order() -> None:
-    """The first reason heads the email to the merchant, so insurance outranks age."""
+def test_fr_0_3_reasons_come_back_in_a_fixed_order_led_by_insurance() -> None:
+    """Being insured comes first because it is what routes the claim out (FR-0.2).
+
+    The rest follow in the order the merchant's email explains them. Every reason is
+    reported whatever its position, and the claim is stopped by there being a reason at
+    all rather than by their order.
+    """
     record = everything_wrong_record()
 
     gates = evaluate_gates(record, resolve_delivered_date(record), Policy())
 
-    assert terminal_reasons(gates, Policy()) == (
+    assert terminal_reasons(gates) == (
         TerminalReason.SHIPMENT_INSURED,
         TerminalReason.CLAIM_TOO_OLD,
         TerminalReason.WRONG_CLAIM_TYPE,
@@ -571,29 +577,18 @@ def test_fr_0_3_a_reason_three_checks_all_give_is_only_said_once() -> None:
     failed = [gate for gate in gates if not gate.passed]
 
     assert len(failed) == 3
-    assert terminal_reasons(gates, Policy()) == (TerminalReason.MISSING_KEY_INFORMATION,)
+    assert terminal_reasons(gates) == (TerminalReason.MISSING_KEY_INFORMATION,)
 
 
-def test_fr_0_7_reordering_the_ranking_reorders_the_reasons() -> None:
-    """The ranking is our judgement, not a ShipBob rule, so it is a setting (NFR-7)."""
-    record = everything_wrong_record()
-    reversed_policy = Policy(
-        terminal_reason_precedence=(
-            TerminalReason.MISSING_KEY_INFORMATION,
-            TerminalReason.WRONG_CLAIM_TYPE,
-            TerminalReason.CLAIM_TOO_OLD,
-            TerminalReason.SHIPMENT_INSURED,
-        )
-    )
+def test_fr_0_2_being_insured_is_not_one_of_the_reasons_the_email_explains() -> None:
+    """An insured claim is routed out to its insurance, so no email mentions it.
 
-    gates = evaluate_gates(record, resolve_delivered_date(record), Policy())
-
-    assert terminal_reasons(gates, reversed_policy) == (
-        TerminalReason.MISSING_KEY_INFORMATION,
-        TerminalReason.WRONG_CLAIM_TYPE,
-        TerminalReason.CLAIM_TOO_OLD,
-        TerminalReason.SHIPMENT_INSURED,
-    )
+    The order the email works through is the three reasons a merchant can be told
+    about. Being insured is reported, and leads the reasons, but it is not in that
+    list — which is what stops it ever reaching a paragraph.
+    """
+    assert TerminalReason.SHIPMENT_INSURED not in EMAIL_REASON_ORDER
+    assert set(EMAIL_REASON_ORDER) == set(TerminalReason) - {TerminalReason.SHIPMENT_INSURED}
 
 
 def test_fr_0_6_the_same_claim_screened_twice_gives_exactly_the_same_result() -> None:

@@ -216,13 +216,21 @@ who is using it, and nothing stored. A rep picks one of the sample claims, the U
 answer out as a conversation: the findings appear one at a time, and a stopped claim ends in
 its drafted email, which the rep can reword and send.
 
-**A second screen is the policy panel**, reached from the header. It lists every threshold in
-`policy.py` and can change one while the service runs: `GET /admin/policy`,
-`PUT /admin/policy`, `POST /admin/policy/reset`. The panel is drawn from the policy file itself —
-each value's label, explanation and control come from how the file declares it — so a threshold
-added there appears on screen without the UI being touched. **There is no sign-in on it**, and a
-change is held in memory only, so a restart silently puts every value back. Both are deliberate
-demo choices, written up in DESIGN.md under "Future production".
+**A second screen is the admin panel**, reached from the header. It lists the thresholds in
+`policy.py` that are meant to be changed while the service runs, and changes them:
+`GET /admin/policy`, `PUT /admin/policy`, `POST /admin/policy/reset`. The panel is drawn from the
+policy file itself — each value's label, explanation and control come from how the file declares
+it — so a threshold added there appears on screen without the UI being touched.
+
+**A value can be kept off the panel** by marking it `NOT_ON_PANEL` in `policy.py`. It stays a
+policy value, still read and still set from the environment; the panel neither shows it nor
+accepts a change to it, and the endpoint refuses one so the omission is a rule rather than a
+choice of controls. Four values are marked today: the three the unbuilt AI investigation would
+read, and the minimum description length.
+
+**There is no sign-in on it**, and a change is held in memory only, so a restart silently puts
+every value back. Both are deliberate demo choices, written up in DESIGN.md under "Future
+production".
 
 **The backend's rules do not stop at the browser:**
 
@@ -429,10 +437,10 @@ Open engineering choices — decide with the user, then record the outcome here:
 
 - **Provisional policy values.** Only the $100 cap comes from REQUIREMENTS.md. Everything else
   in `policy.py` — the age limit and whether it is inclusive, the high-value threshold, the
-  claim-type label, the minimum description length, the order the reasons appear in the email,
-  the confidence threshold, and the step budgets — are placeholders awaiting ShipBob sign-off.
-  They are configurable so they can be corrected without a code change; that does not make the
-  numbers right.
+  claim-type label, the minimum description length, the confidence threshold, and the step
+  budgets — are placeholders awaiting ShipBob sign-off, and so is the fixed order the reasons
+  are explained in. They are configurable so they can be corrected without a code change; that
+  does not make the numbers right.
 - **Reimbursement cap semantics** — per claim line or per claim (REQUIREMENTS.md open
   question 2).
 - **How a built UI would reach the API.** Solved for development by the dev-server proxy, and
@@ -470,8 +478,18 @@ Decided:
   change what every later claim is judged by, and a restart loses the change. Chosen knowingly for
   a demo that is shown once, over a shared admin token and a SQLite table, both of which were
   offered. Neither is a defensible choice for anything longer-lived: see DESIGN.md.
-- **Every policy value is editable from the panel**, the stated $100 cap included. It is shown with
-  the service's own explanation, which says which values are provisional and which is ShipBob's.
+- **The panel offers the values worth changing on a running service**, the stated $100 cap
+  included, each shown with the service's own explanation of it. A value whose layer does not
+  exist yet is kept off it: a control that changes nothing observable is worse than no control.
+  Marking one is a single note beside the value in `policy.py`.
+- **An insured claim is escalated, not explained.** FR-0.2 says insured shipments are "routed out,
+  never processed here", so no merchant email is written about one, and the write-up is marked for
+  escalation instead. A claim that is *also* too old still gets the email about its age, and the
+  rep chooses. FR-0.4 says every ineligible claim is closed with an explanation to the merchant
+  and does not except this case, so the two requirements can be read as conflicting; this is our
+  reading, and DESIGN.md lists it among the questions for whoever owns them.
+- **The order the reasons are explained in is fixed in code**, not a policy value. It sets the
+  paragraph order and the subject line and nothing else, and nobody asked to tune it.
 - **The policy is read once per request**, through the same dependency as before, and replaced
   whole rather than value by value. A claim being screened finishes on the values it started with;
   the next claim sees the change. That is what keeps Layer 0 deterministic (FR-0.6) while its

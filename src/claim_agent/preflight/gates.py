@@ -35,6 +35,32 @@ from claim_agent.domain.models import Case, GateName, Order, Shipment, TerminalR
 from claim_agent.policy import Policy
 from claim_agent.preflight.models import CaseRecord, DeliveryDate, GateResult
 
+EMAIL_REASON_ORDER = (
+    TerminalReason.CLAIM_TOO_OLD,
+    TerminalReason.WRONG_CLAIM_TYPE,
+    TerminalReason.MISSING_KEY_INFORMATION,
+)
+"""The order the merchant's email explains the reasons a claim was turned away.
+
+A claim can fail more than one check, and the email explains every reason it failed,
+one short paragraph each. This is the order those paragraphs come out in, and the
+first reason also names the subject line. So the order settles emphasis and nothing
+else: no reason is dropped by being last, and whether a claim is turned away does
+not depend on it.
+
+**Being insured is not in this list, and that is the point.** An insured shipment is
+routed out rather than answered (FR-0.2): it is claimed on its insurance, through a
+process that is not ours, so nobody here writes to the merchant about it. It is
+escalated for someone else to pick up instead. A claim that is both insured and, say,
+too old still gets the email about its age — the escalation and the email are two
+separate things a representative can act on.
+
+Fixing the order in code rather than in the claim policy is deliberate. A fixed
+order is what keeps two screenings of the same claim identical (FR-0.6), and nobody
+has asked to tune which reason a merchant reads first; a setting nobody changes is a
+lever to maintain for no one. Whoever wants it configurable can move it back.
+"""
+
 NOT_RECORDED = "not recorded"
 """Shown where a value was simply not there — no date, no id, no description."""
 
@@ -395,30 +421,34 @@ def evaluate_gates(
     )
 
 
-def terminal_reasons(gates: Sequence[GateResult], policy: Policy) -> tuple[TerminalReason, ...]:
-    """Collect the reasons a claim was stopped, ranked, with no reason said twice (FR-0.3).
+def terminal_reasons(gates: Sequence[GateResult]) -> tuple[TerminalReason, ...]:
+    """Collect the reasons a claim was stopped, in order, with no reason said twice (FR-0.3).
 
     Several checks can give the same reason — a claim with no parcel record is
-    missing key information according to two of them — and a merchant should be
-    told once, not twice. Ranking matters because the first reason is the one the
-    email to the merchant leads with, and telling someone "too old" when the real
-    answer is "claim on your insurance" sends them the wrong way. The ranking
-    itself is a policy setting, since it is our judgement rather than a ShipBob
-    rule.
+    missing key information according to two of them — and it should be listed once,
+    not twice.
+
+    Being insured comes first when it is one of the reasons, because it is the one
+    that changes what happens to the claim: an insured claim is routed out to the
+    insurance process rather than answered by us (FR-0.2). The rest follow in the
+    order the merchant's email explains them.
 
     Args:
         gates: The outcomes of the checks. Ones that passed are ignored.
-        policy: Holds the ranking, which is guaranteed to list every possible
-            reason exactly once.
 
     Returns:
-        The reasons to stop the claim, in ranked order, each appearing once.
-        Empty when nothing stopped the claim.
+        The reasons to stop the claim, each appearing once, insured first if it
+        applies. Empty when nothing stopped the claim — which is the only thing the
+        verdict depends on, since a claim is stopped by there being a reason at all
+        and not by their order.
     """
     # A list, not a set: iterating a set would put the reasons in an order that
     # can differ between runs, and this layer promises it never does (FR-0.6).
     failed = [gate.reason for gate in gates if not gate.passed and gate.reason is not None]
-    return tuple(reason for reason in policy.terminal_reason_precedence if reason in failed)
+    emailable = tuple(reason for reason in EMAIL_REASON_ORDER if reason in failed)
+    if TerminalReason.SHIPMENT_INSURED in failed:
+        return (TerminalReason.SHIPMENT_INSURED, *emailable)
+    return emailable
 
 
 def _is_within_age_limit(days: int, policy: Policy) -> bool:

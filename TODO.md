@@ -42,18 +42,32 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
     deliberately not a prefix, or `"Claim | Damaged in Transit - Insured"` would be let through.
   - **Be aware:** `missing_key_information` currently covers three different problems, including
     "neither record has a delivery date", which a merchant cannot fix. See DESIGN.md.
+  - **Be aware:** an insured parcel is now *routed out* rather than answered — the write-up is
+    marked for escalation and no merchant email mentions insurance. FR-0.2 says insured shipments
+    are "routed out, never processed here"; FR-0.4 says every ineligible claim is closed with an
+    explanation to the merchant and does not except this one. Reading the two together is our
+    interpretation, and it is listed among DESIGN.md's questions.
 
-- [x] FR-0.3 — `PROCEED`, or `TERMINAL` with every reason, ranked.
-  - **Conclusion:** reasons are ordered by a configurable ranking, never by iterating a set, so
+- [x] FR-0.3 — `PROCEED`, or `TERMINAL` with every reason, in a set order.
+  - **Conclusion:** reasons are put in a fixed order, never left to the order a set
+    happens to iterate in, so
     the same claim always reports them in the same order.
-  - **Be aware:** the ranking (insured, too old, wrong type, missing information) is our
-    judgement, not a ShipBob rule, and it decides which reason heads the merchant's email.
+  - **Be aware:** the order is our judgement, not a ShipBob rule, and it lives in `gates.py`
+    rather than in the claim policy — it decides emphasis only, and nobody asked to tune it.
+    Being insured leads the reasons, because it is what routes the claim out; the other three
+    follow in the order the merchant's email explains them. Every reason is reported whatever the
+    order, and whether the claim is stopped does not depend on it.
 
 - [x] FR-0.4 — A stopped claim produces a rep-facing report and a drafted merchant email listing
   every reason it was declined.
   - **Conclusion:** written from fixed sentences with the claim's real numbers filled in — no AI,
     so an ineligible claim costs three reads and nothing more (NFR-8). The report carries all four
     gate results, so a rep can see what passed rather than infer it from silence.
+  - **Be aware:** an insured claim is the exception — it carries an escalation and no email,
+    because no email explains insurance. A claim that is insured *and* stopped for another reason
+    carries both, and the rep chooses which to act on. The report refuses to exist in any other
+    combination: an email with nothing to say, or a reason the merchant could be told with no
+    email, is a mistake in our own code and is rejected on construction.
   - **Be aware:** this report shape is scoped to Layer 0. Layer 2 has its own requirements
     (FR-2.1–FR-2.10) that nobody has built yet; the two will need reconciling rather than this one
     being extended. Nothing is stored and nothing is sent — the email is a draft on an object, and
@@ -81,10 +95,24 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
 - [x] FR-0.7 — Claim thresholds live in `policy.py`, apart from process settings in `settings.py`.
   - **Conclusion:** every threshold used to judge a claim is in one file and overridable by
     environment variable. Nothing is hardcoded anywhere else.
+  - **Also now changeable while the service runs.** An admin panel reads and writes them over
+    HTTP (`/admin/policy`), and the change reaches the very next claim screened — no restart. The
+    values in force are held in `live_policy.py` and replaced whole; a claim already being
+    screened finishes on the ones it started with, so FR-0.6 still holds. The panel is generated
+    from `policy.py`, so a threshold added there needs no other change to be editable.
+  - **Not every value is on the panel.** Marking one `NOT_ON_PANEL` in `policy.py` keeps it a
+    policy value — read as always, still set from the environment — while the panel neither shows
+    it nor accepts a change to it. Four are marked: the minimum description length, and the three
+    the unbuilt AI investigation would read, where a control would change nothing observable.
   - **Be aware:** only the $100 cap is a real ShipBob figure. The age limit and whether it is
     inclusive, the high-value threshold, the claim-type wording, the minimum description length,
-    the reason ranking, the confidence threshold and the step budgets are placeholders we invented
+    the email reason order, the confidence threshold and the step budgets are placeholders we
+    invented
     so the code runs — they need sign-off before production.
+  - **Be aware:** a change made through the panel is held in memory only and there is no sign-in
+    on it. A restart silently puts every value back to what the environment says, and nothing
+    records who changed what. Both were chosen knowingly for a demo — see DESIGN.md, "Future
+    production".
 
 ## Layer 1a — Triage: splitting the claim into lines
 

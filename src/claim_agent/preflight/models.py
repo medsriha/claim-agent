@@ -118,16 +118,32 @@ class ClaimContext(BaseModel):
 class TerminalReport(BaseModel):
     """What a rep receives when a claim cannot be processed at all (FR-0.4).
 
-    A claim that is ruled out is still closed with an explanation to the
-    merchant, that explanation is an email, and every email waits for a rep. So a
-    stopped claim skips the investigation but still produces this.
+    A claim that is ruled out is still closed with an explanation to the merchant,
+    that explanation is an email, and every email waits for a rep. So a stopped
+    claim skips the investigation but still produces this.
 
-    `reasons` are in precedence order: the first is the one to lead with when a
-    claim failed more than one check. `findings` is one plain sentence for each
-    check that failed. `gates` carries all four, passed and failed alike, because
-    knowing what was checked and cleared is part of being able to audit the
-    decision (NFR-3). `requires_rep_approval` is fixed at true: nothing here
-    reaches the merchant on its own.
+    There are two things a rep can be handed here, and a claim may carry either or
+    both:
+
+    - **A drafted email**, for every reason a merchant can be told about. `None`
+      when there is nothing to tell them — which today means a claim stopped only
+      by being insured.
+    - **An escalation**, when the claim has to leave our hands entirely.
+      `requires_escalation` is true exactly when the shipment was insured: those
+      are claimed on their insurance through a process that is not ours, so they
+      are routed out for someone else to pick up rather than answered (FR-0.2).
+
+    A claim that is both insured and, say, too old carries both, and the rep
+    decides: send the merchant the email about its age, or escalate it, or do both.
+    Nothing here chooses for them.
+
+    `reasons` lists every reason the claim was stopped, insured first when it
+    applies, then in the order the email explains the rest. `findings` is one plain
+    sentence for each check that failed, including the insurance check — that
+    sentence is the escalation note, and it is read by a rep rather than sent to
+    anyone. `gates` carries all four, passed and failed alike, because knowing what
+    was checked and cleared is part of being able to audit the decision (NFR-3).
+    `requires_rep_approval` is fixed at true: nothing here leaves on its own.
     """
 
     case_id: str
@@ -137,8 +153,43 @@ class TerminalReport(BaseModel):
     findings: tuple[str, ...]
     gates: tuple[GateResult, ...]
     context: ClaimContext
-    drafted_email: DraftedEmail
+    drafted_email: DraftedEmail | None
+    requires_escalation: bool
     requires_rep_approval: Literal[True] = True
+
+    @model_validator(mode="after")
+    def _must_give_the_rep_something_to_do(self) -> Self:
+        """Refuse a write-up that leaves a rep holding nothing, or holding the wrong thing.
+
+        Three ways this could go wrong, all of them mistakes in our own code rather
+        than anything a merchant or ShipBob did, and all of them worth stopping here
+        instead of letting a claim quietly go nowhere (NFR-4):
+
+        - **An insured claim not marked for escalation**, or a claim marked for
+          escalation that was never insured. The flag and the reason have to agree,
+          or a claim is routed by one and explained by the other.
+        - **A reason a merchant could be told about, with no email drafted.** That is
+          a claim closed without the explanation FR-0.4 says it is owed.
+        - **An email drafted with nothing to say.** A claim stopped only by being
+          insured has no merchant-facing reason at all, so an email here would have
+          to be explaining something we deliberately do not write to merchants about.
+
+        Raises `ValueError`, which pydantic reports as a validation error.
+        """
+        insured = TerminalReason.SHIPMENT_INSURED in self.reasons
+        if insured != self.requires_escalation:
+            raise ValueError(
+                "requires_escalation has to be true exactly when the shipment was insured."
+            )
+
+        tellable = [
+            reason for reason in self.reasons if reason is not TerminalReason.SHIPMENT_INSURED
+        ]
+        if tellable and self.drafted_email is None:
+            raise ValueError("A claim with a reason the merchant can be told needs an email.")
+        if not tellable and self.drafted_email is not None:
+            raise ValueError("A claim with nothing to tell the merchant must not carry an email.")
+        return self
 
 
 class PreflightResult(BaseModel):
@@ -149,8 +200,8 @@ class PreflightResult(BaseModel):
     checks either way, `record` is what was read, `context` is the groundwork
     done for whoever comes next, and `evaluated_at` is when the screen ran.
 
-    `terminal_reasons` is empty on a claim allowed through, and in precedence
-    order on one that was stopped.
+    `terminal_reasons` is empty on a claim allowed through, and in the merchant
+    email's order on one that was stopped.
     """
 
     case_id: str

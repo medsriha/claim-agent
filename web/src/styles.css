@@ -85,18 +85,6 @@ p {
   color: var(--sb-ink-soft);
 }
 
-.header-tag {
-  margin-left: auto;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--sb-brand-tint);
-  color: var(--sb-brand);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 /* --- Page --------------------------------------------------------------- */
 
 /*
@@ -919,7 +907,8 @@ p {
 .header-nav {
   display: flex;
   gap: 4px;
-  margin-left: 8px;
+  /* Pushed to the right-hand end of the header, where the demo badge used to sit. */
+  margin-left: auto;
 }
 
 .header-tab {
@@ -944,7 +933,6 @@ p {
 }
 
 .header-tab:focus-visible,
-.ranking-move:focus-visible,
 .policy-input:focus-visible {
   outline: 2px solid var(--sb-brand);
   outline-offset: 2px;
@@ -1007,6 +995,22 @@ p {
   color: var(--sb-ink-soft);
 }
 
+/*
+ * A value picked rather than typed. It borrows the text box's look so the two kinds of
+ * control sit together, and keeps the arrow a browser draws on a select so it is obvious
+ * which one it is.
+ */
+.policy-select {
+  margin-top: 10px;
+  max-width: 340px;
+  font-family: var(--sb-font);
+}
+
+.policy-select:focus-visible {
+  outline: 2px solid var(--sb-brand);
+  outline-offset: 2px;
+}
+
 .policy-input {
   margin-top: 10px;
   max-width: 340px;
@@ -1034,63 +1038,6 @@ p {
   margin-top: 10px;
   font-weight: 600;
   cursor: pointer;
-}
-
-.ranking {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 420px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ranking-entry {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  background: var(--sb-surface);
-  border: 1px solid var(--sb-line);
-  border-radius: var(--sb-radius-small);
-}
-
-.ranking-position {
-  width: 20px;
-  font-family: var(--sb-font-mono);
-  font-size: 12.5px;
-  color: var(--sb-ink-faint);
-}
-
-.ranking-name {
-  font-weight: 600;
-}
-
-.ranking-moves {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.ranking-move {
-  width: 28px;
-  padding: 2px 0;
-  font: inherit;
-  color: var(--sb-brand);
-  background: var(--sb-brand-tint);
-  border: 1px solid transparent;
-  border-radius: var(--sb-radius-small);
-  cursor: pointer;
-}
-
-.ranking-move:hover:not(:disabled) {
-  border-color: var(--sb-brand);
-}
-
-.ranking-move:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .policy-refusal,

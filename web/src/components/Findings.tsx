@@ -6,7 +6,7 @@
  */
 import { formatMoment } from "../display";
 
-/** Why the claim was stopped, one sentence per reason, in the order the service ranked them. */
+/** Why the claim was stopped, one sentence per reason, in the order the service sent them. */
 export function Findings({ findings }: { findings: string[] }): React.JSX.Element {
   return (
     <ul className="findings">

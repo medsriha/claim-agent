@@ -97,19 +97,20 @@ representative and a draft email to the merchant listing every reason.
 
 **There is a screen to see it on.** A web page offers the sample claims, and lays the answer out
 as a conversation: what was read, what the claim is worth, each of the four checks in turn, the
-decision, and — on a stopped claim — the write-up and the draft email, which can be reworded on
-the spot. It is a demonstration: anyone who opens it can screen any claim, and it decides nothing
-itself. It has a send button, and that button reaches nothing — no email leaves the browser,
-because the stage that would send one does not exist, though the screen reports it as sent.
+decision, and — on a stopped claim — the write-up, the draft email where there is one, and an
+escalation where the parcel was insured. The email can be reworded on the spot. It is a
+demonstration: anyone who opens it can screen any claim, and it decides nothing itself. It has a
+send button and an escalate button, and neither reaches anything — nothing leaves the browser,
+because the stages that would send an email or route a claim out do not exist, though the screen
+reports both as done.
 Alongside it there is a stand-in for ShipBob, so the whole thing can be run on a laptop without
 being connected to anything.
 
 **The rules can be changed from that screen too.** A second page lists every threshold the checks
-judge by — how old a claim may be, what counts as a high-value order, how the reasons for turning a
-claim away are explained to them — and lets someone change one and watch the next claim be
-screened by the new
-number, with no restart. Nothing about a change is stored: a restart puts every value back to what
-the machine's own settings say.
+judge by — how old a claim may be, what counts as a high-value order, how short a description is
+too short — and lets someone change one and watch the next claim be screened by the new number,
+with no restart. Nothing about a change is stored: a restart puts every value back to what the
+machine's own settings say.
 
 Nothing is stored. The answer exists only in the reply, so a representative cannot fetch a
 screening again, and there is no lasting record of one. Closing the page loses what it showed.
@@ -386,20 +387,26 @@ directly so a claim can be screened and inspected on its own.
 - **No delivery date anywhere stops the claim.** A check we cannot carry out must never quietly
   pass. We report it as missing information rather than inventing a fifth kind of reason. This is
   our judgement, not a stated rule, and it is one of the things worth confirming.
+- **An insured parcel is not answered at all — it is handed on.** Insured shipments are claimed
+  on their insurance, through a process that is not this one, so nobody here writes to the
+  merchant about it. The claim is marked for escalation and left for someone else to pick up
+  (FR-0.2). This is the one reason a merchant is never told about.
 - **When several checks fail, the merchant is told about every one of them, in a set order.**
-  Insurance first, then age, then wrong type, then missing information. Each reason gets its own
-  paragraph whichever position it lands in, so the order decides emphasis and nothing else: which
-  paragraph is read first, and which reason goes in the subject line. Insurance leads because it
-  is the one reason that points a merchant somewhere else entirely — an insured shipment is
-  settled through its insurance — and missing information comes last because inviting someone to
-  send photographs reads oddly above a paragraph saying the claim is too old to process whatever
-  arrives. The order is a judgement call and a setting, not a fixed rule. Whether the claim is
-  stopped does not depend on it at all.
+  Age, then wrong type, then missing information. Each reason gets its own paragraph, so the order
+  decides emphasis and nothing else: which paragraph is read first, and which reason goes in the
+  subject line. Missing information comes last because inviting someone to send photographs reads
+  oddly above a paragraph saying the claim is too old to process whatever arrives. Being insured
+  is deliberately not in that list, because no email explains it. The order is fixed in the code
+  rather than being a setting: nobody has asked to tune which reason a merchant reads first, and
+  a fixed order is what keeps two screenings of the same claim identical.
+- **A claim can be both.** One that is insured *and* too old produces the escalation *and* the
+  email about its age, and a representative chooses which to act on. Nothing decides for them.
 - **Every debatable value is a setting.** The age limit and whether the last day counts, the
-  high-value figure and whether landing exactly on it counts, the complaint-type wording, the
-  shortest acceptable description, and the email order above all live with the other claim policy
-  values. Several of these are numbers we invented, and an invented number that cannot be changed
-  without a code change is a trap.
+  high-value figure and whether landing exactly on it counts, the complaint-type wording and the
+  shortest acceptable description all live together as claim policy values. Several of them are
+  numbers we invented, and an invented number that cannot be changed without a code change is a
+  trap. The order the reasons are explained in is the exception: it is fixed in the code, because
+  nobody has asked to tune it and a setting nobody changes is a lever to maintain for no one.
 - **We do not check things nobody asked for.** The case being marked closed, or the parcel not
   being marked delivered, are not checks. Only four were specified, and adding a fifth would
   quietly change which claims get through.
@@ -421,8 +428,9 @@ keeping a record of the attempt, and nothing is kept yet.
 **Not ready for production** — Three of these behaviours cannot be shown on the sample data:
 every sample parcel is uninsured, every sample complaint is the right type, and no sample order
 comes close to the high-value figure. Each is proven only by a made-up case, so the real data has
-never exercised them. The age limit, the high-value figure, and the email order are all invented
-numbers awaiting ShipBob's confirmation.
+never exercised them. The age limit and the high-value figure are invented numbers awaiting
+ShipBob's confirmation, and so is the decision that an insured claim is escalated rather than
+explained to the merchant.
 
 **Where the code is** — `src/claim_agent/preflight/`, and
 `src/claim_agent/api/routes/preflight.py`.
@@ -431,24 +439,36 @@ numbers awaiting ShipBob's confirmation.
 
 ### Closing a claim we cannot process
 
-**What it does** — When the checks stop a claim, this writes up why, in two forms: a summary for
-the representative, and a draft email to the merchant listing every reason the claim was
-declined.
+**What it does** — When the checks stop a claim, this writes up why: a summary for the
+representative, and — for every reason a merchant can be told about — a draft email listing them.
+An insured claim is the exception: it is marked for escalation and gets no email, because insured
+shipments are claimed on their insurance somewhere else entirely.
 
 **Why we need it** — A claim that cannot be processed is not simply dropped. The merchant is owed
-an explanation, and every explanation is an email, and every email needs a person's approval
-before it goes out (FR-0.4). So a stopped claim skips the AI entirely but still arrives on a
+an explanation, every explanation is an email, and every email needs a person's approval before it
+goes out (FR-0.4). So a stopped claim skips the AI entirely but still arrives on a
 representative's desk as something to read and approve.
+
+The exception is the one thing the merchant is not owed an explanation *from us* for. FR-0.2 says
+an insured shipment must be "routed out, never processed here", and routing a claim out is not the
+same as closing it with an apology: whoever handles insurance claims will be the one to talk to
+the merchant. Reading those two requirements together is our interpretation, not something either
+of them states — see the questions at the end of this document.
 
 **How it works**
 
 1. Take the verdict, the reasons, and all four check results.
 2. Turn each failed check into one plain sentence a representative can read.
-3. Write the email. The subject names the first of the reasons. The body explains every reason
-   the claim was declined, in that same order, with the actual numbers in it — the
-   delivery date, the day count, the limit, or exactly which pieces of information were missing.
-4. Hand over the summary, the email, and the facts already worked out, marked as needing a
-   person's approval.
+3. Set the insurance aside. If the parcel was insured, the write-up is marked for escalation and
+   that reason is taken out of everything the merchant will be shown — insured claims go to the
+   insurance process, not to us, so nobody writes to a merchant about one. A claim with nothing
+   else wrong with it therefore has no email at all.
+4. Write the email, if there is anything left to say. The subject names the first remaining
+   reason. The body explains every reason the claim was declined, in that same order, with the
+   actual numbers in it — the delivery date, the day count, the limit, or exactly which pieces of
+   information were missing.
+5. Hand over the summary, the escalation if there is one, the email if there is one, and the facts
+   already worked out — all of it marked as needing a person's approval.
 
 **What it connects to** — It reads the verdict and check results from the pre-flight checks and
 produces the report a representative reviews. Nothing sends the email; sending is a later stage
@@ -587,8 +607,11 @@ instead of competing with five others for attention.
 4. Every check is shown, passed or failed, each one its own finding. A check turns for a moment
    and then the turning is replaced by a tick or a cross in the same place, so the answer lands
    where the eye is already looking. Each one opens up to reveal the values it looked at.
-5. On a stopped claim, the last finding is the drafted email. The representative can change the
-   subject and the wording, and press send.
+5. On a stopped claim, the write-up is followed by whichever of two things the system produced.
+   An insured parcel gives an escalation, with a button to hand the claim on — there is nothing
+   to send, because no email is written about insurance. Every other reason gives the drafted
+   email, whose subject and wording the representative can change before pressing send. A claim
+   that is insured *and*, say, too old gives both, and they choose.
 6. On a claim that passes, there is no email, because the system only writes one to explain a
    stop. The page says so, and says the stage that would investigate the claim does not exist yet.
 7. If the claim cannot be screened, the page says which of the four things went wrong and offers
@@ -708,14 +731,22 @@ an engineer and useless for showing someone what a different limit would do to a
    defaults — and keeps a copy of it as *the values it started with*.
 2. From then on there is one place holding *the policy in force*. Every screening asks that place
    for the policy once, when the request arrives, and hands what it gets to all four checks.
-3. The panel asks the service what the policy is. The answer is one entry per value: its name,
-   the sentence from the policy file explaining what the value is for, what kind of thing it is
-   (a whole number, an amount of money, a yes or no, some words, a ranking), what it is now, and
-   what it started as.
+3. The panel asks the service what the policy is. The answer is one entry per value the panel
+   is meant to change: its name, the sentence from the policy file explaining what the value is
+   for, what kind of thing it is (a whole number, an amount of money, a yes or no, some words, or
+   one of a set of choices), what those choices are where it has them, what it is now, and what
+   it started as.
+
+   Some values are deliberately left out, and the policy file is where that is marked. Three of
+   them belong to the AI investigation, which does not exist: a control that changes something
+   nothing reads would look like it was doing something. They are still policy values, still read
+   by whatever reads them, and still set from the machine's own settings before the service
+   starts — they simply cannot be changed from a browser. A change to one sent by hand is refused,
+   so leaving it off the screen is a rule rather than a decision about controls.
 4. Someone edits the form and saves. The panel sends back every value on it, not just the ones
    they touched.
 5. The service lays what arrived over what is in force and checks the result as a whole — the
-   same checking a policy gets at startup, so a number outside its allowed range or a ranking
+   same checking a policy gets at startup, so a number outside its allowed range or a value
    that leaves a reason out is refused here exactly as it would be there. If anything is wrong,
    **nothing changes at all**, and the panel is told which values were rejected and why, value by
    value.
@@ -737,6 +768,23 @@ same one place the panel writes to, which is what makes a change take effect imm
 - **The panel is drawn from the policy file**, not from a list of its own. Every label and every
   explanation on screen comes out of the file the values live in, so the two cannot drift apart
   and a value added to the file later appears on the panel without anyone touching the screen.
+- **The claim type is picked from a list, not typed.** It is the one value matched *exactly*
+  against what a merchant's claim says, so a single typo in it turns every claim away at the
+  claim-type check — an easy mistake to make and a confusing one to diagnose. The choices come
+  from the policy file, like everything else on the panel, so the screen holds no list of claim
+  types of its own.
+
+  **There is one choice in the list, and that is deliberate.** One claim type is quoted in the
+  requirements, and the document naming the rest is not in this repository. ShipBob certainly uses
+  others, but we do not know what they are, and putting a guess on screen would show somebody a
+  claim type nobody has confirmed exists. So the list holds the one we can point at.
+
+  That is why the list constrains what the panel *offers* and nothing else: the value behind it is
+  still ordinary text, so a real claim type missing from the list can still be set through the
+  machine's own settings, which is how one would be configured before anyone gets round to adding
+  it. Whatever is currently set is always among the choices for the same reason — a control unable
+  to show the value in force would quietly replace it the moment somebody saved. The list should
+  grow the moment someone can tell us the real claim types.
 - **The policy is swapped whole, never edited value by value.** A claim judged half by the old
   age limit and half by the new one would be unexplainable afterwards, and that is exactly what
   editing in place invites.
@@ -745,8 +793,10 @@ same one place the panel writes to, which is what makes a change take effect imm
   morning is silently gone after a restart this afternoon.
 - **No sign-in.** Anyone who can reach the screen can change what every claim is judged by. The
   rest of this demo has no sign-in either, and adding one here alone would be a false comfort.
-- **The email order is reordered with buttons, not by dragging.** Up and down buttons work with a
-  keyboard, need no library, and cannot half-drop a reason somewhere unexpected.
+- **Only the values worth changing on a running service.** The panel could show every value in
+  the policy file, and at first it did. It now leaves out the ones nothing running reads, because
+  offering someone a control that changes nothing observable is worse than not offering it: they
+  would reasonably conclude the change had taken effect.
 - **The panel adds no words of its own.** It once carried a sentence saying a change is lost on
   restart. That was taken out: a panel explaining its own limitations is not what somebody
   changing a threshold should be reading. The fact is unchanged — see the entry above, and
@@ -805,6 +855,10 @@ finds in production.
   stage of four. Approving a report, sending an email back with feedback, seeing a claim's
   separate products — all of those are later requirements with nothing behind them yet. The
   wording of an email *can* be edited, but only on screen: see the two entries below.
+- **Any real escalation.** The escalate button is a simulation in exactly the way the send
+  button is: nothing is queued, nobody is told, and the screen reports it as escalated regardless.
+  It is worse in one respect — nothing anywhere decides where an escalated claim should *go*, so
+  even the real version has an unanswered question in front of it (see the questions at the end).
 - **Any real sending.** The send button is a simulation. Nothing is contacted, nothing is
   recorded, and there is no address in the system behind it — the whole of stage 4 is empty. The
   screen reports the email as sent and gives no hint that it was not, which makes this the most
@@ -986,9 +1040,15 @@ finds in production.
 - **Does a claim filed exactly on the age limit still count?** We say yes. It is a coin flip.
 - **What should happen when neither the claim nor the parcel records a delivery date?** We stop
   the claim and call it missing information. This is the decision we are least sure of.
-- **When a claim fails several checks at once, which reason should the merchant be told first?**
-  We lead with insurance, then age, then wrong type, then missing information, on the reasoning
-  that a merchant with a live insurance route should hear about that first. They are told every
-  reason either way — the order is about which one they read first and which one is in the
-  subject line, not about which ones they hear. Nobody has confirmed that this is the right
-  emphasis.
+- **Should an insured claim reach the merchant at all?** We say no: FR-0.2 says an insured
+  shipment must be "routed out, never processed here", so we mark it for escalation and write
+  nothing to the merchant, on the reasoning that whoever handles insurance claims will be the one
+  to talk to them. But FR-0.4 says every ineligible claim is closed *with an explanation to the
+  merchant*, without excepting this one, so the two can be read as contradicting each other. This
+  is the interpretation the code now rests on, and it is the decision most worth confirming.
+- **And where should an escalated claim go?** Nothing says. The write-up says a claim has to be
+  escalated and nothing about to whom, which means today it is escalated to nobody in particular.
+- **When a claim fails several checks a merchant can be told about, which comes first?** We lead
+  with age, then wrong type, then missing information. They are told every reason either way —
+  the order settles which one they read first and which one is in the subject line, not which
+  ones they hear. Nobody has confirmed that this is the right emphasis.

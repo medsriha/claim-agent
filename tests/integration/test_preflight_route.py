@@ -128,7 +128,7 @@ async def test_a_stopped_claim_is_a_success_with_a_report_and_an_email(
     # rather than written in here, because it is a provisional number that may change.
     email_body = report["drafted_email"]["body"]
     assert "73 days" in email_body
-    assert f"{app.state.policy.max_claim_age_days} days" in email_body
+    assert f"{app.state.live_policy.current().max_claim_age_days} days" in email_body
     assert report["drafted_email"]["is_draft"] is True
 
 

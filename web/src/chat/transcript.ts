@@ -53,6 +53,7 @@ export type MessageBody =
     }
   | { readonly kind: "findings"; readonly findings: string[] }
   | { readonly kind: "email"; readonly email: DraftedEmail }
+  | { readonly kind: "escalation" }
   | { readonly kind: "note"; readonly text: string }
   | { readonly kind: "failure"; readonly failure: FailureKind; readonly message: string };
 
@@ -141,8 +142,8 @@ export function transcriptFor(pickedId: string, result: PreflightResult): Transc
       kind: "verdict",
       caseId: result.case_id,
       verdict: result.verdict,
-      // Handed on exactly as ranked. The first reason heads the merchant's email, so
-      // sorting these on screen would misrepresent which reason the email leads with.
+      // Handed on exactly as they arrived. The first reason names the merchant email's
+      // subject line, so sorting these on screen would misrepresent which one it leads with.
       reasons: [...result.terminal_reasons],
       evaluatedAt: result.evaluated_at,
     },
@@ -166,12 +167,27 @@ export function transcriptFor(pickedId: string, result: PreflightResult): Transc
     label: "What was found",
     body: { kind: "findings", findings: [...result.report.findings] },
   });
-  messages.push({
-    id: "email",
-    speaker: "system",
-    label: "Email to the merchant",
-    body: { kind: "email", email: result.report.drafted_email },
-  });
+  // Two things a stopped claim can end in, and it may end in both. The escalation comes
+  // first because being insured leads the reasons: it is what routes the claim out.
+  if (result.report.requires_escalation) {
+    messages.push({
+      id: "escalation",
+      speaker: "system",
+      label: "Not ours to answer",
+      body: { kind: "escalation" },
+    });
+  }
+
+  // Absent when there is nothing the merchant can be told — a claim stopped only by
+  // being insured. The service decides that; the screen just shows what it was given.
+  if (result.report.drafted_email !== null) {
+    messages.push({
+      id: "email",
+      speaker: "system",
+      label: "Email to the merchant",
+      body: { kind: "email", email: result.report.drafted_email },
+    });
+  }
 
   return messages;
 }

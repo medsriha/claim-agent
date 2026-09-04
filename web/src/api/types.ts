@@ -134,8 +134,22 @@ export interface DraftedEmail {
 }
 
 /**
- * What a rep receives when a claim cannot be processed. `reasons` are in precedence order
- * — the first heads the merchant's email — so they are never sorted on screen.
+ * What a rep receives when a claim cannot be processed.
+ *
+ * There are two things they can be handed, and a claim may carry either or both:
+ *
+ * - **`drafted_email`**, for every reason the merchant can be told about. `null` when
+ *   there is nothing to tell them, which today means a claim stopped only by being
+ *   insured.
+ * - **`requires_escalation`**, true when the claim has to leave this process entirely.
+ *   Insured shipments are claimed on their insurance somewhere else, so they are routed
+ *   out rather than answered, and no email is written about it.
+ *
+ * A claim that is both insured and, say, too old carries both, and the rep chooses. The
+ * screen shows whichever it was given and never decides between them.
+ *
+ * `reasons` lists every reason the claim was stopped, insured first when it applies, then
+ * in the order the email explains the rest — so they are never sorted on screen.
  */
 export interface TerminalReport {
   case_id: string;
@@ -145,7 +159,8 @@ export interface TerminalReport {
   findings: string[];
   gates: GateResult[];
   context: ClaimContext;
-  drafted_email: DraftedEmail;
+  drafted_email: DraftedEmail | null;
+  requires_escalation: boolean;
   requires_rep_approval: true;
 }
 

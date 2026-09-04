@@ -73,7 +73,7 @@ async def run_preflight(
     record = await gather_case_record(case_id, client)
     delivery = resolve_delivered_date(record)
     gates = evaluate_gates(record, delivery, policy)
-    reasons = terminal_reasons(gates, policy)
+    reasons = terminal_reasons(gates)
     corrections = memory.corrections_for(record.case.user_id)
     context = build_context(record, delivery, corrections, policy)
 

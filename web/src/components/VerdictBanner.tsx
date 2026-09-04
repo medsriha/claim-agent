@@ -3,8 +3,8 @@
  *
  * The verdict and the reasons are shown in the service's own words — `proceed`,
  * `terminal`, `claim_too_old` — reshaped to read, never restated in wording of ours.
- * Reasons keep the order they arrive in: the service ranks them, and the first is the one
- * that heads the merchant's email.
+ * Reasons keep the order they arrive in: the service decides it, and the first is the one
+ * that names the merchant email's subject line.
  */
 import { humanise } from "../display";
 import type { TerminalReason, Verdict } from "../api/types";

@@ -189,26 +189,41 @@ time and starts at UI-20.
   - **Be aware:** this renamed `ScreeningFailure` to `ApiFailure`, which touched the screening
     screen, the transcript and the failure notice. Nothing about screening behaviour changed.
 
-- [x] UI-15 — The panel: every threshold, with a control chosen by what sort of value it is.
+- [x] UI-15 — The panel: the thresholds worth changing, each with a control chosen by what sort
+  of value it is.
   - **What was built:** `screens/PolicyScreen.tsx` and `components/PolicyValueRow.tsx`. The
-    service sends a kind per value — whole number, money, fraction, words, yes-or-no, ranking —
-    and the row draws the matching control.
+    service sends a kind per value — whole number, money, fraction, words, yes-or-no, or one of a
+    set of choices — and the row draws the matching control.
   - **Conclusion:** the panel knows nothing about claims. Every label is the value's own name
     reshaped to read, every explanation is the sentence from the policy file, and a threshold
     added to that file appears here with no UI change. That includes the file's own "PROVISIONAL"
     marker, which is worth a reader seeing rather than hiding.
+  - **Be aware:** the panel shows what the service offers it, which is no longer every policy
+    value. Four are marked off-panel in `policy.py` — three belong to the unbuilt investigation,
+    and a control that changes nothing observable is worse than no control. Nothing in the UI
+    knows which four; it draws what arrives.
   - **Be aware:** every number is an ordinary text box, deliberately. A number box would round or
     refuse on its own, and money must never pass through a browser number (FR-1.21, NFR-2). The
     values arrive as text and are sent back as text, untouched.
 
-- [x] UI-16 — The email reason order, reordered with up and down buttons.
-  - **Conclusion:** buttons rather than dragging — they work with a keyboard, need no library, and
-    cannot half-drop an entry. The positions are numbered because the numbering is the point: the
-    first reason is the paragraph a merchant reads first and the one that names the subject
-    line. Reordering changes emphasis only: every reason is explained whatever its position, and
-    the decision to turn a claim away does not depend on the order.
-  - **Be aware:** the panel does not check the order. Losing or repeating a reason is refused by
-    the service, which has always had that rule, and its complaint appears under the control.
+- [x] UI-16 — **Removed.** The email reason order, reordered with up and down buttons.
+  - **What happened:** built, then taken out when the order stopped being a policy value and moved
+    into `gates.py`. With no list-shaped value left, the control, its type, its styles and its
+    tests were all unreachable, so they went too.
+  - **Conclusion:** worth reading if you are about to add a list-shaped policy value — the shape
+    of the control that worked (up and down buttons, positions numbered, no dragging and no
+    library) is in the history rather than in the code.
+
+- [x] UI-19 — The escalation, and the button that hands a claim on.
+  - **What was built:** `chat/EscalationAction.tsx`, shown when the service says a claim has to be
+    escalated — which today means the parcel was insured. It appears before the email, because
+    being insured leads the reasons, and a claim can carry both.
+  - **Conclusion:** it adds no words. The reason is already on screen in the system's own
+    sentence, in the findings just above, so the message is a label and a button.
+  - **Be aware:** escalating is a simulation, in the same way sending is — nothing is queued and
+    nobody is told, and the screen reports it as escalated anyway. Worse than the send in one
+    way: nothing anywhere decides where an escalated claim should go, so there is no real version
+    to build against yet. See DESIGN.md.
 
 - [x] UI-17 — Saving, being refused, and putting the startup values back.
   - **What was built:** Save sends the whole form; the panel then draws whatever the service says
@@ -242,7 +257,10 @@ gate     gate ("age" | "claim_type" | "key_information" | "insurance"), passed,
 context  order_value_usd (string, or null when the order could not be read), is_high_value,
          days_since_delivery (null when no delivery date), delivered_date, merchant_corrections[]
 report   case_id, account_name, user_id, reasons[], findings[], gates[], context,
-         drafted_email{to, subject, body, is_draft}, requires_rep_approval
+         drafted_email{to, subject, body, is_draft} — null when there is nothing the
+         merchant can be told, which today means a claim stopped only by being insured,
+         requires_escalation (true exactly when the parcel was insured),
+         requires_rep_approval
 error    error{code, message, details} — "not_found" (404), "upstream_unavailable" (502)
 ```
 
@@ -252,10 +270,13 @@ The policy panel's own shapes, from `src/claim_agent/admin/models.py`:
 view     values[], changed_at (null until something changes), matches_startup
 value    name, description, changed, kind, value, startup_value
          kind "integer" | "money" | "fraction" | "text" → value is text
+         kind "choice"                                   → value is text, plus options[]
          kind "boolean"                                  → value is true or false
-         kind "ranking"                                  → value is a list of names, in order
-update   {"values": {name: text | true/false | [names]}} — partial; anything left out is kept
+update   {"values": {name: text | true/false}} — partial; anything left out is kept
 error    also "invalid_request" (400), whose details carry values[{name, message}]
+
+Not every policy value appears: four are marked off-panel in `policy.py`, and a change to
+one is refused with the same error shape.
 ```
 
 Money is a string on purpose. Line totals and the order total are computed in Python and are not

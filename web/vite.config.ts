@@ -18,6 +18,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/cases": { target: CLAIMS_SERVICE, changeOrigin: true },
+      "/admin": { target: CLAIMS_SERVICE, changeOrigin: true },
       "/health": { target: CLAIMS_SERVICE, changeOrigin: true },
     },
   },

@@ -11,7 +11,8 @@ from fastapi import FastAPI
 from claim_agent import __version__
 from claim_agent.api.exception_handlers import register_exception_handlers
 from claim_agent.api.middleware import RequestContextMiddleware
-from claim_agent.api.routes import health, preflight
+from claim_agent.api.routes import admin, health, preflight
+from claim_agent.live_policy import LivePolicy
 from claim_agent.observability import configure_logging, get_logger
 from claim_agent.policy import Policy, get_policy
 from claim_agent.settings import Settings, get_settings
@@ -44,6 +45,11 @@ def create_app(
     on the application, so a route reads it rather than making its own. Passing a
     merchant memory in is how a test starts with a merchant who already has
     corrections on file (FR-0.5).
+
+    The policy passed in is the one the service starts with. It is not kept as it
+    is: the admin panel can change the thresholds while the service runs, so what
+    routes actually read is a holder that can be given a new policy, and that
+    remembers this one to go back to (FR-0.7).
     """
     settings = settings or get_settings()
     policy = policy or get_policy()
@@ -55,7 +61,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.settings = settings
-    app.state.policy = policy
+    app.state.live_policy = LivePolicy(policy)
     # Built here and not in the start-up hook on purpose. A test drives the app in
     # this same process without ever starting a server, and that path runs no
     # start-up hook, so a reader built there would simply not exist by the time a
@@ -73,6 +79,7 @@ def create_app(
     register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(preflight.router)
+    app.include_router(admin.router)
     return app
 
 
