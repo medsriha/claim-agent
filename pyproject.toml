@@ -71,6 +71,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "ANN", "ARG"]   # asserts and fixtures are fine in tests
+# A command-line tool's output is its interface, so printing is the point of it. The rule
+# stays on everywhere else, including the rest of `tools/` — the stand-in API is a server
+# and has no business printing. Granted one file at a time, deliberately.
+"tools/seed_merchant_memory.py" = ["T201"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

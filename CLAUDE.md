@@ -227,8 +227,8 @@ demo choices, written up in DESIGN.md under "Future production".
 **The backend's rules do not stop at the browser:**
 
 - **No business logic in the UI.** It renders what the API returned. It never works out a
-  verdict, decides whether a check passed, or re-orders the reasons — the service ranks them and
-  the first one heads the merchant's email.
+  verdict, decides whether a check passed, or re-orders the reasons — the service decides their
+  order, and the first one names the merchant email's subject line.
 - **No money arithmetic in JavaScript.** The browser half of "no money from model output"
   (FR-1.21, NFR-2). A line item carries `quantity` and a string `unit_price`; the totals behind
   them are computed in Python and are **not** in the JSON. Show `context.order_value_usd`. Money
@@ -266,12 +266,21 @@ demo choices, written up in DESIGN.md under "Future production".
   `web/src/chat/pageWords.ts` and nowhere else, each marked on screen as the screen's own words
   rather than the service's, so the whole list is checkable in one place. Add to it only when the
   service genuinely cannot say the thing instead.
-- **Never invent data, and never seed any.** The screen shows what the endpoint returned and
-  nothing else. An empty list is shown as empty. Do not write sample records into the store to
-  make a panel look fuller — fabricated content on screen is indistinguishable from real
-  history, and a reader has no way to tell. This applies to the service's own values too: a
-  verdict, a check name or a stop reason is reshaped to read (`claim_too_old` becomes "Claim too
-  old"), never swapped for wording of ours.
+- **Never invent data.** The screen shows what the endpoint returned and nothing else. An empty
+  list is shown as empty. Never add a record from the UI, and never fake one in a component to
+  make a panel look fuller — fabricated content on screen is indistinguishable from real history,
+  and a reader has no way to tell. This applies to the service's own values too: a verdict, a
+  check name or a stop reason is reshaped to read (`claim_too_old` becomes "Claim too old"),
+  never swapped for wording of ours.
+
+- **Seeding the store is a deliberate act with a name on it.** Merchant memory is the one panel
+  with nothing to show, because nothing in the system writes a correction yet (FR-3.8), so
+  `tools/seed_merchant_memory.py` writes one by hand for demonstrations. That is the *only*
+  sanctioned way to put content behind a panel, and it earns that by being outside `src/`, saying
+  in its own docstring that everything it writes is invented, writing through the real store
+  rather than around it, and having a `--clear` that takes it back out. Ask the user before
+  running it. Never reach for the shortcut it exists to prevent: seeding from a test, a fixture,
+  a migration, or the UI.
 
 **How it reaches the API.** Through the Vite dev proxy, which forwards `/cases` and `/health`.
 No backend change, and no cross-origin policy opened on a service with no authentication. That
@@ -372,6 +381,8 @@ make install    # sync dependencies into .venv
 make hooks      # install git hooks — do this once, before your first commit
 make run        # uvicorn with reload
 make mock       # the ShipBob stand-in on port 8080
+make seed-memory  # write one invented rep correction, so the history panel shows something
+make clear-memory # remove it again
 make test       # pytest with coverage
 make lint       # ruff check + format check
 make typecheck  # mypy
@@ -415,7 +426,7 @@ Open engineering choices — decide with the user, then record the outcome here:
 
 - **Provisional policy values.** Only the $100 cap comes from REQUIREMENTS.md. Everything else
   in `policy.py` — the age limit and whether it is inclusive, the high-value threshold, the
-  claim-type label, the minimum description length, the order terminal reasons are ranked in,
+  claim-type label, the minimum description length, the order the reasons appear in the email,
   the confidence threshold, and the step budgets — are placeholders awaiting ShipBob sign-off.
   They are configurable so they can be corrected without a code change; that does not make the
   numbers right.
@@ -442,7 +453,8 @@ Decided:
   No backend change, and nothing opened up on a service with no sign-in.
 - **`tools/` holds development-only programs**, typechecked and linted like everything else but
   unreachable from `src/`. It has the ShipBob stand-in the demo reads from, which serves the very
-  same sample records the tests use so the two can never disagree.
+  same sample records the tests use so the two can never disagree, and the merchant-memory seeder
+  that makes the past-corrections panel demonstrable.
 - **The screen is a conversation, and its pacing is faked in the browser.** No streaming endpoint
   was added: the service still answers in one response, and the screen plays it back. This was a
   deliberate call to keep the change to the UI. The honest version — the service emitting each

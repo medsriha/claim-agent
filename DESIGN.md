@@ -106,7 +106,8 @@ being connected to anything.
 
 **The rules can be changed from that screen too.** A second page lists every threshold the checks
 judge by — how old a claim may be, what counts as a high-value order, how the reasons for turning a
-claim away are ranked — and lets someone change one and watch the next claim be screened by the new
+claim away are explained to them — and lets someone change one and watch the next claim be
+screened by the new
 number, with no restart. Nothing about a change is stored: a restart puts every value back to what
 the machine's own settings say.
 
@@ -385,13 +386,18 @@ directly so a claim can be screened and inspected on its own.
 - **No delivery date anywhere stops the claim.** A check we cannot carry out must never quietly
   pass. We report it as missing information rather than inventing a fifth kind of reason. This is
   our judgement, not a stated rule, and it is one of the things worth confirming.
-- **When several checks fail, they are ranked.** Insurance first, then age, then wrong type, then
-  missing information. Telling a merchant "too old" when the real answer is "claim on your
-  insurance" is actively unhelpful, and asking for more photos on a claim being closed for age is
-  worse. The ranking is a judgement call and is a setting, not a fixed rule.
+- **When several checks fail, the merchant is told about every one of them, in a set order.**
+  Insurance first, then age, then wrong type, then missing information. Each reason gets its own
+  paragraph whichever position it lands in, so the order decides emphasis and nothing else: which
+  paragraph is read first, and which reason goes in the subject line. Insurance leads because it
+  is the one reason that points a merchant somewhere else entirely — an insured shipment is
+  settled through its insurance — and missing information comes last because inviting someone to
+  send photographs reads oddly above a paragraph saying the claim is too old to process whatever
+  arrives. The order is a judgement call and a setting, not a fixed rule. Whether the claim is
+  stopped does not depend on it at all.
 - **Every debatable value is a setting.** The age limit and whether the last day counts, the
   high-value figure and whether landing exactly on it counts, the complaint-type wording, the
-  shortest acceptable description, and the ranking above all live with the other claim policy
+  shortest acceptable description, and the email order above all live with the other claim policy
   values. Several of these are numbers we invented, and an invented number that cannot be changed
   without a code change is a trap.
 - **We do not check things nobody asked for.** The case being marked closed, or the parcel not
@@ -415,7 +421,7 @@ keeping a record of the attempt, and nothing is kept yet.
 **Not ready for production** — Three of these behaviours cannot be shown on the sample data:
 every sample parcel is uninsured, every sample complaint is the right type, and no sample order
 comes close to the high-value figure. Each is proven only by a made-up case, so the real data has
-never exercised them. The age limit, the high-value figure, and the ranking are all invented
+never exercised them. The age limit, the high-value figure, and the email order are all invented
 numbers awaiting ShipBob's confirmation.
 
 **Where the code is** — `src/claim_agent/preflight/`, and
@@ -438,8 +444,8 @@ representative's desk as something to read and approve.
 
 1. Take the verdict, the reasons, and all four check results.
 2. Turn each failed check into one plain sentence a representative can read.
-3. Write the email. The subject comes from the highest-ranked reason. The body explains every
-   reason the claim was declined, in that same ranking, with the actual numbers in it — the
+3. Write the email. The subject names the first of the reasons. The body explains every reason
+   the claim was declined, in that same order, with the actual numbers in it — the
    delivery date, the day count, the limit, or exactly which pieces of information were missing.
 4. Hand over the summary, the email, and the facts already worked out, marked as needing a
    person's approval.
@@ -532,9 +538,18 @@ not read. It must never be reachable from anywhere real.
 **Where the code is** — `tools/shipbob_mock.py`, reading `tests/fixtures/shipbob.py`.
 
 Note that the past-corrections part of the screening has nothing to show on a fresh machine.
-Nothing writes a correction yet — the part of the system that captures a representative's edits
+Nothing in the system writes a correction yet — the part that captures a representative's edits
 has not been built — so every claim reports none on file. That is the honest answer, and it is
 what the screen displays.
+
+That makes the feature impossible to demonstrate, so there is a small tool that writes one
+correction by hand. It exists because the alternative is worse: somebody showing the system
+would otherwise be tempted to fake the panel on screen, where nobody could tell. Everything
+that tool writes is invented, it says so plainly, it writes through the same store the service
+reads, and it can take the row back out again. **A correction on screen therefore means one of
+two things — a representative made it, or somebody ran that tool.** Today it can only be the
+second, and it will stay that way until the stage that captures a representative's edits is
+built. Whoever is driving a demonstration should say which they are showing.
 
 ---
 
@@ -607,7 +622,8 @@ writes nothing anywhere. It holds nothing between claims and nothing between vis
   with nobody to send it to, and the button is unavailable rather than merely unwise. That is the
   rule the real sending stage will have to follow, so the screen follows it now.
 - **The page decides nothing.** It never works out a verdict, judges a check, or re-orders the
-  reasons. The order the reasons arrive in matters — the first heads the merchant's email — so
+  reasons. The order the reasons arrive in matters — the first names the merchant email's
+  subject line — so
   they are printed as given and never sorted. Turning one answer into a list of findings is
   arranging, not deciding: the page chooses what order to *show* things in, and nothing else.
 - **No arithmetic on money.** The value of an order is worked out once, by the rules, and sent as
@@ -716,7 +732,7 @@ same one place the panel writes to, which is what makes a change take effect imm
   morning is silently gone after a restart this afternoon.
 - **No sign-in.** Anyone who can reach the screen can change what every claim is judged by. The
   rest of this demo has no sign-in either, and adding one here alone would be a false comfort.
-- **The ranking is reordered with buttons, not by dragging.** Up and down buttons work with a
+- **The email order is reordered with buttons, not by dragging.** Up and down buttons work with a
   keyboard, need no library, and cannot half-drop a reason somewhere unexpected.
 - **One sentence on the panel is ours**, the one saying a change is lost on restart. It sits with
   the screen's other two invented sentences, in the single file that holds them, and is marked out
@@ -726,7 +742,7 @@ same one place the panel writes to, which is what makes a change take effect imm
 
 **When things go wrong** — A value the service will not accept leaves the policy exactly as it
 was: the panel shows the service's own complaint under each value it rejected, and the form still
-holds what was typed so it can be corrected rather than typed again. A ranking that lists a
+holds what was typed so it can be corrected rather than typed again. An order that lists a
 reason twice, or leaves one out, is refused by the same rule that has always refused it, because
 a claim could otherwise fail a check whose reason has nowhere to sit. If the service is not
 answering at all, the panel says so instead of showing a policy that might not be the real one.
@@ -792,7 +808,10 @@ finds in production.
 - **Nothing writes down a representative's corrections.** Merchant memory can be read and can be
   written, and the screen reads it, but no part of the system puts anything in it yet, because
   the part that would is in a later stage. In practice the system does not yet learn between
-  claims — the machinery is there and the input is not.
+  claims — the machinery is there and the input is not. Editing an email on screen does not
+  count: that edit is discarded when the next claim is picked and never reaches the store. The
+  only thing that writes a correction today is a development tool run by hand, which is a way to
+  demonstrate the reading half, not a way for the system to learn.
 - **Any access control.** Anyone who can reach the service can screen any case id and read back
   the merchant's name, contact address, their description of what happened, and what the order
   was worth. There is no sign-in, no notion of which representative is acting, and no limit on
@@ -852,7 +871,8 @@ finds in production.
   would turn away claims we should accept and never know.
 - **The claim thresholds are guesses.** Only the $100 cap is a real ShipBob figure. The age limit,
   whether the last day counts, the high-value figure, the shortest acceptable description, and
-  the order the reasons are ranked in are all placeholders. They can be changed without touching
+  the order the reasons appear in the merchant's email are all placeholders. They can be changed
+  without touching
   code, which is not the same as being right.
 - **One stopped claim, several reasons, one label.** "Missing information" covers three different
   problems: a detail absent from the claim, a record ShipBob could not give us, and no delivery
@@ -947,5 +967,7 @@ finds in production.
   the claim and call it missing information. This is the decision we are least sure of.
 - **When a claim fails several checks at once, which reason should the merchant be told first?**
   We lead with insurance, then age, then wrong type, then missing information, on the reasoning
-  that a merchant with a live insurance route should hear about it rather than be told their
-  claim was late. Nobody has confirmed that.
+  that a merchant with a live insurance route should hear about that first. They are told every
+  reason either way — the order is about which one they read first and which one is in the
+  subject line, not about which ones they hear. Nobody has confirmed that this is the right
+  emphasis.

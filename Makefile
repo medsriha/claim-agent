@@ -1,9 +1,9 @@
 .DEFAULT_GOAL := help
-.PHONY: help install hooks run mock test lint format typecheck check \
+.PHONY: help install hooks run mock seed-memory clear-memory test lint format typecheck check \
         ui-install ui-dev ui-build ui-lint
 
 help: ## Show available commands
-	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-12s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
 
 install: ## Install dependencies into .venv
 	uv sync
@@ -16,6 +16,12 @@ run: ## Run the API with reload
 
 mock: ## Run the ShipBob stand-in on port 8080
 	uv run uvicorn tools.shipbob_mock:app --port 8080 --reload
+
+seed-memory: ## Write one invented rep correction, so the demo has history to show
+	uv run python -m tools.seed_merchant_memory
+
+clear-memory: ## Remove every rep correction again
+	uv run python -m tools.seed_merchant_memory --clear
 
 test: ## Run the test suite
 	uv run pytest

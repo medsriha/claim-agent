@@ -45,21 +45,27 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
   - **Superseded by UI-22.** The input and its button are gone; the nine ids remain. The rule
     about not labelling them still holds.
 
-- [x] UI-6 — The verdict, with the reasons in the order the service ranked them.
+- [x] UI-6 — The verdict, with the reasons in the order the service sent them.
   - **Conclusion:** the verdict and the reasons are the service's own values, reshaped to read —
     `claim_too_old` becomes "Claim too old". There is no table of our own wording anywhere, so
     the screen can only show what the service actually said, and a value we have never seen
     still reads.
-  - **Be aware:** never sorted on screen. The first reason heads the merchant's email.
+  - **Be aware:** never sorted on screen. The first reason names the merchant email's subject
+    line, so re-ordering them here would misreport what the merchant will read.
 
 - [x] UI-7 — The four checks, all shown, each opening to reveal the values it looked at.
   - **Be aware:** an empty observed value is a real answer — "nothing was missing" — so it is
     drawn as a dash rather than blank space that reads like a bug.
 
 - [x] UI-8 — The claim in numbers, and past rep corrections.
-  - **Be aware:** nothing writes corrections yet — that is FR-3.8, a later stage — so this list
-    is always empty. It shows the empty state the endpoint actually returns. Do not seed it with
-    invented history to make the demo look fuller.
+  - **Be aware:** nothing in the *system* writes corrections — that is FR-3.8, a later stage — so
+    on a fresh machine this list is empty, and that is the real state of the endpoint rather than
+    a gap in the screen.
+  - **Be aware:** it is no longer *always* empty. `tools/seed_merchant_memory.py` writes one
+    invented correction against CASE-1001's merchant so the panel can be demonstrated, and
+    `--clear` removes it. So a correction on screen means either a rep made it or somebody ran
+    that tool — and today it can only be the second. Still do not seed from the UI, a test, or a
+    fixture; the tool is deliberately the one place that does it, and it announces itself.
 
 - [x] UI-9 — The stopped-claim findings and the drafted email, marked as a draft.
   - **Conclusion:** the draft note sits above the email because the email's own words never say
@@ -190,11 +196,13 @@ time and starts at UI-20.
     refuse on its own, and money must never pass through a browser number (FR-1.21, NFR-2). The
     values arrive as text and are sent back as text, untouched.
 
-- [x] UI-16 — The reason ranking, reordered with up and down buttons.
+- [x] UI-16 — The email reason order, reordered with up and down buttons.
   - **Conclusion:** buttons rather than dragging — they work with a keyboard, need no library, and
     cannot half-drop an entry. The positions are numbered because the numbering is the point: the
-    first reason heads the merchant's email.
-  - **Be aware:** the panel does not check the ranking. Losing or repeating a reason is refused by
+    first reason is the paragraph a merchant reads first and the one that names the subject
+    line. Reordering changes emphasis only: every reason is explained whatever its position, and
+    the decision to turn a claim away does not depend on the order.
+  - **Be aware:** the panel does not check the order. Losing or repeating a reason is refused by
     the service, which has always had that rule, and its complaint appears under the control.
 
 - [x] UI-17 — Saving, being refused, and putting the startup values back.
