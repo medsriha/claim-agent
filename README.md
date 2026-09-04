@@ -4,13 +4,6 @@ Backend API that investigates ShipBob damaged-in-transit claims and hands a supp
 structured report and a drafted merchant email. The agent recommends; **a rep decides**, and
 nothing is sent or paid without human approval.
 
-- **What it must do:** [REQUIREMENTS.md](REQUIREMENTS.md) — the source of truth.
-- **How it works:** [DESIGN.md](DESIGN.md) — the design in plain English, one section per
-  feature. Start here if you are new.
-- **How to work on it:** [CLAUDE.md](CLAUDE.md) — conventions and architecture rules.
-- **What is done so far:** [TODO.md](TODO.md) — every requirement id, ticked as it lands.
-- **The demo screen:** [UI-TODO.md](UI-TODO.md) — the UI in `web/`, tracked separately.
-
 ## Quickstart
 
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.11.
