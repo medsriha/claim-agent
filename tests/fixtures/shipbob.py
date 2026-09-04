@@ -25,50 +25,26 @@ What is here:
 Real values and invented ones — read this before trusting a field
 -----------------------------------------------------------------
 
-`shipbob-mock-api.md`, the document holding the full payloads, is not in this repository.
-REQUIREMENTS.md quotes parts of it. Everything else here we made up to fill the gaps.
-Confusing the two is expensive in both directions: a test that asserts on an invented
-value proves nothing, and a test that "corrects" a real value will break against the
-real API.
+Everything for CASE-1001 through CASE-1005 below — the cases, their shipments and their
+orders — is ShipBob's own data, copied from the mock API's published collection. Nothing
+about those five cases is invented any more. That was not always true: an earlier version
+of this file made up shipment ids, both of CASE-1004's and CASE-1005's orders, and a
+merchant called "Northwind Naturals" that does not exist. Any test still asserting on one
+of those is asserting on nothing.
 
-**One rule separates them at a glance: every identifier we invented starts with a 9.**
-No identifier quoted in REQUIREMENTS.md does.
+Two consequences worth knowing before writing a test against them:
 
-Quoted in REQUIREMENTS.md, and therefore trustworthy:
+- CASE-1004's order holds exactly one line item, so a claim on it needs no judgement
+  about which product was damaged (FR-1a.5).
+- CASE-1005's order holds a second line worth $0.00, a promotional insert card. Nothing
+  in the requirements says what a free item does to a claim.
 
-- CASE-1001: every field of the case, of its shipment 342578703, and of its order
-  334291211 — including the two line items and their prices.
-- CASE-1002: the merchant name CleanBoss, the order id 336431771, that order's three
-  line items (name, SKU, quantity, unit price), and the phrase "1 order affected"
-  appearing in the case description.
-- CASE-1003: the merchant name Huge Supplements, the order id 337761802, that order's
-  six line items, and the phrase "Number of affected orders: 2" in the description.
-- CASE-1004: the case status "Closed", the merchant name Catalyze-X, and both dates —
-  which are 73 days apart and are the worked example for the age gate (FR-0.2).
-- CASE-1005: the case status "Waiting on Client".
-- All five: the case ids themselves, the claim type "Claim | Damaged in Transit", and an
-  uninsured shipment.
-- The merchants: the five customer ids 334430, 283959, 373103, 374167 and 398045 all
-  exist, and 334430 is CASE-1001's.
+**Invented data is still here, and one rule separates it at a glance: every identifier we
+invented starts with a 9.** No identifier ShipBob supplies does. What is ours:
 
-Invented by us, so never assert on one as though ShipBob had stated it:
-
-- Which customer id belongs to which case, apart from CASE-1001's 334430.
-- Every shipment id, carrier, tracking number and shipment status except CASE-1001's.
-- Every delivery date and case creation date except CASE-1001's and CASE-1004's. The
-  invented pairs are all less than eight days apart, because REQUIREMENTS.md says every
-  case other than CASE-1004 was filed within eight days of delivery.
-- Every case description and contact email except CASE-1001's. Invented addresses use
-  `example.com`, a reserved domain that cannot receive mail.
-- The case status of CASE-1002 and CASE-1003.
-- CASE-1005's merchant name — REQUIREMENTS.md never names it.
-- The whole order behind CASE-1004 and CASE-1005, line items included: neither is quoted
-  anywhere.
-- Every product id except CASE-1001's two, and every order creation date except
-  CASE-1001's.
-- All four `CONSTRUCTED_...` cases, top to bottom.
-- The error body `mock_shipbob` returns for a record that is not there. REQUIREMENTS.md
-  never shows one.
+- All four `CONSTRUCTED_...` cases, top to bottom. They exist because three pre-flight
+  behaviours — an insured shipment, a claim of the wrong type, and a high-value order —
+  cannot be shown on ShipBob's five cases at all.
 
 The constants below are ordinary dictionaries, and Python hands every test the same one.
 Read them; never change one in place. A test that needs a variant calls a builder.
@@ -82,10 +58,26 @@ import respx
 # two values are the same on all five cases (FR-0.2).
 DAMAGED_IN_TRANSIT = "Claim | Damaged in Transit"
 
-# The body served when a record is missing. Invented: REQUIREMENTS.md shows error codes
-# for other endpoints (`422 invoice_unavailable`, `400 invalid_request`) but never an
-# error body for a read, so this follows their shape rather than a quoted example.
-NOT_FOUND_BODY: dict[str, object] = {"error": "not_found"}
+# The bodies ShipBob serves when a record is missing. Each read names its own resource
+# rather than sharing one generic code, so a caller can tell a missing case from a
+# missing order without looking at which URL it asked for. Our code does not read these
+# bodies — a 404 is a 404 — but a test that serves the wrong shape proves less.
+CASE_NOT_FOUND_BODY: dict[str, object] = {
+    "error": "case_not_found",
+    "message": "No case found with the provided ID.",
+}
+SHIPMENT_NOT_FOUND_BODY: dict[str, object] = {
+    "error": "shipment_not_found",
+    "message": "No shipment found with the provided ID.",
+}
+ORDER_NOT_FOUND_BODY: dict[str, object] = {
+    "error": "order_not_found",
+    "message": "No order found with the provided ID.",
+}
+
+# Kept as the name most tests already use, and pointed at the case body, because a test
+# asking for a record that is not there is nearly always asking for a case.
+NOT_FOUND_BODY: dict[str, object] = CASE_NOT_FOUND_BODY
 
 
 def case_payload(**overrides: object) -> dict[str, object]:
@@ -100,8 +92,11 @@ def case_payload(**overrides: object) -> dict[str, object]:
     """
     payload: dict[str, object] = {
         "case_id": "CASE-1001",
+        "case_number": "01838218",
         "status": "New",
+        "origin": "Case Portal - Claim",
         "sub_category": DAMAGED_IN_TRANSIT,
+        "subject": "ShipBob Claim",
         "description": (
             "Shipment ID: 342578703. Customer received order and product arrived damaged. "
             "Both product and shipping box damaged. Damage due to poor/bad packaging. "
@@ -216,231 +211,240 @@ SHIPMENT_1001 = shipment_payload()
 ORDER_1001 = order_payload()
 
 # CASE-1002, CleanBoss — the case where it is unclear which product was damaged, because
-# the order holds two different 24oz bottles at different prices (FR-1.13).
-# Real: the merchant name, the order id 336431771, the three line items exactly as quoted,
-# and the phrase "1 order affected" in the description.
-# Invented: the status, the customer id (the number exists; pairing it with this case does
-# not), the shipment id and everything on the shipment, both dates, the contact email, the
-# wording of the description around that phrase, and the product ids.
+# the order holds two different 24oz bottles at different prices (FR-1.13). The
+# description says one product was affected without saying which of the three it was.
+# Every field below is ShipBob's.
 CASE_1002 = case_payload(
     case_id="CASE-1002",
+    case_number="01838273",
     status="New",
     description=(
-        "Shipment ID: 900000002. Customer received order and product arrived damaged. "
-        "1 order affected."
+        "Shipment ID: 344745459. Date of Last Carrier Tracking: February 22, 2026. "
+        "Carrier: Other. Damaged. Damage Type: Damage due to poor/bad packaging. "
+        "Defect Type: Both product and shipping box damaged. Number of affected orders: 1."
     ),
     order_id="336431771",
     user_id="283959",
-    shipment_id="900000002",
-    delivered_date="2026-02-18T09:14:22.000+0000",
-    contact_email="claims@cleanboss.example.com",
+    shipment_id="344745459",
+    delivered_date="2026-02-22T17:40:30.000+0000",
+    contact_email="mtaparia@shipbob.com",
     account_name="CleanBoss",
-    created_date="2026-02-21T16:03:45.000+0000",
+    created_date="2026-02-26T18:20:11.000+0000",
 )
 SHIPMENT_1002 = shipment_payload(
-    shipment_id="900000002",
+    shipment_id="344745459",
     order_id="336431771",
-    carrier="USPS Priority Mail",
-    tracking_number="TRK900000002",
-    delivered_date="2026-02-18T09:14:22.000+0000",
+    carrier="CirroECommerce",
+    tracking_number="CR000441735725",
+    delivered_date="2026-02-22T17:40:30.000+0000",
 )
 ORDER_1002 = order_payload(
     order_id="336431771",
     user_id="283959",
     line_items=[
         order_line_item(
-            product_id="920000021",
+            product_id="897092060",
             name="CleanBoss Botanical Disinfectant & Cleaner 24oz 2 Pack",
             sku="A00360",
             quantity=1,
             unit_price=24.99,
         ),
         order_line_item(
-            product_id="920000022",
+            product_id="897518713",
             name="CleanBoss Multi Surface Cleaner 24oz",
             sku="A00300",
             quantity=2,
             unit_price=12.99,
         ),
         order_line_item(
-            product_id="920000023",
+            product_id="1377567317",
             name="CleanBoss Foaming Cleaning Wipes 70 pack",
             sku="A00299",
             quantity=1,
             unit_price=14.99,
         ),
     ],
-    created_date="2026-02-14T10:05:11.000+0000",
+    created_date="2026-02-16T02:23:01.000+0000",
 )
 
 # CASE-1003, Huge Supplements — six products, and the only sample claim that can reach the
-# $100 reimbursement cap, since its two dearest items come to $109.98 (FR-1.20).
-# Real: the merchant name, the order id 337761802, all six line items as quoted, and the
-# phrase "Number of affected orders: 2" in the description.
-# Invented: everything else, as for CASE-1002. The dates are set around late February
-# because this case's attachments are named "Screenshot_at_Feb_26...".
+# $100 reimbursement cap, since its two dearest items come to $109.98 (FR-1.20). Its
+# description is also the only one claiming two affected products rather than one.
+# Every field below is ShipBob's.
 CASE_1003 = case_payload(
     case_id="CASE-1003",
+    case_number="01838282",
     status="New",
     description=(
-        "Shipment ID: 900000003. Customer received order and products arrived damaged. "
+        "Shipment ID: 346106093. Date of Last Carrier Tracking: February 24, 2026. "
+        "Carrier: Other. Damaged. Damage Type: Damage due to carrier mishandling. "
         "Number of affected orders: 2."
     ),
     order_id="337761802",
     user_id="373103",
-    shipment_id="900000003",
-    delivered_date="2026-02-25T15:47:09.000+0000",
-    contact_email="claims@hugesupplements.example.com",
+    shipment_id="346106093",
+    delivered_date="2026-02-25T21:51:46.000+0000",
+    contact_email="sakukreja+4@shipbob.com",
     account_name="Huge Supplements",
-    created_date="2026-03-01T10:12:33.000+0000",
+    created_date="2026-02-26T18:20:11.000+0000",
 )
 SHIPMENT_1003 = shipment_payload(
-    shipment_id="900000003",
+    shipment_id="346106093",
     order_id="337761802",
-    carrier="FedEx Ground",
-    tracking_number="TRK900000003",
-    delivered_date="2026-02-25T15:47:09.000+0000",
+    carrier="USPS",
+    tracking_number="9234690244541403638849",
+    delivered_date="2026-02-25T21:51:46.000+0000",
 )
 ORDER_1003 = order_payload(
     order_id="337761802",
     user_id="373103",
     line_items=[
         order_line_item(
-            product_id="920000031",
+            product_id="101786572",
             name="Bomb Popsicle Wrecked Pre-Workout",
             sku="0041",
             quantity=1,
             unit_price=49.99,
         ),
         order_line_item(
-            product_id="920000032",
+            product_id="1303441538",
             name="Blue Razz Liquid Carnitine",
             sku="0199",
             quantity=1,
             unit_price=34.99,
         ),
         order_line_item(
-            product_id="920000033",
+            product_id="101786630",
             name="Red/Black HUGE Shaker",
             sku="0157",
             quantity=1,
             unit_price=12.99,
         ),
         order_line_item(
-            product_id="920000034",
+            product_id="101786566",
             name="2.5LBS White Chocolate Raspberry Huge Whey",
             sku="0159",
             quantity=1,
             unit_price=59.99,
         ),
         order_line_item(
-            product_id="920000035",
+            product_id="196409482",
             name="Green Apple Wrecked Core Sample",
             sku="0180",
             quantity=1,
             unit_price=9.99,
         ),
         order_line_item(
-            product_id="920000036",
+            product_id="136125958",
             name="Unflavored Liquid Glycerol",
             sku="0179",
             quantity=1,
             unit_price=27.99,
         ),
     ],
-    created_date="2026-02-21T13:38:02.000+0000",
+    created_date="2026-02-21T02:08:41.000+0000",
 )
 
 # CASE-1004, Catalyze-X — the age-gate example. Delivered 26 December, opened 9 March:
 # 73 days, well past any reasonable limit, so the claim is turned away before the agent
-# runs and its four attachments are never looked at (FR-0.4, NFR-8).
-# Real: the status "Closed", the merchant name, and both dates. Those dates are the whole
-# point of this case; do not adjust them.
-# Invented: everything else, order and shipment included — REQUIREMENTS.md quotes neither.
+# runs and its four attachments are never looked at (FR-0.4, NFR-8). Those two dates are
+# the whole point of this case; do not adjust them.
+#
+# Its order holds exactly one line item, which makes it the only sample case where the
+# split into claim lines needs no judgement at all (FR-1a.5).
+# Every field below is ShipBob's.
 CASE_1004 = case_payload(
     case_id="CASE-1004",
+    case_number="02564294",
     status="Closed",
     description=(
-        "Shipment ID: 900000004. Customer received order and product arrived damaged. "
-        "1 order affected."
+        "Shipment ID: 330936165. Date of Last Carrier Tracking: March 6, 2026. "
+        "Carrier: Other. Damaged. Damage Type: Damage due to poor/bad packaging. "
+        "Defect Type: Product damaged, but shipping box is intact. "
+        "Number of affected orders: 1."
     ),
-    order_id="910000004",
+    order_id="322882110",
     user_id="374167",
-    shipment_id="900000004",
+    shipment_id="330936165",
     delivered_date="2025-12-26T12:13:36.000+0000",
-    contact_email="claims@catalyze-x.example.com",
+    contact_email="sakukreja+6@shipbob.com",
     account_name="Catalyze-X",
     created_date="2026-03-09T18:51:42.000+0000",
 )
 SHIPMENT_1004 = shipment_payload(
-    shipment_id="900000004",
-    order_id="910000004",
-    carrier="UPS Ground",
-    tracking_number="TRK900000004",
+    shipment_id="330936165",
+    order_id="322882110",
+    carrier="CirroECommerce",
+    tracking_number="CR000498369287",
     delivered_date="2025-12-26T12:13:36.000+0000",
 )
 ORDER_1004 = order_payload(
-    order_id="910000004",
+    order_id="322882110",
     user_id="374167",
     line_items=[
         order_line_item(
-            product_id="920000041",
-            name="Catalyze-X Daily Enzyme Complex",
-            sku="CX-100",
+            product_id="897531023",
+            name="Organic Castor Oil Roll-on with Frankincense",
+            sku="HG-FRCAST-KITTEDROLL",
             quantity=1,
-            unit_price=42.50,
-        ),
-        order_line_item(
-            product_id="920000042",
-            name="Catalyze-X Travel Case",
-            sku="CX-200",
-            quantity=1,
-            unit_price=18.00,
+            unit_price=24.99,
         ),
     ],
-    created_date="2025-12-20T09:05:44.000+0000",
+    created_date="2025-12-22T16:24:28.000+0000",
 )
 
-# CASE-1005 — the case with no evidence at all. It has zero attachments and its status is
-# already "Waiting on Client", so the only possible outcome is a request for information
-# (FR-1.6). An empty attachment list must not be treated as an error.
-# Real: the status "Waiting on Client".
-# Invented: everything else, the merchant name included — REQUIREMENTS.md never names this
-# merchant, and never quotes its order or its shipment.
+# CASE-1005, Loam Science — the case with no evidence at all. It has zero attachments and
+# its status is already "Waiting on Client", so the only possible outcome is a request for
+# information (FR-1.6). An empty attachment list must not be treated as an error.
+#
+# Its order carries a second line worth $0.00, a promotional insert card. Nothing in the
+# requirements says what to do with a free item, and it is the reason this case is not as
+# simple a split as its single affected product suggests.
+# Every field below is ShipBob's.
 CASE_1005 = case_payload(
     case_id="CASE-1005",
+    case_number="02584387",
     status="Waiting on Client",
     description=(
-        "Shipment ID: 900000005. Customer says the product arrived damaged. 1 order affected."
+        "Shipment ID: 349164073. Date of Last Carrier Tracking: March 10, 2026. "
+        "Carrier: Other. Damaged. Damage Type: Damage due to carrier mishandling. "
+        "Number of affected orders: 1."
     ),
-    order_id="910000005",
+    order_id="340775987",
     user_id="398045",
-    shipment_id="900000005",
-    delivered_date="2026-03-02T08:21:55.000+0000",
-    contact_email="claims@northwind-naturals.example.com",
-    account_name="Northwind Naturals",
-    created_date="2026-03-06T12:44:07.000+0000",
+    shipment_id="349164073",
+    delivered_date="2026-03-10T22:54:36.000+0000",
+    contact_email="sakukreja+5@shipbob.com",
+    account_name="Loam Science",
+    created_date="2026-03-18T17:52:59.000+0000",
 )
 SHIPMENT_1005 = shipment_payload(
-    shipment_id="900000005",
-    order_id="910000005",
-    carrier="DHL Express",
-    tracking_number="TRK900000005",
-    delivered_date="2026-03-02T08:21:55.000+0000",
+    shipment_id="349164073",
+    order_id="340775987",
+    carrier="UniUni",
+    tracking_number="UUS6342760220893606",
+    delivered_date="2026-03-10T22:54:36.000+0000",
 )
 ORDER_1005 = order_payload(
-    order_id="910000005",
+    order_id="340775987",
     user_id="398045",
     line_items=[
         order_line_item(
-            product_id="920000051",
-            name="Northwind Elderberry Syrup 8oz",
-            sku="NW-880",
-            quantity=2,
-            unit_price=21.50,
+            product_id="1130664154",
+            name="30-day Pouch LOAM Prebiotic Fiber Formula",
+            sku="LOAM-30DAY-001",
+            quantity=1,
+            unit_price=45.00,
+        ),
+        order_line_item(
+            product_id="1374224271",
+            name="Insert Card",
+            sku="Health Grows Here - Insert",
+            quantity=1,
+            unit_price=0.00,
         ),
     ],
-    created_date="2026-02-26T11:19:37.000+0000",
+    created_date="2026-03-04T03:59:08.000+0000",
 )
 
 
@@ -634,11 +638,17 @@ def mock_shipbob(
 
     shipment_id = case.get("shipment_id") or (shipment or {}).get("shipment_id")
     if shipment_id is not None:
-        _serve(router, f"/shipments/{shipment_id}", shipment, shipment_status)
+        _serve(
+            router,
+            f"/shipments/{shipment_id}",
+            shipment,
+            shipment_status,
+            SHIPMENT_NOT_FOUND_BODY,
+        )
 
     order_id = case.get("order_id") or (order or {}).get("order_id")
     if order_id is not None:
-        _serve(router, f"/orders/{order_id}", order, order_status)
+        _serve(router, f"/orders/{order_id}", order, order_status, ORDER_NOT_FOUND_BODY)
 
 
 def _serve(
@@ -646,16 +656,18 @@ def _serve(
     path: str,
     payload: dict[str, object] | None,
     status_code: int,
+    missing_body: dict[str, object],
 ) -> None:
     """Register one address on the stand-in API, with a record or with an error.
 
     A record and a status of 200 serve the record. Anything else — no record, or a status
     the caller asked for — serves an error body instead, defaulting to 404 when the record
-    is simply absent.
+    is simply absent. The error body names the resource, the way ShipBob's does, so a
+    test never sees a missing order reported as a missing case.
     """
     if payload is not None and status_code == 200:
         router.get(path).respond(200, json=payload)
         return
 
     error_status = status_code if status_code != 200 else 404
-    router.get(path).respond(error_status, json=NOT_FOUND_BODY)
+    router.get(path).respond(error_status, json=missing_body)

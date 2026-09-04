@@ -32,6 +32,7 @@ from tests.fixtures.shipbob import (
     CASE_1003,
     CASE_1004,
     CASE_1005,
+    CASE_NOT_FOUND_BODY,
     CONSTRUCTED_HIGH_VALUE_CASE,
     CONSTRUCTED_HIGH_VALUE_ORDER,
     CONSTRUCTED_HIGH_VALUE_SHIPMENT,
@@ -44,17 +45,18 @@ from tests.fixtures.shipbob import (
     CONSTRUCTED_LOST_IN_TRANSIT_CASE,
     CONSTRUCTED_LOST_IN_TRANSIT_ORDER,
     CONSTRUCTED_LOST_IN_TRANSIT_SHIPMENT,
-    NOT_FOUND_BODY,
     ORDER_1001,
     ORDER_1002,
     ORDER_1003,
     ORDER_1004,
     ORDER_1005,
+    ORDER_NOT_FOUND_BODY,
     SHIPMENT_1001,
     SHIPMENT_1002,
     SHIPMENT_1003,
     SHIPMENT_1004,
     SHIPMENT_1005,
+    SHIPMENT_NOT_FOUND_BODY,
 )
 
 CASES = [
@@ -186,19 +188,25 @@ app = FastAPI(
 )
 
 
-async def _answer(record: dict[str, object] | None) -> Response:
+async def _answer(
+    record: dict[str, object] | None,
+    missing_body: dict[str, object] = CASE_NOT_FOUND_BODY,
+) -> Response:
     """Send a record back the way ShipBob would, or say there is no such record.
 
     A missing record is answered as a proper 404 rather than an error, because a claim
     for a case that does not exist is a normal thing to demonstrate: the system turns
     that into "ShipBob has no case with this id" for the representative.
+
+    The body naming the missing resource differs per read, the way ShipBob's does, so
+    the stand-in cannot teach a caller that every 404 looks alike.
     """
     delay = _delay_seconds()
     if delay:
         await asyncio.sleep(delay)
     if record is None:
         return Response(
-            content=_to_json(NOT_FOUND_BODY),
+            content=_to_json(missing_body),
             status_code=404,
             media_type="application/json",
         )
@@ -214,11 +222,13 @@ async def get_case(case_id: str) -> Response:
 @app.get("/shipments/{shipment_id}", summary="Read one shipment")
 async def get_shipment(shipment_id: str) -> Response:
     """Return the parcel record, or 404 if there is no such shipment."""
-    return await _answer(SHIPMENTS_BY_ID.get(shipment_id))
+    return await _answer(SHIPMENTS_BY_ID.get(shipment_id), SHIPMENT_NOT_FOUND_BODY)
 
 
 @app.get("/orders/{order_id}", summary="Read one order")
 async def get_order(order_id: str) -> Response:
     """Return the order and its line items, or 404 if there is no such order."""
     record = ORDERS_BY_ID.get(order_id)
-    return await _answer(None if record is None else _with_money_restored(record))
+    return await _answer(
+        None if record is None else _with_money_restored(record), ORDER_NOT_FOUND_BODY
+    )

@@ -101,7 +101,7 @@ def all_gates(**overrides: GateResult) -> tuple[GateResult, ...]:
 def make_context(**overrides: Any) -> ClaimContext:
     """Build the facts worked out about CASE-1004 before the checks ran."""
     fields: dict[str, Any] = {
-        "order_value_usd": Decimal("60.50"),
+        "order_value_usd": Decimal("24.99"),
         "is_high_value": False,
         "days_since_delivery": 73,
         "delivered_date": "2025-12-26T12:13:36+00:00",
@@ -165,7 +165,7 @@ def test_the_email_is_addressed_to_the_merchant_on_the_case() -> None:
     """FR-0.4: the explanation is owed to the merchant, so it is addressed to them."""
     email = draft()
 
-    assert email.to == "claims@catalyze-x.example.com"
+    assert email.to == "sakukreja+6@shipbob.com"
 
 
 def test_the_email_names_every_reason_the_claim_was_declined() -> None:

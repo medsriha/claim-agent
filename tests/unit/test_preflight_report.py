@@ -66,7 +66,7 @@ ALL_FOUR_GATES = (AGE_FAILED, CLAIM_TYPE_PASSED, KEY_INFORMATION_FAILED, INSURAN
 def make_context(**overrides: Any) -> ClaimContext:
     """Build the facts worked out about CASE-1004 before the checks ran."""
     fields: dict[str, Any] = {
-        "order_value_usd": Decimal("60.50"),
+        "order_value_usd": Decimal("24.99"),
         "is_high_value": False,
         "days_since_delivery": 73,
         "delivered_date": "2025-12-26T12:13:36+00:00",
@@ -154,7 +154,7 @@ def test_the_facts_gathered_up_front_travel_with_the_write_up() -> None:
     report = build()
 
     assert report.context.days_since_delivery == 73
-    assert report.context.order_value_usd == Decimal("60.50")
+    assert report.context.order_value_usd == Decimal("24.99")
 
 
 def test_the_write_up_names_no_amount_of_money() -> None:
@@ -168,7 +168,7 @@ def test_the_write_up_names_no_amount_of_money() -> None:
     written = " ".join([*report.findings, report.drafted_email.subject, report.drafted_email.body])
 
     assert "$" not in written
-    assert "60.50" not in written
+    assert "24.99" not in written
 
 
 def test_a_stopped_claim_with_no_reason_at_all_is_refused() -> None:
