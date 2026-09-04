@@ -1,31 +1,46 @@
 /**
  * The one screen: pick a claim, watch the screening report back, act on the email.
  *
- * The important decision here is that **the pacing is a replay, not a race.** The whole
- * answer is fetched first, and only then are the findings played out one at a time. The
- * tempting alternative — start playing findings while the request is still in flight — can
- * put "read the parcel ✓" on screen for a read that has not finished, or for one that
- * failed a moment later. Waiting first means every finding shown is a finding the service
- * really produced, and a claim that fails shows a failure and no findings at all.
+ * **Two halves, and they work differently.** The quick checks are a replay: the whole
+ * answer is fetched first, and only then are the findings played out one at a time, because
+ * starting earlier could put "read the parcel ✓" on screen for a read that had not finished
+ * or had just failed. The investigation is not a replay — it genuinely reports as it works,
+ * and each thing it says is added the moment the service says it.
+ *
+ * What that leaves invented is worth being exact about, because it used to be everything.
+ * The steps are real, their order is real, and their wording is the service's. What is
+ * still the screen's own is the moment each one is *drawn*: a message waits its turn behind
+ * the ones before it and spins for a beat as it arrives, so a step can appear a little after
+ * it happened. The rhythm is a reading aid; the work behind it is not.
  *
  * One claim at a time. Picking a claim replaces the conversation rather than adding to it,
  * so a finding can never be read against the wrong claim. Nothing is kept between visits.
  *
- * **A claim that passes is asked about twice.** After the screening comes back, and only if
- * it says the claim may proceed, the screen asks which past claims resemble it. A stopped
- * claim is not asked: nothing is going to be investigated, so how comparable claims went
- * helps nobody, and it would sit in front of the email a representative has to act on. Both
- * answers are in hand before the conversation starts playing, which is the same replay rule
- * as before — a second request still in flight would put a finished-looking step on screen
- * for work that had not finished.
+ * **A claim that passes is asked about three times.** The screening comes back first. Then,
+ * only if it says the claim may proceed, the screen asks which past claims resemble it — a
+ * stopped claim is not asked, because nothing is going to be investigated and it would sit
+ * in front of the email a representative has to act on. Then the investigation is asked for,
+ * and that one streams.
+ *
+ * The investigation screens the claim again for itself, so those three cheap reads happen
+ * twice. That is knowingly wasteful and costs no AI; the alternative was for the screen to
+ * wait for the stream before it could show any of the four checks, which would have made
+ * the first thing a representative sees arrive later rather than sooner.
  */
 import { useCallback, useState } from "react";
 
 import { ApiFailure } from "../api/failure";
 import { findSimilarClaims, screenCase } from "../api/client";
+import { investigateCase } from "../api/investigationStream";
 import { CasePicker } from "../components/CasePicker";
 import { Thread } from "../chat/Thread";
-import { failureTranscript, pickedMessage, transcriptFor } from "../chat/transcript";
+import {
+  failureTranscript,
+  investigationMessages,
+  pickedMessage,
+  stepMessage,
+  transcriptFor,
+} from "../chat/transcript";
 import type { PrecedentLookup, TranscriptMessage } from "../chat/transcript";
 import type { PreflightResult } from "../api/types";
 
@@ -82,6 +97,101 @@ async function lookUpPrecedent(result: PreflightResult): Promise<PrecedentLookup
   }
 }
 
+/**
+ * Ask for the claim to be investigated, and add what the service says as it says it.
+ *
+ * This is the one place on the screen where messages arrive rather than being laid out.
+ * Each one is appended the moment it comes in; the conversation's own pacing then draws it
+ * in turn, which is why a step can appear a moment after it happened.
+ *
+ * **A failure never throws away what already arrived.** The screening is on screen and a
+ * representative can use it, so a stream that breaks part-way adds what went wrong and
+ * leaves everything else standing (NFR-4). That is also why this never rejects.
+ *
+ * **A conversation that has moved on is left alone.** Every update checks the claim it is
+ * for, so a step belonging to a claim nobody is looking at any more is dropped rather than
+ * appearing under the one they are.
+ *
+ * @param caseId - The claim being investigated.
+ * @param setConversation - How the conversation is added to.
+ */
+async function investigate(
+  caseId: string,
+  setConversation: React.Dispatch<React.SetStateAction<Conversation | null>>,
+): Promise<void> {
+  // Product names arrive with the split, part-way through, and every later message about a
+  // product carries only its id. Kept here so a step can be headed with the product it is
+  // about rather than an identifier nobody reads.
+  const productNames = new Map<string, string>();
+
+  const add = (messages: TranscriptMessage[], stillWorking: boolean): void => {
+    setConversation((current) =>
+      current === null || current.caseId !== caseId
+        ? current
+        : { ...current, messages: [...current.messages, ...messages], working: stillWorking },
+    );
+  };
+
+  try {
+    await investigateCase(caseId, (message) => {
+      switch (message.kind) {
+        case "progress":
+          // The screening was already said, at the top of the conversation, from the
+          // request that fetched it. Saying it again would read as it having happened twice.
+          if (message.event.kind !== "screened") {
+            add([stepMessage(message.event, (id) => productNames.get(id) ?? null)], true);
+          }
+          return;
+
+        case "result":
+          if (message.investigation !== null) {
+            message.investigation.triage.claim_lines.forEach((line) => {
+              productNames.set(line.claim_line_id, line.claimed.name);
+            });
+            add(investigationMessages(message.investigation), true);
+          }
+          return;
+
+        case "failed":
+          add(failureMessages(message.message), false);
+          return;
+
+        case "done":
+          setConversation((current) =>
+            current === null || current.caseId !== caseId
+              ? current
+              : { ...current, working: false },
+          );
+          return;
+      }
+    });
+  } catch (error: unknown) {
+    const failure =
+      error instanceof ApiFailure
+        ? error
+        : new ApiFailure("unexpected", "This screen ran into a problem of its own.");
+    add(failureMessages(failure.message), false);
+  }
+}
+
+/**
+ * What went wrong with an investigation, as a message to add to a conversation.
+ *
+ * Kept apart from the failure transcript, which *replaces* a conversation. This one is
+ * added to the end of one, because the screening it follows succeeded and is worth keeping.
+ */
+function failureMessages(message: string): TranscriptMessage[] {
+  return [
+    {
+      id: "investigation-failed",
+      speaker: "system",
+      label: "The investigation could not be completed",
+      body: { kind: "findings", findings: [message] },
+    },
+  ];
+}
+
+
 export function PreflightScreen(): React.JSX.Element {
   const [conversation, setConversation] = useState<Conversation | null>(null);
 
@@ -98,6 +208,7 @@ export function PreflightScreen(): React.JSX.Element {
     screenCase(caseId)
       .then(async (result) => {
         const precedent = await lookUpPrecedent(result);
+        const screened = transcriptFor(caseId, result, precedent);
         setConversation((current) =>
           // A conversation that has moved on is left alone: an answer for a claim nobody is
           // looking at any more must not overwrite the one they are.
@@ -105,10 +216,16 @@ export function PreflightScreen(): React.JSX.Element {
             ? current
             : {
                 ...current,
-                messages: transcriptFor(caseId, result, precedent),
-                working: false,
+                messages: screened,
+                // A claim that passes is still working: the investigation follows. A
+                // stopped one is finished, because nothing more is going to be asked.
+                working: result.verdict === "proceed",
               },
         );
+
+        if (result.verdict === "proceed") {
+          await investigate(caseId, setConversation);
+        }
       })
       .catch((error: unknown) => {
         // The client promises to throw only its own failure type. Anything else would be a

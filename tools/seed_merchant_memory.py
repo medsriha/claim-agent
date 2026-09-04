@@ -2,7 +2,8 @@
 
 **Everything this writes is invented.** No part of the running system records a rep's
 corrections yet: the store can be read and can be written, the screen reads it, and the
-code that would write to it belongs to a later stage that does not exist (FR-3.8). So on
+step that would write to it is specified but unbuilt — FR-3.8 says a correction is kept,
+and FR-C.1 and FR-C.2 say what writes one and from what. So on
 any fresh machine every claim honestly reports "None on file for this merchant", and the
 panel that would show a merchant's history is always empty.
 
@@ -10,12 +11,11 @@ That is correct and it demonstrates nothing. This tool exists so someone showing
 system can make that panel show something, **knowing** that what it shows was typed by
 hand rather than learned from a rep.
 
-It writes the one correction the repository already documents: `layer0-http-transcript.txt`
-records a real response for CASE-1001 carrying exactly this note, because whoever captured
-that transcript seeded it the same way. The database is not in version control, so the row
-never travelled with the file — which leaves the transcript showing history the screen
-cannot. Running this makes the two agree again, and it is the reason this writes that
-correction rather than one of its own devising.
+It writes one fixed correction rather than a different one each run: the merchant, the case
+number and the wording were all chosen by hand and never change, so that two people
+demonstrating the system see the same history and a screenshot still matches the screen a
+month later. The database is not in version control, so nothing carries the row between
+machines — a fresh clone shows an empty panel until somebody runs this.
 
 **It is a development tool.** It writes through the same store the service reads, so what
 appears on screen went in the way a real correction would. Nothing in `src/` can reach it,
@@ -26,6 +26,11 @@ and production never runs it.
 
 `--clear` matters as much as the writing does: fabricated history on screen is
 indistinguishable from the real thing, so there has to be an obvious way to undo it.
+
+**This file has an expiry date, and it is later than it looks.** TODO.md's FR-C.8 note sets
+the condition: not when the real write exists, but when a rep can decide a claim *and* the
+demo data holds a second case for a merchant who already has a decided one. Until all three
+are true, a real correction would be written and no later claim would ever see it.
 """
 
 from __future__ import annotations
@@ -45,9 +50,9 @@ from claim_agent.storage.merchant_memory import MerchantMemory
 # the brand name, because the name is display text a merchant can edit (FR-3.8).
 DEMO_MERCHANT_USER_ID = "334430"
 
-# Word for word the correction in `layer0-http-transcript.txt`. Note the case id does not
-# follow this project's convention of starting invented identifiers with a 9 — it is
-# reproduced as the transcript has it rather than corrected, so the two match exactly.
+# Invented, like everything else in this file. Note the case id does not follow this
+# project's convention of starting a made-up identifier with a 9, so unlike the constructed
+# claims in the ShipBob stand-in it does not announce itself as ours at a glance.
 DEMO_CORRECTION = MerchantCorrection(
     user_id=DEMO_MERCHANT_USER_ID,
     case_id="CASE-0912",

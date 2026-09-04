@@ -152,13 +152,33 @@ def test_the_model_name_and_timeout_come_from_the_settings() -> None:
     assert chat.default_request_timeout == 7.5  # type: ignore[attr-defined]
 
 
-def test_the_temperature_is_zero_and_the_provider_does_not_retry_for_us() -> None:
-    """NFR-1, FR-1.3: variance is not invited, and retrying happens in one place only."""
+def test_no_sampling_setting_is_sent_because_the_model_refuses_them() -> None:
+    """NFR-1, NFR-6: asking for a temperature broke every investigation.
+
+    `claude-opus-5` rejects a temperature outright, and an earlier version of this asked
+    for zero — so the first real call of every run came back as a refusal saying the
+    setting was deprecated. Nothing about that was visible in a unit test, because the
+    unit tests never reach the provider; it took running the thing.
+
+    So this pins the absence rather than a value, and it is the one lever NFR-1 used to
+    have. What consistency the system does offer comes from everything around the model,
+    not from how the model is asked.
+    """
     chat = build_chat_model(settings_with_a_key())
 
-    assert chat.temperature == 0.0  # type: ignore[attr-defined]
-    # Left to this file's own bounded loop. The provider's retries would multiply
-    # with ours and neither the step budget nor the report would know.
+    assert chat.temperature is None  # type: ignore[attr-defined]
+    assert chat.top_p is None  # type: ignore[attr-defined]
+    assert chat.top_k is None  # type: ignore[attr-defined]
+
+
+def test_the_provider_does_not_retry_for_us() -> None:
+    """FR-1.3: retrying happens in one place only, so a budget can bound it.
+
+    The provider's own retries would multiply with ours — three of theirs inside two of
+    ours is six calls — and neither the step budget nor the report would know.
+    """
+    chat = build_chat_model(settings_with_a_key())
+
     assert chat.max_retries == 0  # type: ignore[attr-defined]
 
 

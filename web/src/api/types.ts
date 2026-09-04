@@ -243,3 +243,186 @@ export interface PrecedentSet {
   unavailable_reason: string | null;
   was_read: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Investigating a claim — what arrives while the work happens, and what it ends with
+// ---------------------------------------------------------------------------
+
+/**
+ * The kinds of thing an investigation says about itself as it works.
+ *
+ * Listed here so the screen can label them, and for no other reason: it never decides
+ * anything from the kind. A kind it does not recognise is still shown, because the
+ * sentence beside it is the service's own and is worth reading whatever we call it.
+ */
+export type RunEventKind =
+  | "screened"
+  | "attachments_listed"
+  | "image_classified"
+  | "evidence_settled"
+  | "claim_split"
+  | "precedent_gathered"
+  | "line_started"
+  | "tool_called"
+  | "thinking"
+  | "line_finished"
+  | "report_ready"
+  | "failed";
+
+/**
+ * One thing the investigation said while it was working.
+ *
+ * `summary` is a finished sentence written by the service, ready to put on screen
+ * unchanged. `claim_line_id` names the damaged product it is about, and is `null` for the
+ * things that concern the whole claim — several products are investigated at once, so
+ * without it there would be no telling which of them a line belonged to.
+ */
+export interface RunEvent {
+  sequence: number;
+  kind: RunEventKind;
+  summary: string;
+  claim_line_id: string | null;
+  detail: Record<string, string>;
+}
+
+/** One damaged product, as the claim was split into products. */
+export interface ClaimLine {
+  claim_line_id: string;
+  claimed: { name: string; quantity: number; sku: string | null };
+  match: "matched" | "not_on_order" | "ambiguous";
+  order_line: OrderLineItem | null;
+  candidate_order_lines: OrderLineItem[];
+  damage_attachment_ids: string[];
+}
+
+/** What was found for one of the four pieces of evidence, and in which image. */
+export interface EvidenceFinding {
+  kind: "invoice" | "customer_confirmation" | "damaged_product_photo" | "outer_packaging_photo";
+  state: "present" | "missing" | "unusable" | "unreadable";
+  observed: string;
+  attachment_id: string | null;
+  problem: string | null;
+}
+
+/** One of the four judgements, with the reasoning and the confidence behind it. */
+export interface Assessment {
+  name:
+    | "damage_visible"
+    | "product_identifiable"
+    | "product_on_invoice"
+    | "packaging_documented";
+  passed: boolean;
+  reasoning: string;
+  confidence: number;
+  attachment_ids: string[];
+}
+
+/**
+ * The recommendation that stands, and what the investigation itself had said.
+ *
+ * When the two differ, `overrides` names the rules that stepped in. Worth showing both: a
+ * representative should be able to see that a product was sound on its own evidence and
+ * that a rule withheld the payment anyway.
+ */
+export interface OutcomeDecision {
+  recommendation: "approve" | "request_info" | "deny" | "escalate";
+  recommended_by_agent: "approve" | "request_info" | "deny" | "escalate";
+  overrides: string[];
+  explanation: string;
+}
+
+/**
+ * One damaged item's part of an amount.
+ *
+ * `unit_price` is what one cost and `refunded_usd` is what is being refunded for the
+ * item — they differ by the refund percentage. Both are text, like every figure here.
+ */
+export interface AmountComponent {
+  product_name: string;
+  quantity: number;
+  unit_price: string;
+  refunded_usd: string;
+  sku: string | null;
+}
+
+/**
+ * A recommended amount and the whole of its working (FR-2.4).
+ *
+ * Every figure is text and must stay text: turning one into a browser number is how
+ * $100.00 becomes 100.00000000000001. Nothing here is added up on screen either — the
+ * arithmetic was done in the service, and doing it again in a browser would be a second
+ * calculation that could disagree with the first.
+ *
+ * The steps read: the items came to `items_total_usd`, `refund_percentage` per cent of
+ * that is `subtotal_usd`, and the cap brings it to `amount_usd` when `cap_applied`.
+ */
+export interface AmountDerivation {
+  components: AmountComponent[];
+  items_total_usd: string;
+  refund_percentage: number;
+  subtotal_usd: string;
+  amount_usd: string;
+  cap_usd: string;
+  cap_applied: boolean;
+  priced_from: string | null;
+}
+
+/** How many steps a run was allowed and how many it used. */
+export interface BudgetSnapshot {
+  steps_used: number;
+  steps_allowed: number;
+  image_analyses_used: number;
+  image_analyses_allowed: number;
+  tool_retries_used: number;
+  tool_retries_allowed_per_call: number;
+  limits_reached: string[];
+}
+
+/**
+ * Everything established about one damaged product.
+ *
+ * `drafted_email` is `null` when there is nothing that could be sent — a product whose
+ * wording was refused, or one held back by the cap after its email had been written.
+ * `concerns` is where anything that did not sit right goes, and silence there is treated
+ * as a defect rather than a clean result (FR-2.5).
+ */
+export interface LineInvestigation {
+  line: ClaimLine;
+  evidence: EvidenceFinding[];
+  assessments: Assessment[];
+  outcome: OutcomeDecision;
+  amount: AmountDerivation;
+  concerns: string[];
+  drafted_email: DraftedEmail | null;
+  budget: BudgetSnapshot;
+}
+
+/**
+ * How a claim was split, and what was settled about the evidence covering the whole parcel.
+ *
+ * `ambiguity` carries what was unclear when the split could not be established. While it
+ * says anything at all, no product was investigated — nothing may be looked into until
+ * somebody has said which products are being claimed for (FR-1a.4).
+ */
+export interface ClaimTriage {
+  case_id: string;
+  claim_lines: ClaimLine[];
+  shared_evidence: EvidenceFinding[];
+  ambiguity: string | null;
+}
+
+/**
+ * Everything an investigation established about one claim, product by product.
+ *
+ * `lines` is empty when the split was never settled. `recommended_total_usd` is what the
+ * products recommended for payment come to between them — text, and worked out in the
+ * service like every other figure.
+ */
+export interface ClaimInvestigation {
+  case_id: string;
+  triage: ClaimTriage;
+  lines: LineInvestigation[];
+  claim_concerns: string[];
+  recommended_total_usd: string;
+  claim_cap_applied: boolean;
+}

@@ -1175,3 +1175,340 @@ p {
   margin: 0;
   color: var(--sb-ink-soft);
 }
+
+/* --- A step the investigation took -------------------------------------- */
+/* Narration rather than a finding, so it is deliberately lighter than a bubble: a
+   representative should be able to skim past these to the report at the end. The two kinds
+   worth stopping at — the agent choosing a tool, and what comparable claims were decided —
+   carry a brand-coloured edge so they stand out from the rest. */
+
+.step {
+  padding: 0.35rem 0 0.35rem 0.75rem;
+  border-left: 2px solid var(--sb-line);
+  color: var(--sb-ink-soft);
+  font-size: 0.9rem;
+}
+
+.step-noticed {
+  border-left-color: var(--sb-brand);
+  color: var(--sb-ink);
+}
+
+.step-summary {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.step-kind {
+  display: inline-block;
+  margin-right: 0.5rem;
+  color: var(--sb-ink-faint);
+  font-family: var(--sb-font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.step-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0.3rem 0 0;
+}
+
+.step-detail-row {
+  display: flex;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.step-detail-key {
+  color: var(--sb-ink-faint);
+}
+
+.step-detail-value {
+  margin: 0;
+  color: var(--sb-ink-soft);
+  font-family: var(--sb-font-mono);
+}
+
+/* --- One damaged product's report --------------------------------------- */
+/* The thing a representative decides on, so it carries its own frame and a colour down the
+   edge saying what is recommended — the same shape as a check card, for the same reason. */
+
+.line-report {
+  padding: 0.9rem 1rem;
+  background: var(--sb-surface);
+  border: 1px solid var(--sb-line);
+  border-left: 4px solid var(--sb-ink-faint);
+  border-radius: var(--sb-radius);
+  box-shadow: var(--sb-shadow);
+}
+
+.line-approve {
+  border-left-color: var(--sb-pass);
+}
+
+.line-request_info {
+  border-left-color: var(--sb-flag);
+}
+
+.line-escalate {
+  border-left-color: var(--sb-flag);
+}
+
+.line-deny {
+  border-left-color: var(--sb-stop);
+}
+
+.line-heading {
+  margin-bottom: 0.6rem;
+}
+
+.line-count {
+  margin: 0;
+  color: var(--sb-ink-faint);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.line-product {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+}
+
+.line-sku {
+  margin: 0.1rem 0 0;
+  color: var(--sb-ink-faint);
+  font-family: var(--sb-font-mono);
+  font-size: 0.8rem;
+}
+
+.line-recommendation {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0 0 0.4rem;
+}
+
+.line-verdict {
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.line-amount {
+  color: var(--sb-pass);
+  font-family: var(--sb-font-mono);
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.line-explanation,
+.line-overruled {
+  margin: 0 0 0.5rem;
+  color: var(--sb-ink-soft);
+  line-height: 1.5;
+}
+
+.line-overruled {
+  padding: 0.5rem 0.65rem;
+  background: var(--sb-flag-tint);
+  border-radius: var(--sb-radius-small);
+  color: var(--sb-ink);
+  font-size: 0.9rem;
+}
+
+.line-section {
+  margin: 0.7rem 0 0.3rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sb-ink-faint);
+}
+
+.line-list,
+.line-evidence,
+.line-assessments {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--sb-ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.line-concerns .line-list {
+  color: var(--sb-ink);
+}
+
+.line-none {
+  margin: 0.3rem 0 0;
+  color: var(--sb-ink-faint);
+  font-size: 0.88rem;
+}
+
+.line-details,
+.amount-working {
+  margin-top: 0.6rem;
+  border-top: 1px solid var(--sb-line);
+  padding-top: 0.5rem;
+}
+
+.line-details-summary,
+.amount-summary {
+  cursor: pointer;
+  color: var(--sb-brand);
+  font-size: 0.85rem;
+}
+
+/* --- How the amount was worked out -------------------------------------- */
+/* Every figure here is text the service sent. The steps are shown, never recomputed. */
+
+.amount-items {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.amount-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.25rem 0;
+  font-size: 0.88rem;
+}
+
+.amount-item-name {
+  flex: 1 1 12rem;
+}
+
+.amount-item-price,
+.amount-item-refund {
+  font-family: var(--sb-font-mono);
+  color: var(--sb-ink-soft);
+}
+
+.amount-item-refund {
+  color: var(--sb-ink);
+}
+
+.amount-steps {
+  margin: 0.5rem 0 0;
+}
+
+.amount-step {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0;
+  font-size: 0.88rem;
+}
+
+.amount-step dt {
+  color: var(--sb-ink-soft);
+}
+
+.amount-step dd {
+  margin: 0;
+  font-family: var(--sb-font-mono);
+}
+
+.amount-source {
+  margin: 0.4rem 0 0;
+  color: var(--sb-ink-faint);
+  font-size: 0.8rem;
+}
+
+/* --- Evidence and the four questions ------------------------------------ */
+
+.evidence,
+.judgement {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.65rem;
+  padding: 0.25rem 0;
+}
+
+.evidence-kind,
+.judgement-name {
+  min-width: 11rem;
+  color: var(--sb-ink);
+}
+
+.evidence-state,
+.judgement-answer,
+.judgement-confidence {
+  font-family: var(--sb-font-mono);
+  font-size: 0.8rem;
+}
+
+.evidence-present .evidence-state,
+.judgement-yes .judgement-answer {
+  color: var(--sb-pass);
+}
+
+.evidence-missing .evidence-state,
+.evidence-unusable .evidence-state,
+.judgement-no .judgement-answer {
+  color: var(--sb-stop);
+}
+
+/* Our own failure to read an image, which is not the merchant's to fix. Marked apart from
+   evidence they never sent, because only one of the two can be asked for again. */
+.evidence-unreadable .evidence-state {
+  color: var(--sb-flag);
+}
+
+.evidence-observed,
+.judgement-reasoning {
+  flex: 1 1 100%;
+  color: var(--sb-ink-soft);
+  font-size: 0.86rem;
+}
+
+.evidence-problem {
+  flex: 1 1 100%;
+  color: var(--sb-flag);
+  font-size: 0.86rem;
+}
+
+.evidence-source {
+  color: var(--sb-ink-faint);
+  font-family: var(--sb-font-mono);
+  font-size: 0.76rem;
+}
+
+.judgement-confidence {
+  color: var(--sb-ink-faint);
+}
+
+/* --- What the claim comes to altogether --------------------------------- */
+
+.claim-total-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+}
+
+.claim-total-label {
+  color: var(--sb-ink-soft);
+}
+
+.claim-total-figure {
+  font-family: var(--sb-font-mono);
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.claim-total-capped .claim-total-figure {
+  color: var(--sb-flag);
+}
+
+.claim-total-concern {
+  margin: 0.5rem 0 0;
+  color: var(--sb-ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}

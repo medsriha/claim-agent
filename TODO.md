@@ -129,11 +129,15 @@ built, tested, explained in DESIGN.md, and **now reachable**: `POST
 and reports what it is doing as it happens rather than answering at the end. A claim the
 screen turns away never reaches the agent and costs no AI at all.
 
-Two caveats that the ticks do not cover. **Nothing is stored**, so a stream cannot be
-replayed and a representative who reloads starts again — which is why NFR-3 and NFR-5 are
-still unticked below. And **the demo screen has not been moved onto it**: it still shows
-the quick checks through the older one-reply route and still invents its own pacing, so
-the honest streaming exists without being what anybody sees yet.
+The demo screen shows all of it: the quick checks, the similar past claims, then the
+investigation reporting each step as it happens, then a report per damaged product with the
+working behind its figure and a draft email. Proven end to end against the real model on
+ShipBob's own photographs — it picked out the damaged collagen from four images, priced it at
+$52.00, took 60% and recommended $31.20.
+
+One caveat the ticks do not cover: **nothing is stored**, so a stream cannot be replayed and
+a representative who reloads starts the investigation again. That is why NFR-3 and NFR-5 are
+still unticked below.
 
 - [x] FR-1a.1 — One agent pass over the whole claim that reads the description and the
   photographs and says which products are being claimed for.
@@ -543,8 +547,10 @@ demonstration needs the rest to exist. FR-C.7 is a question for whoever owns the
 should be asked, not answered here.
 
 - [ ] FR-C.1 — the decision record. Sits between FR-2.8 (what a rep may do) and FR-3.1 (what an
-  approval releases), and belongs to neither: recording a decision sends nothing. Note that
-  `decided_by` cannot be filled in — there is no sign-in anywhere in this service.
+  approval releases), and belongs to neither: recording a decision sends nothing. Two things to
+  design around: `decided_by` cannot be filled in, because there is no sign-in anywhere in this
+  service, and a claim stopped in Layer 0 has no claim lines to key a decision to — it is never
+  split. A record that insists on a line cannot hold the one decision that costs nothing to reach.
 - [ ] FR-C.2 — the merchant correction, written only where the decision differs from the
   recommendation. Store already exists; the difference test and the wording do not.
 - [ ] FR-C.3 — the close event that writes precedent. FR-S.1 says when a record is written;
@@ -563,6 +569,15 @@ should be asked, not answered here.
   merchants, no two alike, so nothing carries forward on the real set. Follow the rules
   `tools/seed_merchant_memory.py` already sets: outside `src/`, invented in its own words,
   written through the real store, removable again.
+  - **When that seeder can be deleted, so it does not linger by default.** Not when FR-C.1 and
+    FR-C.2 land. Its seeding half becomes redundant only once three things hold together: the
+    write exists (FR-C.1, FR-C.2), a rep can actually decide something (FR-2.1–FR-2.8), and the
+    demo data holds a second case for a merchant who already has a decided one. Without the
+    third, a real correction is written and no later claim ever sees it — invisible real history
+    is a worse demonstration than visible invented history, not a better one.
+  - **Be aware:** its `--clear` half has no replacement even then. `MerchantMemory` deliberately
+    has no delete method, and FR-C.6 is *withdrawal*, which keeps the record and only hides it
+    from later claims. Emptying the store between demonstrations still needs something.
 
 ## Non-functional requirements
 

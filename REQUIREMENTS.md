@@ -1028,6 +1028,13 @@ FR-C.3 read, and it is the audit trail's account of where the human intervened (
 Recorded per line, because approval is per line (FR-3.1a). A rep who approves one line and sends
 another back has taken two decisions, and both are recorded.
 
+**A claim stopped in Layer 0 is the exception, and it is not a rare one.** It still produces a
+report a rep approves (FR-0.4), but it has no claim lines at all: the split into lines happens in
+Layer 1a, which a terminal claim never reaches. So the record must be able to name a whole claim
+as well as a single line — the same fields, with no line named — rather than a line being
+invented so the decision has somewhere to sit. This is also the cheapest decision in the system,
+costing no AI at all (NFR-8), which makes it the first one likely to be built.
+
 > **Reference — what a decision record holds**
 > ```json
 > {
@@ -1076,6 +1083,14 @@ The record carries the outcome that actually took effect and the amount actually
 the outcome the agent recommended. Where a rep overrode the recommendation, precedent must show
 what ShipBob did rather than what this system suggested; remembering decisions is the entire point
 of the store, and remembering its own guesses is the failure FR-S.1 exists to prevent.
+
+**A claim stopped in Layer 0 closes without ever becoming precedent.** Nothing was investigated:
+no evidence was read and no product was assessed, so the record FR-S.3 describes would be almost
+entirely empty, and a later claim compared against it would be compared against nothing. NFR-8
+already says a claim stopped at the gates is never written to the store, and this is the same
+rule seen from the other end. It may still write a correction under FR-C.2 — a rep who pays a
+claim the gates wanted to refuse has corrected the system, and the next claim by that merchant
+should know it.
 
 **FR-C.4 — Make both writes repeatable, and never let them fail a decision.**
 Deciding the same line twice — a double-click, a retry after a timeout — must leave one

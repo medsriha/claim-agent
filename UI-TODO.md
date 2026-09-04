@@ -275,6 +275,60 @@ time and starts at UI-20.
     service now stores only closed claims, so every row is a decision and there is nothing to
     mark out as weaker. Each row shows what the claim closed on instead.
 
+## v5 — watching an investigation happen
+
+- [x] UI-28 — The investigation, streamed and shown as it happens, right after the similar
+  past claims.
+  - **What was built:** `api/investigationStream.ts` posts to `/cases/{id}/investigate` and
+    reads the reply as it arrives, handing each message over untouched.
+    `screens/PreflightScreen.tsx` starts it once the screening says "proceed" and the similar
+    claims are on screen, then appends what the service says as it says it. Two new
+    components draw it: `components/InvestigationStep.tsx` for a step, and
+    `components/LineReport.tsx` for one damaged product — its recommendation, the working
+    behind its figure, the four pieces of evidence and the four questions with their
+    confidence. `components/ClaimTotal.tsx` covers what a claim comes to across its products.
+  - **Conclusion: this is the first part of the screen that is not a replay.** Everything
+    above it is laid out from an answer that had already arrived; these messages exist
+    because the service said so, in the order it said it, in its own words. That retires most
+    of the invented pacing — see the caveat below for the part that remains.
+  - **`EventSource` was not usable.** It only ever sends a GET and asking for an
+    investigation is a POST, so the reply is read directly with `fetch`. A few more lines
+    here and no change to the service.
+  - **Be aware: the timing is still the screen's.** The steps are real and their order is
+    real, but each message still waits its turn behind the ones before it and spins for a
+    fixed beat as it arrives — so a step can appear a little after it happened. The *steps*
+    are no longer invented; the *timing* is. Much smaller than the fiction it replaced, and
+    still worth knowing.
+  - **Be aware: a claim that passes is now asked about three times** — screening, similar
+    claims, then the investigation, which screens the claim again for itself. Those three
+    cheap reads therefore happen twice, and cost no AI. The alternative was to wait for the
+    stream before showing any of the four checks, which would have made the first thing a
+    representative sees arrive later rather than sooner.
+  - **Be aware: money is still text everywhere.** Every figure the reports show is a string
+    the service sent, and nothing on screen adds any of them up — the arithmetic was done in
+    the service, and doing it again in a browser would be a second calculation that could
+    disagree with the first (FR-1.21).
+  - **`chat/pageWords.ts` went back down to two sentences.** The one saying the investigation
+    stage did not exist was removed, because it does. The ambiguity a claim comes back with
+    when its split cannot be settled is drawn as a *finding* rather than a note, since a note
+    carries a mark saying the screen wrote it and those words are the service's.
+  - **Proven against the real model, on ShipBob's own photographs.** It chose to look at all
+    four images on CASE-1001, identified them as the customer's email, the invoice, the
+    damaged product and the outer mailer, picked out the Liposomal Tripeptide Collagen,
+    priced it at $52.00, took 60% and recommended $31.20 — with the four questions answered
+    between 80% and 95% confidence and an email drafted.
+  - **Two real faults were found by running it**, neither visible to any unit test: the model
+    was being built before the route body ran, so a missing key refused even a claim that
+    screening would stop; and `temperature` is rejected outright by `claude-opus-5`, so every
+    single investigation was failing on its first model call. Both fixed, both now pinned by
+    a test.
+
+- [ ] UI-29 — Tried in a browser.
+  - **Not done.** The whole flow was exercised against the live service and the real model,
+    and the project builds, typechecks and lints clean. Nobody has watched it render. The
+    thing most likely to look wrong is a long run of steps on a claim with several
+    products — the reading order is right, but nobody has seen how much scrolling it makes.
+
 - [ ] UI-27 — Tried in a browser.
   - **Not done.** The flow was exercised against the live service — both verdicts, the exact
     request the screen makes, a seeded precedent coming back with its score and reasons — and the

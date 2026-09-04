@@ -10,9 +10,12 @@ import { EscalationAction } from "./EscalationAction";
 import type { MessageState } from "./useReveal";
 import { ClaimRead, OrderRead, ParcelRead } from "../components/CaseReads";
 import { ClaimNumbers } from "../components/ClaimNumbers";
+import { ClaimTotal } from "../components/ClaimTotal";
 import { EvaluatedAt, Findings } from "../components/Findings";
 import { FailureNotice } from "../components/FailureNotice";
 import { GateCard } from "../components/GateCard";
+import { InvestigationStep } from "../components/InvestigationStep";
+import { LineReport } from "../components/LineReport";
 import { SimilarClaims } from "../components/SimilarClaims";
 import { Spinner } from "../components/Spinner";
 import { VerdictBanner } from "../components/VerdictBanner";
@@ -149,6 +152,32 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
           <span className="note-mark">This screen, not the system</span>
           {body.text}
         </p>
+      );
+
+    case "step":
+      // No bubble: a step is a line of narration rather than a finding, and boxing it
+      // would give it the same weight as the report it is leading up to.
+      return (
+        <InvestigationStep
+          eventKind={body.eventKind}
+          summary={body.summary}
+          detail={body.detail}
+        />
+      );
+
+    case "lineReport":
+      // Carries its own frame and its own colour down the edge, like a check card.
+      return <LineReport report={body.report} position={body.position} outOf={body.outOf} />;
+
+    case "claimTotal":
+      return (
+        <div className="bubble">
+          <ClaimTotal
+            total={body.total}
+            capApplied={body.capApplied}
+            concerns={body.concerns}
+          />
+        </div>
       );
 
     case "failure":

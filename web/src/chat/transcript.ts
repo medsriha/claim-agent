@@ -14,16 +14,19 @@
  * stopped claim — write up what was found and draft the email. A reader watching the
  * conversation is watching the real running order, not one of ours.
  */
-import { PAGE_WORDS } from "./pageWords";
 import type { FailureKind } from "../api/failure";
 import type {
   Case,
   ClaimContext,
+  ClaimInvestigation,
   DraftedEmail,
   GateResult,
+  LineInvestigation,
   Order,
   PrecedentSet,
   PreflightResult,
+  RunEvent,
+  RunEventKind,
   Shipment,
   TerminalReason,
   Verdict,
@@ -61,6 +64,39 @@ export type MessageBody =
       readonly found: PrecedentSet | null;
       /** Why nothing could be looked up. `null` when it could be. */
       readonly failureMessage: string | null;
+    }
+  | {
+      /**
+       * Something the investigation did, said as it happened.
+       *
+       * Unlike every other message here, this one arrives while the work is going on
+       * rather than being laid out from a finished answer. `summary` is the service's own
+       * sentence and is shown unchanged.
+       */
+      readonly kind: "step";
+      readonly eventKind: RunEventKind;
+      readonly summary: string;
+      readonly detail: Record<string, string>;
+    }
+  | {
+      /** Everything established about one damaged product. */
+      readonly kind: "lineReport";
+      readonly report: LineInvestigation;
+      /** Which of how many, for a heading. Counted by the service's own ordering. */
+      readonly position: number;
+      readonly outOf: number;
+    }
+  | {
+      /**
+       * What the claim came to across all its products.
+       *
+       * Only the cap can make a claim-level judgement, so this is where it appears. The
+       * total is the service's figure, shown as text and never added up here.
+       */
+      readonly kind: "claimTotal";
+      readonly total: string;
+      readonly capApplied: boolean;
+      readonly concerns: string[];
     }
   | { readonly kind: "note"; readonly text: string }
   | { readonly kind: "failure"; readonly failure: FailureKind; readonly message: string };
@@ -195,12 +231,6 @@ export function transcriptFor(
         },
       });
     }
-    messages.push({
-      id: "next-stage",
-      speaker: "page",
-      label: null,
-      body: { kind: "note", text: PAGE_WORDS.investigationNotBuilt },
-    });
     return messages;
   }
 
@@ -256,4 +286,111 @@ export function failureTranscript(
       body: { kind: "failure", failure, message },
     },
   ];
+}
+
+
+/**
+ * One thing the investigation said, as a message.
+ *
+ * **This is the only message in the conversation that is not a replay.** Every other one
+ * is laid out from an answer that had already arrived; this one is made when the service
+ * says it, in the order it said it. The sentence is the service's own and is shown
+ * unchanged — the screen adds the heading and nothing else.
+ *
+ * The heading names the product where the service said which product it was about, so a
+ * representative watching two investigations at once can tell them apart.
+ *
+ * @param event - What the service said.
+ * @param labelFor - Turns a claim line id into a product name, where one is known.
+ */
+export function stepMessage(
+  event: RunEvent,
+  labelFor: (claimLineId: string) => string | null,
+): TranscriptMessage {
+  const product = event.claim_line_id === null ? null : labelFor(event.claim_line_id);
+  return {
+    // The service numbers what it says, so two messages can never share a position and a
+    // message redrawn does not restart its entrance.
+    id: `step-${String(event.sequence)}`,
+    speaker: "system",
+    label: product,
+    body: {
+      kind: "step",
+      eventKind: event.kind,
+      summary: event.summary,
+      detail: event.detail,
+    },
+  };
+}
+
+/**
+ * The finished investigation, product by product.
+ *
+ * Comes after everything the investigation said while it worked, and after the similar
+ * claims, because it is the thing a representative decides from and belongs at the end of
+ * the reading rather than the middle.
+ *
+ * A claim whose split was never settled has no products to report on, and says what was
+ * unclear instead — nothing may be investigated until somebody has said which products are
+ * being claimed for (FR-1a.4).
+ *
+ * The claim total is shown only where there is more than one product, or where the cap
+ * changed the answer. On a single product it would just be that product's figure again.
+ */
+export function investigationMessages(
+  investigation: ClaimInvestigation,
+): TranscriptMessage[] {
+  if (investigation.triage.ambiguity !== null) {
+    return [
+      {
+        id: "split-unsettled",
+        speaker: "system",
+        label: "Which product was damaged is unclear",
+        // A finding and not a note: the words are the service's own, and a note is drawn
+        // with a mark saying the screen wrote it.
+        body: { kind: "findings", findings: [investigation.triage.ambiguity] },
+      },
+    ];
+  }
+
+  const messages: TranscriptMessage[] = investigation.lines.map((report, index) => ({
+    id: `line-${report.line.claim_line_id}`,
+    speaker: "system",
+    label: null,
+    body: {
+      kind: "lineReport",
+      report,
+      position: index + 1,
+      outOf: investigation.lines.length,
+    },
+  }));
+
+  if (investigation.lines.length > 1 || investigation.claim_cap_applied) {
+    messages.push({
+      id: "claim-total",
+      speaker: "system",
+      label: "The claim altogether",
+      body: {
+        kind: "claimTotal",
+        total: investigation.recommended_total_usd,
+        capApplied: investigation.claim_cap_applied,
+        concerns: [...investigation.claim_concerns],
+      },
+    });
+  }
+
+  // One draft per product that has one, after the reports, so the reading ends on the
+  // words that would go to the merchant.
+  investigation.lines.forEach((report) => {
+    if (report.drafted_email !== null) {
+      messages.push({
+        id: `line-email-${report.line.claim_line_id}`,
+        speaker: "system",
+        label: `Email about ${report.line.claimed.name}`,
+        body: { kind: "email", email: report.drafted_email },
+      });
+    }
+  });
+
+  return messages;
 }

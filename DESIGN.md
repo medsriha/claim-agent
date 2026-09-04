@@ -123,10 +123,12 @@ hands back, per product, what the evidence showed, what it recommends, how the a
 arrived at, and a draft email. **It reports all of that while it happens** rather than going
 quiet and answering at the end.
 
-Two things are worth being clear about. The AI recommends and never decides, and the money is
-arithmetic rather than anything the AI produced — it is not shown a figure and has nowhere to
-write one. And the screen has not been moved onto this yet: it still shows the quick checks
-through the older one-reply route.
+**The screen shows all of it.** A representative picks a claim and watches the quick checks,
+then the similar past claims, then the investigation reporting each thing it does as it does
+it, and finally a report per damaged product with the working behind its figure and a draft
+email. Two things are worth being clear about: the AI recommends and never decides, and the
+money is arithmetic rather than anything the AI produced — it is not shown a figure and has
+nowhere to write one.
 
 **Stage 4 is untouched**, and nothing has ever been sent to a merchant or paid out. The parts of
 the system that could do those things do not exist.
@@ -1311,11 +1313,7 @@ model key, a run that used up its steps, a photograph that cannot be fetched: ea
 as something a representative can act on. Nothing ends in an empty connection, and nothing
 ends in a payment.
 
-**Not ready for production** — **The screen does not use this yet.** The endpoint exists and
-the screen still calls the old one-reply route for the quick checks, so what a representative
-sees today is still the invented pacing described under [Future
-production](#future-production). Moving the screen across is what makes that entry go away,
-and until then both exist side by side. Nothing is stored, so a stream cannot be caught up
+**Not ready for production** — Nothing is stored, so a stream cannot be caught up
 with or replayed — a representative who reloads has to start the investigation again, and
 one who closes the tab half way through loses the work. There is no keep-alive on a quiet
 connection, so anything between the browser and the service that times out an idle stream
@@ -1450,13 +1448,14 @@ finds in production.
   deliberate, and it means a figure arriving in an unexpected shape would appear on screen in
   that shape rather than being quietly tidied up. Tidying it up in the browser is the thing this
   project most wants to avoid, so the trade was made knowingly.
-- **The rhythm of the conversation is invented, and now looks convincingly like it is not.**
-  *There is now a real alternative, and the screen is not using it.* An investigation can be
-  watched as it happens (see [Watching an investigation
-  happen](#watching-an-investigation-happen)), which is the honest version of what this
-  entry describes. The screen still calls the older one-reply route for the quick checks and
-  still invents the pauses, so everything below remains true of what a representative sees
-  today. Moving the screen across is what retires it.
+- **Half the rhythm is now real, and the half that is not looks exactly like it.** The
+  investigation genuinely reports as it works, and the screen shows those steps as they
+  arrive — so what a representative watches during the investigation is real work in real
+  order, in the service's own words. The quick checks at the top are still a replay, and
+  every message still spins for a fixed beat as it arrives, which means a step can appear a
+  little after it happened. So the *steps* are no longer invented; the *timing* still is.
+  That is a much smaller lie than the one this entry used to describe, and it is still worth
+  knowing before trusting the pace of it. Everything below applies to the quick checks.
 
   Each finding turns before it settles, which reads as a step being worked on. It is not: the
   screening finished before the first message appeared, and every pause is a fixed length the

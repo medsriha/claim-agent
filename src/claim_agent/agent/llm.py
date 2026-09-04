@@ -57,19 +57,24 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
     Call this once per run and pass the result around. It opens no connection and
     makes no request, so building one is cheap; it is the asking that costs.
 
-    The temperature is fixed at zero and is not configurable. Consistency is the
-    problem this system exists to solve — the same claim, investigated twice,
-    should reach a representative looking the same both times — so anything that
-    introduces run-to-run variance in a report needs a specific reason, and
-    nobody has one (NFR-1).
+    **No sampling settings are sent, because this model does not accept any.**
+    `claude-opus-5` rejects a temperature outright — the request comes back as a
+    plain refusal saying the setting is deprecated for it — and the same is true
+    of the other knobs that used to be reached for here. An earlier version of
+    this function asked for a temperature of zero and every investigation failed
+    on the first call because of it.
 
-    **Be clear about what that buys, because it is less than it sounds.
-    Temperature zero is not determinism.** It asks the model for its most likely
-    next word rather than a sampled one; it does not make the model repeatable.
-    The same prompt can still come back different — providers change models
-    behind a name, and floating-point arithmetic on the provider's hardware is
-    not bit-for-bit stable. So this is a reduction in variance, not a removal of
-    it. The real guarantees in this system are elsewhere and are not the model's
+    That matters for what this system promises. Consistency is the problem it
+    exists to solve — the same claim, investigated twice, should reach a
+    representative looking the same both times (NFR-1) — and asking for the
+    model's most likely answer rather than a sampled one used to be the one lever
+    available for it. There is now no lever at all. Even when there was, it was
+    worth less than it sounded: it never made a model repeatable, because
+    providers change models behind a name and floating-point arithmetic on their
+    hardware is not bit-for-bit stable.
+
+    So run-to-run variance in the *reading of a photograph* is not something this
+    code can reduce. The real guarantees in this system are elsewhere and are not the model's
     to break: money is worked out by arithmetic in `claim_agent.domain`, never
     read out of generated text (FR-1.21), and every answer has to fit a form
     before it is accepted (NFR-2).
@@ -116,7 +121,8 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
     return ChatAnthropic(
         model=settings.model,
         api_key=settings.anthropic_api_key,
-        temperature=0.0,
+        # Deliberately no temperature, and no other sampling setting: this model
+        # refuses them. See the note above — asking for one broke every call.
         timeout=settings.model_timeout_seconds,
         max_retries=0,
     )
@@ -190,9 +196,7 @@ class StructuredModel:
             # A reply that will not fit the form is a settled answer, not a
             # stumble, so it is not retried. Asking the identical question in the
             # identical way is the one thing least likely to produce a different
-            # shape — especially at temperature zero, where we have deliberately
-            # asked for the model's most likely answer rather than a fresh sample.
-            # A retry here would spend a representative's time and the step budget
+            # shape. A retry here would spend a representative's time and the step budget
             # to arrive at the same refusal. Getting a usable answer needs a
             # changed question, and changing the question is a decision for
             # whoever writes the prompts, not something to do silently in here.
