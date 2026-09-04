@@ -25,6 +25,34 @@ Note: `shipbob-mock-api.md`, which REQUIREMENTS.md cites for full endpoint paylo
 in this repo. Work from the summary tables in REQUIREMENTS.md and ask before assuming a
 payload shape it does not show.
 
+## Design
+
+**[DESIGN.md](DESIGN.md) records how the system actually works.** REQUIREMENTS.md says what must
+happen; DESIGN.md says how we built it. Every feature adds a section, and those sections together
+are the design of the project.
+
+Update it as part of building a feature, not afterwards:
+
+- **Before writing code**, add the feature's section using the template at the top of DESIGN.md.
+  Writing the design first is how you find the holes in it.
+- **After the code works**, correct the section so it describes what was actually built. A design
+  that still describes an abandoned plan is worse than no design.
+- **Update "How the pieces fit together"** whenever a feature changes how the parts connect, and
+  keep "What exists today" honest about what is and is not built.
+- Commit the DESIGN.md change in the **same commit** as the code it describes.
+
+**Write it so anyone can read it.** Assume a new joiner, a support rep, or a manager — someone
+who has never seen this codebase and may not be an engineer:
+
+- Short sentences, everyday words. Explain a term the first time you use it, or don't use it.
+- Write "the system reads the case from ShipBob", not "the client hydrates the case aggregate".
+- No code, no class names, no library or framework names in the explanation. File paths appear
+  only in the "Where the code is" line.
+- Explain **why**, not just what. A reader should follow the reasoning, not just the steps.
+- Say plainly what is still undecided, provisional, or invented rather than specified.
+- If a sentence only makes sense to someone who already knows the project, rewrite it.
+- Roughly a page per feature. Long is not the same as thorough.
+
 ## Stack
 
 | Concern | Choice |

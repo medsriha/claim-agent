@@ -5,6 +5,8 @@ structured report and a drafted merchant email. The agent recommends; **a rep de
 nothing is sent or paid without human approval.
 
 - **What it must do:** [REQUIREMENTS.md](REQUIREMENTS.md) — the source of truth.
+- **How it works:** [DESIGN.md](DESIGN.md) — the design in plain English, one section per
+  feature. Start here if you are new.
 - **How to work on it:** [CLAUDE.md](CLAUDE.md) — conventions and architecture rules.
 
 ## Quickstart
