@@ -207,49 +207,43 @@ These follow from the requirements and are not negotiable without changing them:
 
 ## The UI
 
-A React and TypeScript screen in `web/`, served by Vite. It is a **demo**: it shows the system
-working. It has no sign-in, no idea which rep is using it, and stores nothing — the same gaps
-DESIGN.md already records for the backend.
+A React and TypeScript screen in `web/`, served by Vite. It is a **demo**: no sign-in, no idea
+who is using it, and nothing stored. One screen — a rep types a case id, the UI calls
+`POST /cases/{case_id}/preflight` (the case id in the path is the whole input) and renders the
+answer.
 
-**What v1 does.** One screen. A rep types a case id; the UI calls
-`POST /cases/{case_id}/preflight` and renders the answer — the verdict, the four checks, the
-claim context, and, when a claim is stopped, the rep-facing report and the drafted merchant
-email. There is no request body to send: the case id in the path is the whole input.
-
-**The backend's rules do not stop at the browser.** Restated for anyone writing UI code:
+**The backend's rules do not stop at the browser:**
 
 - **No business logic in the UI.** It renders what the API returned. It never works out a
-  verdict, never decides whether a check passed, never re-orders the reasons. The backend ranks
-  terminal reasons deliberately, because the first one heads the merchant's email — display them
-  in the order they arrive.
-- **No money arithmetic in JavaScript.** This is the browser half of "no money from model
-  output" (FR-1.21, NFR-2). A line item on the wire carries only `quantity` and a string
-  `unit_price`; the totals behind them are computed in Python and are **not** in the JSON. Do not
-  multiply them in TypeScript — show `context.order_value_usd`, which the backend worked out as
-  an exact decimal. Money arrives as a string (`"90.00"`) so that it never becomes a float. Keep
-  it a string.
-- **Fail toward the human** (NFR-4). Every failure renders something a rep can act on. The
-  backend speaks one error shape — `{"error": {"code", "message", "details"}}` — and the codes
-  reachable from Layer 0 are `not_found` (404) and `upstream_unavailable` (502). A blank screen
-  or an error only in the console is a bug.
-- **A draft is never a send.** `drafted_email.is_draft` is always true, and the UI is what makes
-  that visible: the word "draft" is deliberately absent from the email body so a marker can never
-  reach a merchant. v1 has no send action, and there is no endpoint behind one.
-- **Show all four checks, always.** The backend returns all four whether they passed or failed,
-  so a rep sees what passed rather than inferring it from silence. Do not hide the passing ones.
+  verdict, decides whether a check passed, or re-orders the reasons — the service ranks them and
+  the first one heads the merchant's email.
+- **No money arithmetic in JavaScript.** The browser half of "no money from model output"
+  (FR-1.21, NFR-2). A line item carries `quantity` and a string `unit_price`; the totals behind
+  them are computed in Python and are **not** in the JSON. Show `context.order_value_usd`. Money
+  is a string (`"90.00"`) so it never becomes a float — keep it one.
+- **Fail toward the human** (NFR-4). Every failure renders something a rep can act on. The error
+  shape is `{"error": {"code", "message", "details"}}`; from Layer 0 the codes are `not_found`
+  (404) and `upstream_unavailable` (502). A blank screen is a bug.
+- **A draft is never a send.** `drafted_email.is_draft` is always true and the UI is what makes
+  that visible — the email's own words never say "draft". There is no send action and no endpoint
+  behind one.
+- **Show all four checks, always.** The service returns all four so a rep sees what passed rather
+  than inferring it from silence.
+- **Say as little as possible on screen.** Almost every sentence a rep reads should have come
+  from the service. The UI adds labels, not commentary — it is a window onto the rules, and prose
+  explaining itself is noise in front of them.
 
-**How it reaches the API.** Through the Vite dev server, which forwards `/cases` and `/health`
-on to the service. Nothing was added to the backend for it, and in particular no cross-origin
-policy was opened up on a service that has no authentication. The cost is that the proxy is a
-development-server feature: a built UI served from anywhere else would need that solved properly.
+**How it reaches the API.** Through the Vite dev proxy, which forwards `/cases` and `/health`.
+No backend change, and no cross-origin policy opened on a service with no authentication. That
+is a dev-server feature: a built UI served elsewhere would need it solved properly.
 
-**Theme.** Every colour, font and the logo path live in one file under `web/src/theme/`. Those
-hex values are our approximation of ShipBob's public branding, not values ShipBob gave us — the
-file must say so, the same way `policy.py` marks its provisional thresholds. The logo drawn
-there is a stand-in, not ShipBob's real mark.
+**Theme.** Every colour, font and the logo live in one file under `web/src/theme/`. The values
+are our approximation of ShipBob's public branding, not values ShipBob gave us — the file says
+so, the same way `policy.py` marks its provisional thresholds. The logo is a stand-in.
 
-**Writing it.** [Documenting the code](#documenting-the-code) applies unchanged. TypeScript is
-strict and `any` is not allowed, for the same reason mypy is strict over `src`.
+**Writing it.** [Documenting the code](#documenting-the-code) applies, in proportion: the UI is a
+demo, so a component gets a short docstring saying what it is for, not an essay. TypeScript is
+strict and `any` is not allowed, for the same reason mypy is.
 
 ## Working on a feature
 

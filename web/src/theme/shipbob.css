@@ -1,13 +1,9 @@
 /**
  * Every colour, typeface and measurement the ShipBob look is made of.
  *
- * PROVISIONAL. These values are our approximation of ShipBob's public branding. Nobody
- * at ShipBob supplied them and nobody has signed them off, exactly like the claim
- * thresholds in the service's policy file. They are gathered here so that correcting
- * them is one edit rather than a hunt through the screen.
- *
- * Nothing outside this file may write a colour. Everywhere else refers to these names,
- * so a wrong shade can never be hiding in a component.
+ * PROVISIONAL: our approximation of ShipBob's public branding, not values ShipBob gave
+ * us. Gathered here so correcting them is one edit. Nothing outside this file writes a
+ * colour, so a wrong shade can never hide in a component.
  */
 
 :root {

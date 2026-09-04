@@ -1,21 +1,18 @@
 /**
- * The shapes the claims service sends back, written out for the screen to read.
+ * The shapes the claims service sends back.
  *
- * Every name here matches a field the service actually sends. Nothing is renamed on the
- * way in, so a reader can hold this file and the service's own definitions side by side
- * and check them against each other.
+ * Every name matches a field the service actually sends, with nothing renamed on the way
+ * in, so this can be read side by side with the Python models and checked against them.
  *
- * Two habits are worth knowing before reading it:
+ * Two things to know:
  *
- * - **Money is text, never a number.** `"90.00"` arrives as text because the service
- *   works money out exactly and a browser number cannot hold it that way — 0.1 + 0.2 is
- *   famously not 0.3. Keeping it as text means nothing on the screen can accidentally do
- *   arithmetic with it.
- * - **A missing value is `null`, and it means something.** An order that could not be
- *   read has no value, which is a different thing from an order worth nothing. The
- *   screen has to say which it is looking at.
+ * - **Money is text, never a number.** `"90.00"` arrives as text because the service works
+ *   it out exactly and a browser number cannot hold it that way. Keeping it as text means
+ *   nothing on screen can do arithmetic with it by accident.
+ * - **`null` means something.** An order that could not be read has no value, which is not
+ *   the same as an order worth nothing.
  *
- * Times arrive as text in the international standard shape, always on the UTC clock.
+ * Times are text in the international standard shape, always UTC.
  */
 
 /** Whether the claim may be investigated, or is stopped here. */
@@ -24,7 +21,7 @@ export type Verdict = "proceed" | "terminal";
 /** The four eligibility checks every claim goes through. */
 export type GateName = "age" | "claim_type" | "key_information" | "insurance";
 
-/** Why a claim was stopped. A claim can collect more than one of these. */
+/** Why a claim was stopped. A claim can collect more than one. */
 export type TerminalReason =
   | "shipment_insured"
   | "claim_too_old"
@@ -32,11 +29,9 @@ export type TerminalReason =
   | "missing_key_information";
 
 /**
- * What one of the four checks found.
- *
- * `explanation` is a finished sentence a rep can read as it is. `observed` holds every
- * value the check actually looked at, so its finding can be verified rather than taken
- * on trust. `reason` is filled in only on a check that failed.
+ * What one check found. `explanation` is a finished sentence; `observed` holds the values
+ * it looked at, so the finding can be checked rather than trusted. `reason` is filled in
+ * only when the check failed.
  */
 export interface GateResult {
   gate: GateName;
@@ -46,7 +41,7 @@ export interface GateResult {
   observed: Record<string, string>;
 }
 
-/** One product on the order. `unit_price` is text; see the note at the top of this file. */
+/** One product on the order. `unit_price` is text — see the note at the top. */
 export interface OrderLineItem {
   product_id: string | null;
   name: string;
@@ -56,11 +51,9 @@ export interface OrderLineItem {
 }
 
 /**
- * The order the damaged goods came from.
- *
- * There is no total here, and that is deliberate rather than an oversight: the service
- * works the total out and sends it as part of the claim context. Adding these lines up
- * on screen is exactly what the project forbids.
+ * The order the damaged goods came from. There is no total here on purpose: the service
+ * works it out and sends it in the claim context. Adding these lines up on screen is what
+ * the project forbids.
  */
 export interface Order {
   order_id: string;
@@ -80,7 +73,7 @@ export interface Shipment {
   delivered_date: string | null;
 }
 
-/** The support case the merchant opened, in their words, with the ids it points at. */
+/** The case the merchant opened, in their words, with the ids it points at. */
 export interface Case {
   case_id: string;
   created_date: string;
@@ -96,10 +89,8 @@ export interface Case {
 }
 
 /**
- * Everything the screening read.
- *
- * `shipment` and `order` are `null` when the case named none, or when the record could
- * not be read at all.
+ * Everything the screening read. `shipment` and `order` are `null` when the case named
+ * none, or when the record could not be read.
  */
 export interface CaseRecord {
   case: Case;
@@ -116,11 +107,9 @@ export interface MerchantCorrection {
 }
 
 /**
- * The facts worked out up front, so nothing later has to work them out again.
- *
- * `days_since_delivery` counts delivery to the day the claim was filed — not to today —
- * so the number never goes stale. `is_high_value` is false when the value is unknown,
- * meaning "not known to be high value" rather than "known to be ordinary".
+ * Facts worked out up front. `days_since_delivery` counts delivery to the day the claim
+ * was filed, not to today, so it never goes stale. `is_high_value` is false when the value
+ * is unknown, meaning "not known to be" rather than "known not to be".
  */
 export interface ClaimContext {
   order_value_usd: string | null;
@@ -133,12 +122,9 @@ export interface ClaimContext {
 /**
  * An email written to the merchant that has not been sent and cannot send itself.
  *
- * `is_draft` can only ever be true. The email's own words never say "draft", so that a
- * marker can never reach a merchant by accident — which makes this screen the only place
- * the draft state is visible, and why it is stated so plainly there.
- *
- * `to` is `null` when the case carries no contact address. The draft is still written;
- * a rep supplies the address before approving it.
+ * `is_draft` can only be true. The email's own words never say "draft", so a marker can
+ * never reach a merchant — which makes the screen the only place that state is visible.
+ * `to` is `null` when the case carries no contact address.
  */
 export interface DraftedEmail {
   to: string | null;
@@ -148,12 +134,8 @@ export interface DraftedEmail {
 }
 
 /**
- * What a rep receives when a claim cannot be processed at all.
- *
- * `reasons` are in order of precedence — the first is the one that heads the merchant's
- * email — so the screen shows them in the order they arrive and never sorts them.
- * `findings` is one sentence per failed check. `gates` carries all four, passed and
- * failed alike.
+ * What a rep receives when a claim cannot be processed. `reasons` are in precedence order
+ * — the first heads the merchant's email — so they are never sorted on screen.
  */
 export interface TerminalReport {
   case_id: string;
@@ -168,10 +150,8 @@ export interface TerminalReport {
 }
 
 /**
- * The complete answer for one claim.
- *
- * `report` is filled in only when the claim was stopped, and `terminal_reasons` is empty
- * on one allowed through. `gates` carries all four checks either way.
+ * The complete answer for one claim. `report` is filled in only when the claim was
+ * stopped; `gates` carries all four checks either way.
  */
 export interface PreflightResult {
   case_id: string;

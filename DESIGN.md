@@ -527,65 +527,49 @@ id and sees what the screening decided: carry on or stop, what each of the four 
 what the claim is worth and how old it is, and — when the claim is stopped — the write-up and the
 draft email waiting for their approval.
 
-**Why we need it** — Everything the system had worked out was reachable only by sending a
-hand-written request and reading the reply as raw data. That is fine for proving the rules are
-right and useless for showing anyone what the system does. The screening already produces
-everything a representative needs; it had nowhere to appear.
+**Why we need it** — Everything the system worked out was reachable only by sending a
+hand-written request and reading raw data back. Fine for proving the rules are right, useless for
+showing anyone what the system does.
 
 **How it works**
 
-1. The representative types a case id and presses the button. There are also buttons for the
-   sample claims, so someone seeing this for the first time does not have to know an id to try.
-2. The page asks the system to screen that claim, and says plainly that it is working while it
-   waits.
-3. The answer comes back and the page lays it out: the decision first and largest, then the four
-   checks, then what was read about the claim, then — on a stopped claim — the reasons, the
-   write-up and the draft email.
-4. Every check is shown, whether it passed or failed, and each one can be opened up to see the
-   exact values it looked at.
-5. If the claim cannot be screened — no such case, or ShipBob unreachable — the page says which
-   of those happened, in a sentence, and offers to try again.
+1. The representative types a case id, or picks one of the sample claims, and presses the button.
+2. The page asks the system to screen it, and says it is working while it waits.
+3. The answer comes back and is laid out: the decision, then — on a stopped claim — the write-up
+   and the draft email, then the four checks, the numbers, and what was read.
+4. Every check is shown, passed or failed, and each opens up to reveal the values it looked at.
+5. If the claim cannot be screened, the page says which of the three things went wrong and
+   offers to try again.
 
 **What it connects to** — It reads from the one screening address the system already offers and
-writes nothing anywhere. It holds nothing between visits: closing the page loses the result,
-because there is nowhere to keep one yet.
+writes nothing anywhere. It holds nothing between visits.
 
 **Choices we made**
 
-- **The page decides nothing.** It never works out a verdict, never judges whether a check
-  passed, never re-orders the reasons. Everything it shows was decided by the rules and sent to
-  it. The order the reasons arrive in matters — the first one is the one that heads the
-  merchant's email — so the page shows them in the order it was given and never sorts them.
-- **No arithmetic on money, anywhere on the page.** The value of an order is worked out once, by
-  the rules, and sent as text rather than as a number. The page prints that text. It would be
-  easy to multiply a price by a quantity on screen to show what a line was worth, and that is
-  exactly the habit that ends with a payment built on a rounding error, so the page shows the
-  price and the quantity and stops there.
-- **The draft email is shown as a draft, loudly.** The email's own words never say "draft",
-  deliberately, so that a marker can never reach a merchant. That makes the screen the only place
-  the draft state is visible, so it is stated plainly above the email. There is no send button
-  and nothing behind one.
-- **Failures are shown as sentences a person can act on, never as raw error data.** A claim that
-  cannot be screened is a normal thing to see, not a crash.
-- **It is a demonstration, not a product.** Anyone who opens it can screen any claim: there is no
-  sign-in, no record of who looked, and nothing is kept. The same gaps the system behind it has.
-- **The ShipBob colours are our approximation.** They are gathered in one file and marked as
-  provisional, in the same way the claim thresholds are, so correcting them is one edit. The
-  logo drawn on the page is a stand-in, not ShipBob's real mark.
+- **The page decides nothing.** It never works out a verdict, judges a check, or re-orders the
+  reasons. The order the reasons arrive in matters — the first heads the merchant's email — so
+  they are printed as given and never sorted.
+- **No arithmetic on money.** The value of an order is worked out once, by the rules, and sent as
+  text. The page prints that text. Multiplying a price by a quantity on screen is the habit that
+  ends with a payment built on a rounding error, so the page shows both and stops there.
+- **The page says as little as it can.** Almost every sentence on it came from the system. The
+  page adds labels, not commentary: a reader should be looking at what the rules decided, not at
+  the screen explaining itself.
+- **The draft email is marked as a draft.** The email's own words never say so, deliberately, so
+  that a marker can never reach a merchant — which leaves the screen as the only place that state
+  is visible. There is no send button and nothing behind one.
+- **The ShipBob colours are our approximation**, gathered in one file and marked provisional the
+  same way the claim thresholds are. The logo is a stand-in, not ShipBob's real mark.
 
-**When things go wrong** — Three failures are handled and shown differently, because they need
-different things from the person reading: a case that does not exist is a typo to fix, ShipBob
-being unreachable is a wait-and-retry, and the page being unable to reach the system at all
-usually means it is not running. Anything unexpected still ends in a readable sentence rather
-than a blank page.
+**When things go wrong** — Three failures are handled separately because they need different
+things from the reader: a case that does not exist is a typo, ShipBob being unreachable is a
+wait, and the system not answering usually means it is not running.
 
-**Not ready for production** — It is one screen, and it only shows the quick checks, because the
-quick checks are all that exists. It cannot approve anything, send anything, or fetch back a
-screening that has already been run. Nothing it shows is stored. It has never been tried by a
-representative, on a phone, or with a screen reader, and it is not covered by the automated
-checks that run before every push.
+**Not ready for production** — One screen, showing the quick checks, because that is all that
+exists. It cannot approve, send, or fetch back a screening. Nothing it shows is stored. It has
+no sign-in, no tests, and has never been tried by a representative or with a screen reader.
 
-**Where the code is** — `web/`, and its entry point `web/src/App.tsx`.
+**Where the code is** — `web/`, entry point `web/src/App.tsx`.
 
 ---
 

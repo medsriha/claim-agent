@@ -1,11 +1,9 @@
 /**
- * What the claim is worth, how old it is, and what a rep has corrected for this merchant
- * before.
+ * What the claim is worth, how old it is, and what a rep corrected for this merchant before.
  *
- * These are facts the service works out once, up front, so that nothing later has to work
- * them out again. The screen prints them and adds nothing: in particular the order value
- * arrives already worked out, and the line items further down the page are deliberately
- * never added up here.
+ * The service works these out once, up front. The screen prints them and adds nothing —
+ * in particular the order value arrives already worked out, and the order lines further
+ * down the page are never added up here.
  */
 import { formatDayCount, formatMoment, formatMoney } from "../display";
 import type { ClaimContext } from "../api/types";
@@ -22,39 +20,20 @@ export function ClaimContextPanel({ context }: ClaimContextPanelProps): React.JS
       <h3 className="panel-title">The claim in numbers</h3>
 
       <div className="facts">
-        <Fact label="Order value">
-          {formatMoney(context.order_value_usd)}
-          {context.order_value_usd === null && (
-            <span className="fact-caveat">the order could not be read</span>
-          )}
-        </Fact>
-
-        <Fact label="High value">
-          {context.is_high_value ? "Yes" : "No"}
-          {!context.is_high_value && context.order_value_usd === null && (
-            <span className="fact-caveat">not known to be, with no value to compare</span>
-          )}
-        </Fact>
-
-        <Fact label="Filed after delivery">
-          {formatDayCount(context.days_since_delivery)}
-          <span className="fact-caveat">delivery to the day the claim was opened</span>
-        </Fact>
-
+        <Fact label="Order value">{formatMoney(context.order_value_usd)}</Fact>
+        <Fact label="High value">{context.is_high_value ? "Yes" : "No"}</Fact>
+        <Fact label="Filed after delivery">{formatDayCount(context.days_since_delivery)}</Fact>
         <Fact label="Delivered">{formatMoment(context.delivered_date)}</Fact>
       </div>
 
-      <h4 className="subhead">What a rep corrected before</h4>
+      <h4 className="subhead">Past rep corrections</h4>
       {corrections.length === 0 ? (
-        <p className="empty">
-          Nothing on file for this merchant. Either they are new to us, or none of their
-          earlier claims needed correcting.
-        </p>
+        <p className="empty">None on file for this merchant.</p>
       ) : (
         <ul className="corrections">
           {corrections.map((correction) => (
             <li key={`${correction.case_id}-${correction.recorded_at}`} className="correction">
-              <p className="correction-summary">{correction.summary}</p>
+              <p>{correction.summary}</p>
               <p className="correction-meta">
                 {correction.case_id} · {formatMoment(correction.recorded_at)}
               </p>

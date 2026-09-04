@@ -1,13 +1,9 @@
 /**
- * What the screening actually read: the merchant's case, the parcel, and the order.
+ * What the screening read: the merchant's case, the parcel, and the order.
  *
- * This is here so a rep can see the claim itself rather than only the verdict on it —
- * the merchant's own description of what happened is often the first thing they want.
- *
- * **The order lines show a price and a quantity and stop there.** Multiplying them out to
- * show what each line was worth is the obvious next step and is exactly what this project
- * forbids on screen: money is worked out once, by the service, exactly. What the order
- * came to is in the panel above this one, and it got there that way.
+ * The order lines show a price and a quantity and stop there. Multiplying them out on
+ * screen is the obvious next step and is exactly what this project forbids — money is
+ * worked out once, by the service. What the order came to is in the panel above.
  */
 import { formatMoment, formatMoney } from "../display";
 import type { CaseRecord } from "../api/types";
@@ -25,39 +21,34 @@ export function RecordPanel({ record }: RecordPanelProps): React.JSX.Element {
 
       <h4 className="subhead">The claim</h4>
       <dl className="record">
-        <Row label="Merchant">{supportCase.account_name ?? "not recorded"}</Row>
-        <Row label="Merchant account">{supportCase.user_id ?? "not recorded"}</Row>
-        <Row label="Kind of claim">{supportCase.sub_category ?? "not recorded"}</Row>
-        <Row label="Status">{supportCase.status ?? "not recorded"}</Row>
+        <Row label="Merchant">{supportCase.account_name ?? "—"}</Row>
+        <Row label="Merchant account">{supportCase.user_id ?? "—"}</Row>
+        <Row label="Kind of claim">{supportCase.sub_category ?? "—"}</Row>
+        <Row label="Status">{supportCase.status ?? "—"}</Row>
         <Row label="Opened">{formatMoment(supportCase.created_date)}</Row>
-        <Row label="Contact">{supportCase.contact_email ?? "not recorded"}</Row>
+        <Row label="Contact">{supportCase.contact_email ?? "—"}</Row>
       </dl>
       <blockquote className="description">
-        {supportCase.description ?? "The merchant described nothing."}
+        {supportCase.description ?? "No description given."}
       </blockquote>
 
       <h4 className="subhead">The parcel</h4>
       {shipment === null ? (
-        <p className="empty">
-          No parcel record. Either the claim named none, or it could not be read.
-        </p>
+        <p className="empty">No parcel record.</p>
       ) : (
         <dl className="record">
           <Row label="Shipment">{shipment.shipment_id}</Row>
           <Row label="Insured">{shipment.is_insured ? "Yes" : "No"}</Row>
-          <Row label="Carrier">{shipment.carrier ?? "not recorded"}</Row>
-          <Row label="Tracking">{shipment.tracking_number ?? "not recorded"}</Row>
-          <Row label="Status">{shipment.status ?? "not recorded"}</Row>
+          <Row label="Carrier">{shipment.carrier ?? "—"}</Row>
+          <Row label="Tracking">{shipment.tracking_number ?? "—"}</Row>
+          <Row label="Status">{shipment.status ?? "—"}</Row>
           <Row label="Delivered">{formatMoment(shipment.delivered_date)}</Row>
         </dl>
       )}
 
       <h4 className="subhead">The order</h4>
       {order === null ? (
-        <p className="empty">
-          No order record. Either the claim named none, or it could not be read — which is
-          not the same as an order with nothing on it.
-        </p>
+        <p className="empty">No order record.</p>
       ) : (
         <>
           <dl className="record">
@@ -65,7 +56,7 @@ export function RecordPanel({ record }: RecordPanelProps): React.JSX.Element {
             <Row label="Placed">{formatMoment(order.created_date)}</Row>
           </dl>
           {order.line_items.length === 0 ? (
-            <p className="empty">The order has no lines on it.</p>
+            <p className="empty">No lines on the order.</p>
           ) : (
             <div className="table-scroll">
               <table className="lines">
@@ -74,7 +65,7 @@ export function RecordPanel({ record }: RecordPanelProps): React.JSX.Element {
                     <th scope="col">Product</th>
                     <th scope="col">SKU</th>
                     <th scope="col" className="numeric">
-                      Quantity
+                      Qty
                     </th>
                     <th scope="col" className="numeric">
                       Price each

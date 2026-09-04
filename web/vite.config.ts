@@ -1,12 +1,10 @@
 /**
- * How the demo screen is built and served while someone is working on it.
+ * How the demo screen is built and served.
  *
- * The one thing worth knowing here is the proxy. The screen and the claims service run
- * on two different ports, and a browser will not let a page on one port read from
- * another unless the service says it may. Rather than open the service up — it has no
- * sign-in, so opening it up to any page anywhere is not a small thing — the development
- * server forwards the claim addresses on to it. As far as the browser is concerned
- * there is only ever one address, and the service needs no change at all.
+ * The proxy is the part worth knowing. The screen and the service run on different ports,
+ * and a browser will not read across them unless the service allows it. Rather than open
+ * up a service that has no sign-in, the dev server forwards the claim addresses on to it,
+ * so the browser sees one address and the service needs no change.
  */
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";

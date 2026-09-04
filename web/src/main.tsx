@@ -8,8 +8,8 @@ import "./styles.css";
 
 const container = document.getElementById("root");
 if (container === null) {
-  // The element is written into index.html, so its absence means the page itself is
-  // broken. Failing loudly here beats a blank screen with nothing in the console.
+  // Written into index.html, so its absence means the page itself is broken. Failing
+  // loudly beats a blank screen with nothing in the console.
   throw new Error("The page is missing the element the app draws into.");
 }
 

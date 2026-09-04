@@ -1,13 +1,9 @@
 /**
- * Turning the values the service sends into the words that appear on screen.
+ * Turning values the service sends into words on screen.
  *
- * Everything here is presentation and nothing here is judgement. No function in this
- * file decides anything about a claim: they put labels on values that have already been
- * decided, and they do it the same way every time.
- *
- * **Nothing here does arithmetic on money.** The one money function pads a figure out
- * for display and never adds, multiplies or rounds. Working out what a claim is worth
- * belongs to the service, which does it exactly; a browser cannot.
+ * Presentation only — nothing here decides anything about a claim, and nothing here does
+ * arithmetic on money. The money function pads a figure for display and never adds,
+ * multiplies or rounds.
  */
 import type { GateName, TerminalReason } from "./api/types";
 
@@ -17,14 +13,6 @@ const GATE_LABELS: Record<GateName, string> = {
   claim_type: "Kind of claim",
   key_information: "Key information",
   insurance: "Insurance",
-};
-
-/** What each check is actually asking, for someone meeting them for the first time. */
-const GATE_QUESTIONS: Record<GateName, string> = {
-  age: "Was the claim filed soon enough after the parcel was delivered?",
-  claim_type: "Is this a damaged-in-transit claim, the only kind handled here?",
-  key_information: "Are the parcel, the order and the merchant's description all there?",
-  insurance: "Was the parcel uninsured? An insured one follows a different process.",
 };
 
 /** Why a claim was stopped, in one short phrase. */
@@ -40,24 +28,12 @@ export function gateLabel(gate: GateName): string {
   return GATE_LABELS[gate];
 }
 
-/** The question one of the four checks is asking. */
-export function gateQuestion(gate: GateName): string {
-  return GATE_QUESTIONS[gate];
-}
-
 /** The short phrase for why a claim was stopped. */
 export function reasonLabel(reason: TerminalReason): string {
   return REASON_LABELS[reason];
 }
 
-/**
- * Turn a key the service used into a readable label — `days_since_delivery` becomes
- * "Days since delivery".
- *
- * The values a check looked at arrive under the service's own field names. They are
- * shown rather than hidden, because being able to check the working is the point of
- * them, and this is only about making them easier on the eye.
- */
+/** Turn a field name into a label: `days_since_delivery` becomes "Days since delivery". */
 export function humaniseKey(key: string): string {
   const words = key.split("_").join(" ");
   return words.charAt(0).toUpperCase() + words.slice(1);
@@ -79,16 +55,15 @@ const MONTHS = [
 ];
 
 /**
- * Write a moment in time the same way on every machine — "11 February 2026, 11:36 UTC".
+ * Write a time the same way on every machine — "11 February 2026, 11:36 UTC".
  *
- * The browser's own date formatting changes language and order depending on how the
- * machine is configured, which would mean the same claim reading differently to two
- * people. The service avoids that in the emails it writes for exactly the same reason,
- * and this keeps the screen consistent with it.
+ * The browser's own formatting changes with how the machine is configured, so the same
+ * claim would read differently to two people. The service avoids that in the emails it
+ * writes for the same reason.
  *
  * @param moment - A time as the service sends it, or `null`.
- * @returns The formatted time, or "not recorded" when there is none, or the original
- *   text if it cannot be read as a time — showing what arrived beats inventing a date.
+ * @returns The formatted time, "not recorded" when there is none, or the original text if
+ *   it cannot be read as a time — showing what arrived beats inventing a date.
  */
 export function formatMoment(moment: string | null): string {
   if (moment === null) {
@@ -107,16 +82,14 @@ export function formatMoment(moment: string | null): string {
 }
 
 /**
- * Show an amount of money exactly as the service worked it out.
+ * Show money exactly as the service worked it out.
  *
- * The figure arrives as text — `"90.00"` — because it was worked out exactly and a
- * browser number could not hold it that way. It is printed as it stands, with a dollar
- * sign in front. Cents are padded out only when the text is plainly a decimal already,
- * and even that is done on the text: no number is parsed, so no rounding can creep in.
+ * The figure arrives as text and is printed as it stands. Cents are padded only when the
+ * text is plainly a decimal already, and that is done on the text — no number is parsed,
+ * so no rounding can creep in.
  *
  * @param amount - The figure as text, or `null` when the order could not be read.
- * @returns The amount to print, or "unknown" — which means the order could not be read,
- *   and is deliberately not the same as an order worth nothing.
+ * @returns The amount, or "unknown" — which is not the same as an order worth nothing.
  */
 export function formatMoney(amount: string | null): string {
   if (amount === null) {
@@ -133,8 +106,7 @@ export function formatMoney(amount: string | null): string {
 /**
  * How long the merchant took to file, in words.
  *
- * @param days - Days from delivery to the claim being filed, or `null` when no delivery
- *   date is known anywhere.
+ * @param days - Delivery to filing, or `null` when no delivery date is known.
  */
 export function formatDayCount(days: number | null): string {
   if (days === null) {

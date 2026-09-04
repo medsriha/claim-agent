@@ -1,11 +1,9 @@
 /**
- * The bar at the top where a rep types the claim they want screened.
+ * The bar where a rep types the claim to screen, with the sample ids as buttons.
  *
- * It also offers the sample claim ids as buttons, so someone opening this for the first
- * time can try it without knowing an id. The buttons are labelled with the ids and
- * nothing else on purpose: saying what each one demonstrates would mean this screen
- * asserting an outcome it does not decide, and the moment a threshold changed, the label
- * would be a lie.
+ * The buttons carry ids and nothing else on purpose: saying what each one demonstrates
+ * would be the screen asserting an outcome it does not decide, and would become a lie the
+ * moment a threshold changed.
  */
 import { useState } from "react";
 

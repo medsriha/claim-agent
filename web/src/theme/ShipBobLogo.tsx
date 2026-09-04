@@ -1,12 +1,8 @@
 /**
- * The mark in the top-left corner of the screen.
+ * The mark in the top-left corner.
  *
- * A STAND-IN, not ShipBob's real logo. It is drawn here rather than loaded as an image
- * so the demo needs no asset file, and so that nobody mistakes it for the genuine mark
- * and ships it somewhere real. Replace it with the actual logo before this is ever put
- * in front of a merchant.
- *
- * It takes its colours from the theme, so it changes with everything else.
+ * A stand-in, not ShipBob's real logo — drawn here so the demo needs no asset file.
+ * Replace it with the real mark before this goes in front of anyone.
  */
 export function ShipBobLogo(): React.JSX.Element {
   return (

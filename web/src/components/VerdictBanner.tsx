@@ -1,12 +1,8 @@
 /**
- * The decision, stated first and stated largest.
+ * The decision, stated first and largest.
  *
- * A rep reading this needs one thing before anything else: can this claim be worked on,
- * or is it stopped? Everything below the banner is the working behind that answer.
- *
- * When a claim is stopped, every reason is listed, in the order the service ranked them.
- * That order is not cosmetic — the first reason is the one that heads the merchant's
- * email — so the list is printed exactly as it arrives and is never sorted here.
+ * Reasons are printed in the order they arrive and never sorted here: the service ranks
+ * them, and the first is the one that heads the merchant's email.
  */
 import { reasonLabel } from "../display";
 import type { TerminalReason, Verdict } from "../api/types";
@@ -23,29 +19,18 @@ export function VerdictBanner({ caseId, verdict, reasons }: VerdictBannerProps):
   return (
     <section className={stopped ? "verdict verdict-stopped" : "verdict verdict-proceed"}>
       <div className="verdict-head">
-        <span className="verdict-badge">{stopped ? "Stopped" : "Carry on"}</span>
+        <span className="verdict-badge">{stopped ? "Stopped" : "Proceed"}</span>
         <h2 className="verdict-title">
-          {stopped
-            ? "This claim cannot be processed"
-            : "Nothing rules this claim out"}
+          {stopped ? "This claim cannot be processed" : "Goes on to investigation"}
         </h2>
         <p className="verdict-case">{caseId}</p>
       </div>
 
-      <p className="verdict-meaning">
-        {stopped
-          ? "The claim is closed here. A merchant email explaining why is drafted below and waits for your approval."
-          : "The four eligibility checks all passed, so the claim would go on to be investigated."}
-      </p>
-
       {reasons.length > 0 && (
         <ol className="reason-list">
-          {reasons.map((reason, index) => (
+          {reasons.map((reason) => (
             <li key={reason} className="reason">
-              <span className="reason-text">{reasonLabel(reason)}</span>
-              {index === 0 && reasons.length > 1 && (
-                <span className="reason-lead">leads the merchant email</span>
-              )}
+              {reasonLabel(reason)}
             </li>
           ))}
         </ol>

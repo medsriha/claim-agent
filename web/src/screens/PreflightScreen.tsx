@@ -1,14 +1,9 @@
 /**
  * The one screen: type a case id, see what the eligibility checks decided.
  *
- * It holds the whole of the screen's state, which is four things — what is being
- * screened, whether a screening is running, the last result, and the last failure. There
- * is only ever one of a result or a failure, never both, because a new screening clears
- * whatever the last one left behind. Showing a stale verdict next to a fresh error would
- * be worse than showing nothing.
- *
- * Nothing is kept between visits. Closing the page loses the result, because there is
- * nowhere to keep one yet.
+ * A result and a failure are never on screen together — a new screening clears whatever
+ * the last one left — because a stale verdict beside a fresh error is worse than nothing.
+ * Nothing is kept between visits.
  */
 import { useCallback, useState } from "react";
 
@@ -89,19 +84,7 @@ export function PreflightScreen(): React.JSX.Element {
       )}
 
       {!busy && result === null && failure === null && (
-        <section className="intro">
-          <h2 className="intro-title">Screen a damaged-in-transit claim</h2>
-          <p>
-            Every claim is checked four ways before anyone investigates it: whether it was
-            filed soon enough, whether it is the right kind of claim, whether the parcel,
-            the order and the merchant&rsquo;s description are all there, and whether the
-            parcel was insured. The checks are fixed rules, so the same claim always gets
-            the same answer, and no AI is involved at this stage.
-          </p>
-          <p>
-            Enter a case id above, or pick one of the samples, to see what they found.
-          </p>
-        </section>
+        <p className="intro">Enter a case id, or pick one of the samples.</p>
       )}
     </main>
   );
