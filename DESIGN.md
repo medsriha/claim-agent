@@ -288,6 +288,14 @@ context. Nothing writes to it yet; representative feedback is a later stage.
   requirement. Today it is used only by the tests.
 - **A merchant with no notes is not an error.** It is the ordinary case, and it comes back as an
   empty list.
+- **If the notes cannot be read at all, we stop the claim rather than screen it without them.**
+  This is deliberate, and it costs us something: by the time the notes are read, the four checks
+  have already run, so we could usually give an answer anyway. We do not, because the alternative
+  is worse. Screening on regardless would hand the next stage an empty list of notes, and nothing
+  further down could tell that apart from a merchant with a genuinely clean record — so the
+  system would quietly repeat the very correction a representative had already made. Failing
+  outright keeps "empty" meaning one thing only. The price is that a problem with our own disk
+  blocks claims whose answer was already worked out, and somebody has to fix the disk.
 
 **When things go wrong** — A missing database file is created on first use. A claim whose case
 has no merchant identifier gets no notes and carries on; it is not treated as a failure. A
@@ -377,7 +385,17 @@ directly so a claim can be screened and inspected on its own.
 
 **When things go wrong** — ShipBob being unreachable stops the claim with an upstream failure a
 person sees; it never results in a silent pass. A reply we cannot read is treated the same way. A
-case that does not exist is reported as not found.
+case that does not exist is reported as not found. A database we cannot read stops the claim too,
+with its own separate message.
+
+Be clear about what "stops the claim" means today: the request fails and the person who asked
+gets an error. Nothing is written down, so there is nothing to come back to and no way to pick
+the claim up again once whatever broke is fixed — it has to be asked for from the start. Each
+read of ShipBob is tried three times before giving up, but that budget is per read, not per
+claim, and there is nothing that notices ShipBob is having a bad morning and stops trying. No
+claim is ever silently passed or silently closed, which is the part that matters; but a
+representative is left with an error rather than something they can act on. A real fallback means
+keeping a record of the attempt, and nothing is kept yet.
 
 **Not ready for production** — Three of these behaviours cannot be shown on the sample data:
 every sample parcel is uninsured, every sample complaint is the right type, and no sample order
@@ -532,6 +550,11 @@ finds in production.
 - **Reading merchant memory blocks everything else.** The database is read in the middle of
   handling a request, so under load every screening queues behind the same file. Fine for a local
   file; not fine for a real one.
+- **A database we cannot read stops every claim, including ones already decided.** This is a
+  chosen trade rather than an oversight — the reasoning is in [Remembering a
+  merchant](#remembering-a-merchant) — but the consequence is worth being clear about: a single
+  corrupt file on one machine halts screening entirely, and there is no degraded mode to fall
+  back to. It is one more thing that a store not living on one local disk would fix.
 - **Every price is assumed to be in dollars.** Nothing in ShipBob's data says what currency an
   order is in, so we add the numbers up and call the total dollars. A non-dollar order would be
   compared against a dollar threshold and nobody would notice.

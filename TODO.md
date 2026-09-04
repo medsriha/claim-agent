@@ -60,7 +60,9 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
     its cents, and rendered as `"90.00"` rather than a float.
   - **Be aware:** `days_since_delivery` counts delivery to *case creation*, not to today, so the
     number matches the age gate and never goes stale. An unreadable order gives an unknown value,
-    which is deliberately different from an order worth nothing.
+    which is deliberately different from an order worth nothing. A store of corrections we cannot
+    read stops the claim outright rather than screening without them — chosen so that an empty
+    history always means "this merchant has none", never "we did not look".
 
 - [x] FR-0.6 — The same claim always produces the same answer.
   - **Conclusion:** no clock is read anywhere in the layer — the timestamp is passed in from the

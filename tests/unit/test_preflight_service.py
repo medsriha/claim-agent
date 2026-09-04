@@ -15,13 +15,14 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 import pytest
 import respx
 
 from claim_agent.domain.models import GateName, MerchantCorrection, TerminalReason, Verdict
-from claim_agent.errors import NotFoundError, UpstreamError
+from claim_agent.errors import NotFoundError, StorageError, UpstreamError
 from claim_agent.policy import Policy
 from claim_agent.preflight.gather import gather_case_record
 from claim_agent.preflight.models import PreflightResult
@@ -401,6 +402,34 @@ async def test_a_case_naming_no_merchant_is_screened_anyway_with_nothing_remembe
 
     assert result.verdict is Verdict.PROCEED
     assert result.context.merchant_corrections == ()
+
+
+async def test_a_store_we_cannot_read_stops_the_screen_rather_than_guessing_at_it(
+    shipbob: respx.Router,
+    shipbob_client: ShipBobClient,
+    tmp_path: Path,
+) -> None:
+    """FR-0.5, NFR-4: an empty history must always mean "this merchant has none".
+
+    CASE-1004's verdict does not actually need the store. It is stopped for its age,
+    and all four checks have already run by the time the store is read, so the screen
+    could answer anyway. We deliberately do not, because the alternative is worse: it
+    would hand on an empty list of corrections, and nothing further down could tell
+    that apart from a merchant with a genuinely clean record. A later stage would then
+    quietly repeat the very mistake a rep had already corrected.
+
+    The cost of this choice is that a local disk problem blocks claims whose verdict
+    was already worked out. That is a known and accepted trade, written up in
+    DESIGN.md.
+    """
+    mock_shipbob(shipbob, case=CASE_1004, shipment=SHIPMENT_1004, order=ORDER_1004)
+    unreadable = tmp_path / "corrupt.db"
+    unreadable.write_bytes(b"this file is not a database")
+
+    with pytest.raises(StorageError) as failure:
+        await screen("CASE-1004", shipbob_client, MerchantMemory(unreadable))
+
+    assert failure.value.code == "storage_unavailable"
 
 
 # ---------------------------------------------------------------------------
