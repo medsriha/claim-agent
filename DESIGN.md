@@ -89,9 +89,13 @@ better informed.
 
 ## What exists today
 
-The repository currently holds the foundation only: the service skeleton, project tooling, and
-the empty packages for each stage above. None of the four stages is implemented yet. Each
-feature adds its section below as it is built.
+Stage 1, the quick checks, is being built now. The records it works on, the shapes it produces,
+and the sample data it is tested against are in place; the checks themselves, the connection to
+ShipBob, and the merchant memory are next. Stages 2 to 4 are untouched.
+
+The sections below are written before the code they describe, then corrected once it works. A
+section may therefore describe something still being built — [What exists
+today](#what-exists-today) is the honest list.
 
 For what that leaves missing or fragile, see [Future production](#future-production).
 
@@ -183,6 +187,248 @@ reach anything it depends on. Secrets are read from a local file rather than a s
 
 **Where the code is** — `src/claim_agent/app.py`, `settings.py`, `policy.py`, `errors.py`,
 `observability.py`, and `src/claim_agent/api/`.
+
+---
+
+### Reading a case from ShipBob
+
+**What it does** — Fetches the three records a claim is built from: the complaint the merchant
+opened, the parcel it is about, and the order that parcel came from.
+
+**Why we need it** — Everything else needs these facts, and this is the first part of the system
+that talks to ShipBob at all (FR-0.1). It is deliberately narrow: three reads and nothing else.
+It cannot fetch photos, cannot ask for an invoice, and cannot send anything. Those belong to
+later stages, and keeping them out of here means no later change can accidentally make the cheap
+first stage expensive (NFR-8).
+
+**How it works**
+
+1. Ask ShipBob for the case. It carries the identifiers for everything else.
+2. Ask for the parcel and the order at the same time, since neither depends on the other.
+3. Turn each answer into a checked record. Anything that does not fit the expected shape is
+   refused rather than half-understood.
+
+**What it connects to** — It reads from ShipBob and hands three records to the pre-flight
+checks. Nothing else calls it yet.
+
+**Choices we made**
+
+- **Money is read exactly as written.** A price of `38.00` is kept as thirty-eight dollars and
+  zero cents, not as a number a computer rounds. This sounds fussy and is not: the ordinary way
+  of reading prices quietly turns `38.00` into `38`, and two different-looking answers for the
+  same claim is the exact problem this project exists to prevent.
+- **Every time is converted to one common clock.** ShipBob can write the same moment in more than
+  one style, and a day count must not change because of how a date was spelled.
+- **A parcel with no insurance flag is refused, not assumed.** If ShipBob does not tell us whether
+  a parcel was insured, we stop and say so. Guessing "not insured" would send an insured claim
+  down a path the requirements say it must never take.
+- **We try again, but not forever.** A read is attempted up to three times, with a short and
+  growing pause. Three is a guess, and it is a setting rather than a fixed number.
+- **We do not try again when the answer will not change.** A missing record or a reply we cannot
+  read is a real answer; repeating the question only wastes time.
+
+**When things go wrong** — A case that does not exist is reported as not found. A parcel or an
+order that does not exist is not an error: the claim simply lacks something, and the checks below
+decide what that means. Anything else — ShipBob being down, slow, or answering with something we
+cannot read — is reported as an upstream failure. The full detail goes to the logs; the caller
+gets a plain message with nothing internal in it.
+
+**Not ready for production** — We work from the example payloads quoted in the requirements,
+because the full description of ShipBob's endpoints is not in this repository. If the real
+replies differ, our reading of them is wrong. There is no circuit breaker: if ShipBob is down,
+every claim keeps trying and keeps failing.
+
+**Where the code is** — `src/claim_agent/shipbob/client.py`, `src/claim_agent/domain/models.py`.
+
+---
+
+### Remembering a merchant
+
+**What it does** — Keeps a note of the corrections a representative has made on a merchant's
+earlier claims, so the next claim from that merchant starts better informed.
+
+**Why we need it** — ShipBob has no place to store this. There is no endpoint that says "this
+merchant's claims have been wrong in this way before", so the system has to remember it itself
+(FR-0.1, FR-0.5). Without it, every representative would keep making the same correction.
+
+**How it works**
+
+1. Notes are filed against the merchant's account identifier — the stable number that appears on
+   both the case and the order, not the brand name, which is only display text and can change.
+2. When a claim arrives, the system looks up every note filed against that merchant and passes
+   them along as starting context.
+3. Notes come back in the order they were written, always, so the same claim reads the same way
+   twice.
+
+**What it connects to** — It is read by the pre-flight checks and passed to the agent as
+context. Nothing writes to it yet; representative feedback is a later stage.
+
+**Choices we made**
+
+- **A single database file on disk.** It survives a restart, needs no server to be running, and
+  is one of the few things a reader can inspect by hand. This was an open question until now;
+  it is settled for merchant memory, not for reports or the audit trail.
+- **A fresh connection for each read.** These reads are tiny and this avoids a whole class of
+  problem where a shared connection is used from the wrong place.
+- **The table can be written to, even though nothing writes to it yet.** A store that can only be
+  read is not really a store, and the code that writes corrections arrives with a later
+  requirement. Today it is used only by the tests.
+- **A merchant with no notes is not an error.** It is the ordinary case, and it comes back as an
+  empty list.
+
+**When things go wrong** — A missing database file is created on first use. A claim whose case
+has no merchant identifier gets no notes and carries on; it is not treated as a failure.
+
+**Not ready for production** — One file on one machine. A second copy of the service would not
+see the first one's notes, and there is no backup. The read blocks the request while it happens;
+that is fine for a local file and would not be for a real database.
+
+**Where the code is** — `src/claim_agent/storage/merchant_memory.py`,
+`src/claim_agent/storage/database.py`.
+
+---
+
+### The pre-flight checks
+
+**What it does** — Answers one cheap question before anything expensive happens: can this claim
+be processed at all? It either says *carry on* or *stop, and here is why*.
+
+**Why we need it** — Some claims are dead on arrival no matter how good the photos are. Finding
+that out first means an unprocessable claim costs three quick reads instead of a full
+investigation with an AI reading every image (FR-0.2, FR-0.3, NFR-8). It also removes a whole
+class of inconsistency: these are questions with right answers, so no judgement is involved and
+the same claim always gets the same verdict (FR-0.6).
+
+**How it works**
+
+1. Read the case, the parcel, and the order, and look up anything remembered about the merchant.
+2. Work out which delivery date to trust. The case's own date is used when it has one, otherwise
+   the parcel's. If the two disagree, we use the case's and record both, so a person can see the
+   disagreement instead of it being smoothed away.
+3. Run four checks:
+   - **Is the parcel too old?** Count the days from delivery to the day the merchant opened the
+     case, and compare that with the limit.
+   - **Is this the right kind of complaint?** Only damage-in-transit is handled here.
+   - **Is the basic information there?** A claim with no parcel, no order, or no description of
+     what happened has nothing to investigate.
+   - **Was the parcel insured?** Insured parcels follow a completely different process and must
+     never be handled here.
+4. Work out the facts the AI should not have to rediscover: what the order was worth, whether
+   that counts as high value, how many days passed, and what a representative has previously
+   corrected for this merchant (FR-0.5).
+5. Give a verdict. If all four checks pass, the claim carries on to the next stage with those
+   facts attached. If any fails, it stops, and the reasons go into a report for a person.
+
+**What it connects to** — It reads from ShipBob and from merchant memory. It produces a verdict,
+the four check results, and the starting facts, which the next stage will use. It is reachable
+directly so a claim can be screened and inspected on its own.
+
+**Choices we made**
+
+- **All four checks always run, even after one has failed.** Stopping at the first failure would
+  save nothing — the information is already in hand — and would hide facts a person needs. A
+  representative should be able to see that a claim is *both* insured *and* three months old.
+- **The result records what each check looked at, not just its answer.** "Why was this stopped?"
+  has to be answerable from the result itself, without reading logs or running anything again.
+- **The clock is never consulted.** The age check compares two dates that both come from ShipBob,
+  so a claim that was 73 days old when it was filed is 73 days old forever. Re-running this next
+  year gives the same answer, and a number in a stored report never goes stale.
+- **The days count is whole calendar days.** "Delivered on the 26th, filed on the 9th" is what a
+  person can check by looking at a calendar.
+- **The complaint type must match exactly.** We ignore capitals and extra spaces, because those
+  are just typing. We deliberately do not accept anything merely *starting* with the right words:
+  a category called "damaged in transit — insured" is a different thing entirely, and treating it
+  as a match would send an insured claim down this path, which is the single worst mistake
+  available here.
+- **What counts as missing.** A field that is absent, empty, or only spaces is missing. So is a
+  record ShipBob could not give us — a parcel that does not exist and a case with no parcel
+  number are the same problem, and the result says which of the two it was.
+- **No delivery date anywhere stops the claim.** A check we cannot carry out must never quietly
+  pass. We report it as missing information rather than inventing a fifth kind of reason. This is
+  our judgement, not a stated rule, and it is one of the things worth confirming.
+- **When several checks fail, they are ranked.** Insurance first, then age, then wrong type, then
+  missing information. Telling a merchant "too old" when the real answer is "claim on your
+  insurance" is actively unhelpful, and asking for more photos on a claim being closed for age is
+  worse. The ranking is a judgement call and is a setting, not a fixed rule.
+- **Every debatable value is a setting.** The age limit and whether the last day counts, the
+  high-value figure and whether landing exactly on it counts, the complaint-type wording, the
+  shortest acceptable description, and the ranking above all live with the other claim policy
+  values. Several of these are numbers we invented, and an invented number that cannot be changed
+  without a code change is a trap.
+- **We do not check things nobody asked for.** The case being marked closed, or the parcel not
+  being marked delivered, are not checks. Only four were specified, and adding a fifth would
+  quietly change which claims get through.
+
+**When things go wrong** — ShipBob being unreachable stops the claim with an upstream failure a
+person sees; it never results in a silent pass. A reply we cannot read is treated the same way. A
+case that does not exist is reported as not found.
+
+**Not ready for production** — Three of these behaviours cannot be shown on the sample data:
+every sample parcel is uninsured, every sample complaint is the right type, and no sample order
+comes close to the high-value figure. Each is proven only by a made-up case, so the real data has
+never exercised them. The age limit, the high-value figure, and the ranking are all invented
+numbers awaiting ShipBob's confirmation.
+
+**Where the code is** — `src/claim_agent/preflight/`, and
+`src/claim_agent/api/routes/preflight.py`.
+
+---
+
+### Closing a claim we cannot process
+
+**What it does** — When the checks stop a claim, this writes up why, in two forms: a summary for
+the representative, and a draft email to the merchant listing every reason the claim was
+declined.
+
+**Why we need it** — A claim that cannot be processed is not simply dropped. The merchant is owed
+an explanation, and every explanation is an email, and every email needs a person's approval
+before it goes out (FR-0.4). So a stopped claim skips the AI entirely but still arrives on a
+representative's desk as something to read and approve.
+
+**How it works**
+
+1. Take the verdict, the reasons, and all four check results.
+2. Turn each failed check into one plain sentence a representative can read.
+3. Write the email. The subject comes from the highest-ranked reason. The body explains every
+   reason the claim was declined, in that same ranking, with the actual numbers in it — the
+   delivery date, the day count, the limit, or exactly which pieces of information were missing.
+4. Hand over the summary, the email, and the facts already worked out, marked as needing a
+   person's approval.
+
+**What it connects to** — It reads the verdict and check results from the pre-flight checks and
+produces the report a representative reviews. Nothing sends the email; sending is a later stage
+and only happens after approval.
+
+**Choices we made**
+
+- **No AI anywhere in this.** The whole point of stopping early is that a claim we cannot process
+  costs almost nothing. Asking a model to write the email would throw that away, and the
+  explanations are fixed text with the facts filled in — there is nothing to reason about.
+- **The email lists every reason, not just the main one.** A merchant told only "too old" who
+  fixes nothing and re-files has been failed by the explanation.
+- **The email never says "draft" in its text.** A representative needs to read the exact words
+  that would be sent. The fact that it is a draft is recorded alongside the email, not inside it,
+  so a marker cannot be sent to a merchant by accident.
+- **The report shows the checks that passed too.** A representative can see that the insurance
+  check ran and passed, rather than having to infer it from silence.
+- **The report never mentions money.** Nothing at this stage recommends an amount.
+- **Month names are written out by hand.** The usual way of formatting a date changes language
+  depending on how the machine running it is configured, which would mean the same claim
+  producing a different email on a different computer.
+- **A case with no contact address still gets an email written.** The reasons still reach the
+  representative; only the recipient is blank, and the later sending stage refuses to send
+  without one.
+
+**When things go wrong** — There is nothing here to fail: no network, no model, no database. It
+works from facts already in hand.
+
+**Not ready for production** — This is a report shaped for stopped claims only. The full report
+that the AI stages will produce is a later requirement with its own rules, and this is not it —
+it will need to be reconciled with that shape rather than extended into it. The email wording has
+not been reviewed by anyone who writes to merchants for a living.
+
+**Where the code is** — `src/claim_agent/preflight/report.py`,
+`src/claim_agent/preflight/email.py`.
 
 ---
 

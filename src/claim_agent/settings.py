@@ -8,9 +8,10 @@ are judged*.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +32,14 @@ class Settings(BaseSettings):
     # credentials; unreachable upstreams surface as handled errors (NFR-6).
     shipbob_base_url: str = "http://localhost:8080"
     shipbob_timeout_seconds: float = 10.0
+    shipbob_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        description="Tries per ShipBob read before giving up, first attempt included (NFR-6).",
+    )
+
+    # Where merchant memory is kept. One SQLite file, created on first use.
+    database_path: Path = Path("claim_agent.db")
 
     # LLM access. Absent key is a handled state, not a crash at import time.
     anthropic_api_key: SecretStr | None = None

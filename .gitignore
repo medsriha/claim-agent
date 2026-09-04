@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local merchant memory database (DATABASE_PATH)
+claim_agent.db
+claim_agent.db-journal
+claim_agent.db-wal
+claim_agent.db-shm

@@ -229,9 +229,12 @@ be traced back to the requirement that motivated it.
 - Keep the main path a straight line down the page and push edge cases to the edges.
 - Docstrings and comments follow [Documenting the code](#documenting-the-code) — plain words,
   readable by someone new to the project.
-- Build the simplest thing that satisfies the requirement. No configuration, indirection, or
-  extension points for needs nobody has yet — an abstraction with one implementation is a
-  liability, not foresight.
+- Build the simplest thing that satisfies the requirement. No indirection or extension points
+  for needs nobody has yet — an abstraction with one implementation is a liability, not
+  foresight.
+- **Configuration is different.** A value used to judge a claim belongs in `policy.py` even if
+  only one place reads it. Judgement calls have to be visible and changeable, not buried in a
+  branch (FR-0.7, NFR-7).
 - Keep modules focused. When a file starts covering two subjects, split it.
 
 **Project conventions.**
@@ -284,10 +287,16 @@ pushing.
 
 Open engineering choices — decide with the user, then record the outcome here:
 
-- **Persistence backend** for reports, versions, feedback, merchant memory, and the audit
-  trail. Nothing is chosen; `storage/` is empty by design.
-- **Provisional policy values.** Only the $100 cap comes from REQUIREMENTS.md. The age limit,
-  high-value threshold, confidence threshold, and step budgets in `policy.py` are placeholders
-  awaiting ShipBob sign-off.
+- **Provisional policy values.** Only the $100 cap comes from REQUIREMENTS.md. Everything else
+  in `policy.py` — the age limit and whether it is inclusive, the high-value threshold, the
+  claim-type label, the minimum description length, the order terminal reasons are ranked in,
+  the confidence threshold, and the step budgets — are placeholders awaiting ShipBob sign-off.
+  They are configurable so they can be corrected without a code change; that does not make the
+  numbers right.
 - **Reimbursement cap semantics** — per claim line or per claim (REQUIREMENTS.md open
   question 2).
+
+Decided:
+
+- **Persistence backend: SQLite**, one file, path from `DATABASE_PATH`. Chosen for merchant
+  memory in Layer 0. Reports, versions, feedback, and the audit trail still have no schema.

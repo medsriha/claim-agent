@@ -13,8 +13,25 @@ from __future__ import annotations
 from decimal import Decimal
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from claim_agent.domain.models import TerminalReason
+
+DEFAULT_TERMINAL_REASON_PRECEDENCE = (
+    TerminalReason.SHIPMENT_INSURED,
+    TerminalReason.CLAIM_TOO_OLD,
+    TerminalReason.WRONG_CLAIM_TYPE,
+    TerminalReason.MISSING_KEY_INFORMATION,
+)
+"""Which reason to lead with when a claim fails several checks at once.
+
+Insurance comes first because an insured claim belongs to a different process
+entirely, and telling a merchant "too old" instead of "claim on your insurance"
+sends them the wrong way. Missing information comes last on purpose: it is the
+only recoverable reason, and asking a merchant for photos on a claim being closed
+for age wastes their time. This order is our judgement, not a ShipBob rule.
+"""
 
 
 class Policy(BaseSettings):
@@ -38,9 +55,33 @@ class Policy(BaseSettings):
         default=60,
         description="Age gate: days from delivery to case creation (FR-0.2). PROVISIONAL.",
     )
+    age_limit_inclusive: bool = Field(
+        default=True,
+        description="Whether a claim filed exactly on the limit still passes (FR-0.2). PROVISIONAL.",
+    )
     high_value_order_usd: Decimal = Field(
         default=Decimal("500.00"),
         description="Order value at which a shipment is flagged high-value (FR-0.5). PROVISIONAL.",
+    )
+    high_value_inclusive: bool = Field(
+        default=True,
+        description="Whether an order landing exactly on the threshold counts as high value "
+        "(FR-0.5). PROVISIONAL.",
+    )
+    damaged_in_transit_sub_category: str = Field(
+        default="Claim | Damaged in Transit",
+        description="The only claim type handled here, matched exactly (FR-0.2). PROVISIONAL.",
+    )
+    min_description_length: int = Field(
+        default=1,
+        ge=1,
+        description="Shortest description that counts as present, after trimming spaces "
+        "(FR-0.2). PROVISIONAL.",
+    )
+    terminal_reason_precedence: tuple[TerminalReason, ...] = Field(
+        default=DEFAULT_TERMINAL_REASON_PRECEDENCE,
+        description="Order terminal reasons are ranked in; the first one heads the merchant "
+        "email (FR-0.2, FR-0.4). PROVISIONAL.",
     )
     min_assessment_confidence: float = Field(
         default=0.7,
@@ -58,6 +99,25 @@ class Policy(BaseSettings):
         ge=0,
         description="Retries per tool call before failing toward the rep (FR-1.3). PROVISIONAL.",
     )
+
+    @field_validator("terminal_reason_precedence")
+    @classmethod
+    def _must_rank_every_reason(
+        cls, value: tuple[TerminalReason, ...]
+    ) -> tuple[TerminalReason, ...]:
+        """Refuse an order that leaves a reason out or lists one twice.
+
+        Every reason has to appear exactly once, or a claim could fail a check whose
+        reason has nowhere to sit in the ranking. The result would depend on the order
+        the checks happened to run in, which is the one thing FR-0.6 rules out.
+        """
+        if sorted(value) != sorted(TerminalReason):
+            missing = sorted(set(TerminalReason) - set(value))
+            raise ValueError(
+                "terminal_reason_precedence must list each terminal reason exactly once; "
+                f"got {list(value)}, missing {missing}"
+            )
+        return value
 
 
 @lru_cache
