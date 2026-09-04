@@ -53,6 +53,24 @@ who has never seen this codebase and may not be an engineer:
 - If a sentence only makes sense to someone who already knows the project, rewrite it.
 - Roughly a page per feature. Long is not the same as thorough.
 
+## Progress
+
+**[TODO.md](TODO.md) tracks which requirements are done.** It lists every requirement id in
+REQUIREMENTS.md and nothing else — no descriptions, because REQUIREMENTS.md already holds them
+and a second copy would drift out of step with the first.
+
+When you finish a requirement, tick its box and write underneath it:
+
+- **One line on what was actually built** — not what the requirement asked for, what you did.
+- **A conclusion** — what someone picking this up later should take away.
+- **Anything to be aware of** — a caveat, a decision made along the way, a value still
+  provisional, a requirement this one interacts with. Leave this out only when there is
+  genuinely nothing to flag.
+
+Keep it to a few lines; the full explanation belongs in DESIGN.md. Tick a box only when the
+requirement is genuinely done (see [Working on a feature](#working-on-a-feature)) — a tracker
+that overstates progress is worse than no tracker.
+
 ## Stack
 
 | Concern | Choice |
@@ -107,9 +125,10 @@ These follow from the requirements and are not negotiable without changing them:
 
 ## Working on a feature
 
-REQUIREMENTS.md holds 83 numbered requirements and they interlock, so **keep a todo list and
-build it from the requirements themselves.** A list is what stops a half-finished layer from
-looking finished.
+REQUIREMENTS.md holds 83 numbered requirements and they interlock, so **work from a todo list
+built out of the requirements themselves.** That is what stops a half-finished layer from
+looking finished. TODO.md is the durable record; your working list is how you get through a
+session.
 
 1. **Read the requirements in scope, then create one todo item per requirement id** — `FR-0.2`,
    `FR-0.3`, each its own item. Never collapse them into a single "implement Layer 0"; the point
@@ -120,12 +139,13 @@ looking finished.
 3. **Work one item at a time.** Mark it in progress when you start and done the moment it is
    finished — never in a batch at the end. Exactly one item in progress at a time.
 4. **A requirement is done only when** the behaviour is implemented, a test names the requirement
-   id, and DESIGN.md explains it. If it is partly satisfied, keep the item open and say what is
-   missing. Never mark done anything you have not actually run.
+   id, and DESIGN.md explains it. Then tick it in TODO.md and write its note. If it is only
+   partly satisfied, leave the box unticked and say what is missing. Never tick anything you
+   have not actually run.
 5. **Turn discovered work into new items** rather than dropping it silently. If a requirement is
    blocked, ambiguous, or larger than it looked, say so and ask — do not guess.
-6. **Finish with `make check`**, then commit the code, its tests, and the DESIGN.md update
-   together.
+6. **Finish with `make check`**, then commit the code, its tests, and the DESIGN.md and TODO.md
+   updates together.
 
 Carry the requirement id into docstrings, test names, and commit messages, so any behaviour can
 be traced back to the requirement that motivated it.

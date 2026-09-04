@@ -8,6 +8,7 @@ nothing is sent or paid without human approval.
 - **How it works:** [DESIGN.md](DESIGN.md) — the design in plain English, one section per
   feature. Start here if you are new.
 - **How to work on it:** [CLAUDE.md](CLAUDE.md) — conventions and architecture rules.
+- **What is done so far:** [TODO.md](TODO.md) — every requirement id, ticked as it lands.
 
 ## Quickstart
 
