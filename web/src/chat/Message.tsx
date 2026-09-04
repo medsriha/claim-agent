@@ -13,6 +13,7 @@ import { ClaimNumbers } from "../components/ClaimNumbers";
 import { EvaluatedAt, Findings } from "../components/Findings";
 import { FailureNotice } from "../components/FailureNotice";
 import { GateCard } from "../components/GateCard";
+import { SimilarClaims } from "../components/SimilarClaims";
 import { Spinner } from "../components/Spinner";
 import { VerdictBanner } from "../components/VerdictBanner";
 import type { TranscriptMessage } from "./transcript";
@@ -132,6 +133,13 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
       return (
         <div className="bubble">
           <EscalationAction />
+        </div>
+      );
+
+    case "precedent":
+      return (
+        <div className="bubble">
+          <SimilarClaims found={body.found} failureMessage={body.failureMessage} />
         </div>
       );
 

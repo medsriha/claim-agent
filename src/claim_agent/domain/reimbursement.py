@@ -61,11 +61,16 @@ class AmountComponent(BaseModel):
     product_name: str
     quantity: int
     unit_price: Decimal
+    refunded_usd: Decimal
     sku: str | None = None
 
     @property
     def line_total(self) -> Decimal:
-        """What this item contributes: the price of one, times how many were damaged."""
+        """What this item was worth altogether: the price of one, times how many broke.
+
+        What it *cost*, not what is being refunded for it — the two differ by the refund
+        percentage. Both are kept so a rep can see the step between them (FR-2.4).
+        """
         return self.unit_price * self.quantity
 
 
@@ -90,6 +95,8 @@ class AmountDerivation(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     components: tuple[AmountComponent, ...]
+    items_total_usd: Decimal
+    refund_percentage: int
     subtotal_usd: Decimal
     amount_usd: Decimal
     cap_usd: Decimal
@@ -172,10 +179,13 @@ def compute_reimbursement(
     # can see which document was read as well as that the answer was nothing.
     priced_from = invoice.invoice_id if invoice is not None else None
 
-    components = _price_every_item(damaged, invoice)
+    percentage = policy.uninsured_refund_percentage
+    components = _price_every_item(damaged, invoice, percentage)
     if components is None:
         return AmountDerivation(
             components=(),
+            items_total_usd=NOTHING,
+            refund_percentage=percentage,
             subtotal_usd=NOTHING,
             amount_usd=NOTHING,
             cap_usd=cap,
@@ -183,14 +193,22 @@ def compute_reimbursement(
             priced_from=priced_from,
         )
 
-    subtotal = _to_cents(
+    items_total = _to_cents(
         sum((component.line_total for component in components), start=Decimal("0"))
+    )
+    # Each item's share is rounded to cents before they are added up, so the lines a rep
+    # reads add up to the total beside them. Rounding the total instead would leave the
+    # working looking like it did not.
+    subtotal = _to_cents(
+        sum((component.refunded_usd for component in components), start=Decimal("0"))
     )
     # A subtotal landing exactly on the cap is paid in full: the cap has changed nothing,
     # and saying it applied would tell a rep the figure had been trimmed when it had not.
     cap_applied = subtotal > cap
     return AmountDerivation(
         components=components,
+        items_total_usd=items_total,
+        refund_percentage=percentage,
         subtotal_usd=subtotal,
         amount_usd=cap if cap_applied else subtotal,
         cap_usd=cap,
@@ -200,7 +218,7 @@ def compute_reimbursement(
 
 
 def _price_every_item(
-    damaged: Sequence[ClaimedProduct], invoice: Invoice | None
+    damaged: Sequence[ClaimedProduct], invoice: Invoice | None, percentage: int
 ) -> tuple[AmountComponent, ...] | None:
     """Price all the damaged items, or refuse to price any of them.
 
@@ -223,7 +241,7 @@ def _price_every_item(
         if position is None or position in already_claimed:
             return None
         already_claimed.add(position)
-        components.append(_component_for(item, invoice.line_items[position]))
+        components.append(_component_for(item, invoice.line_items[position], percentage))
     return tuple(components)
 
 
@@ -252,7 +270,7 @@ def _position_on_invoice(item: ClaimedProduct, lines: Sequence[OrderLineItem]) -
     return matches[0]
 
 
-def _component_for(item: ClaimedProduct, line: OrderLineItem) -> AmountComponent:
+def _component_for(item: ClaimedProduct, line: OrderLineItem, percentage: int) -> AmountComponent:
     """Price one damaged item against the invoice line it was matched to.
 
     The name, code and price all come from the invoice rather than from the claim. The
@@ -263,11 +281,19 @@ def _component_for(item: ClaimedProduct, line: OrderLineItem) -> AmountComponent
     than was invoiced cannot be right, and paying for more would be the expensive
     mistake; a quantity below nothing would subtract from the other items' totals, which
     would be worse still.
+
+    What is refunded is a percentage of what the item cost, not the whole of it: ShipBob
+    reimburses part of the price on an uninsured shipment, and the share is a policy
+    value (FR-1.19). It is worked out in exact decimals and rounded to cents half up, the
+    way money is normally rounded, so the same item always comes to the same figure.
     """
+    quantity = max(0, min(item.quantity, line.quantity))
+    cost = line.unit_price * quantity
     return AmountComponent(
         product_name=line.name,
-        quantity=max(0, min(item.quantity, line.quantity)),
+        quantity=quantity,
         unit_price=line.unit_price,
+        refunded_usd=_to_cents(cost * Decimal(percentage) / Decimal(100)),
         sku=line.sku,
     )
 

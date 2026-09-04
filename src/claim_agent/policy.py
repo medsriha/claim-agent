@@ -10,7 +10,7 @@ below are provisional placeholders and need ShipBob sign-off before production.
 **Some values are marked `NOT_ON_PANEL`.** The admin panel is built from this
 file, so by default a value here is a value someone can change from a screen
 while the service runs. That is only useful for a value the running service
-actually reads: five of the ones marked belong to the AI investigation, which is
+actually reads: seven of the ones marked belong to the AI investigation, which is
 being built and is not yet reachable, so changing them from a panel would do
 nothing observable and would suggest otherwise. Once the investigation runs, they
 are the marks to revisit. The marking changes nothing about the value itself —
@@ -73,6 +73,14 @@ class Policy(BaseSettings):
         default=True,
         description="Whether a claim filed exactly on the limit still passes (FR-0.2). PROVISIONAL.",
     )
+    uninsured_refund_percentage: int = Field(
+        default=60,
+        ge=0,
+        le=100,
+        description="Percentage of a damaged item's price that is refunded on an uninsured "
+        "shipment. Applied to each item before the reimbursement cap is checked "
+        "(FR-1.19, FR-1.20). PROVISIONAL.",
+    )
     high_value_order_usd: Decimal = Field(
         default=Decimal("500.00"),
         description="Order value at which a shipment is flagged high-value (FR-0.5). PROVISIONAL.",
@@ -97,7 +105,7 @@ class Policy(BaseSettings):
         "(FR-0.2). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
-    # The five below are read by the AI investigation, which is being built but is not
+    # The seven below are read by the AI investigation, which is being built but is not
     # yet reachable over HTTP. Nothing a running service does looks at them, so a panel
     # offering them would be offering a change nobody could see the effect of. When the
     # investigation is reachable, these markings are the ones to take off.
@@ -125,6 +133,23 @@ class Policy(BaseSettings):
         gt=0,
         description="Most images one run may look at, whatever its step budget allows. Looking "
         "at an image is the costliest thing the system does (NFR-8). PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    precedent_results_per_line: int = Field(
+        default=5,
+        gt=0,
+        description="Most similar past claims shown to the investigation, per product "
+        "(FR-S.5). Every one costs the model something to read, and a long list buries the "
+        "closest match among weaker ones. PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    min_precedent_similarity: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description="How alike a past claim must be to be shown at all, from 0 to 1 (FR-S.5). "
+        "Too low and unrelated claims are offered as precedent, which is worse than offering "
+        "none. PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
     cap_applies_to_whole_claim: bool = Field(

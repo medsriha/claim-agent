@@ -110,6 +110,8 @@ def amount_of_nothing(
     """An amount that came to nothing, in one of the three ways that can happen."""
     return AmountDerivation(
         components=components,
+        items_total_usd=Decimal("0.00"),
+        refund_percentage=60,
         subtotal_usd=Decimal("0.00"),
         amount_usd=Decimal("0.00"),
         cap_usd=Decimal("100.00"),
@@ -121,9 +123,15 @@ def amount_of_nothing(
 PAYABLE_AMOUNT = AmountDerivation(
     components=(
         AmountComponent(
-            product_name=COLLAGEN, quantity=1, unit_price=Decimal("52.00"), sku="COLLAGEN1"
+            product_name=COLLAGEN,
+            quantity=1,
+            unit_price=Decimal("52.00"),
+            refunded_usd=Decimal("52.00"),
+            sku="COLLAGEN1",
         ),
     ),
+    items_total_usd=Decimal("52.00"),
+    refund_percentage=100,
     subtotal_usd=Decimal("52.00"),
     amount_usd=Decimal("52.00"),
     cap_usd=Decimal("100.00"),
@@ -510,7 +518,11 @@ def test_fr_1_18_an_approval_whose_product_was_not_on_the_invoice_names_the_invo
 def test_fr_1_20_an_item_the_invoice_prices_at_nothing_goes_to_a_person() -> None:
     """A free promotional insert really exists in this data, and no requirement covers it."""
     free_item = AmountComponent(
-        product_name="Insert Card", quantity=1, unit_price=Decimal("0.00"), sku="Insert"
+        product_name="Insert Card",
+        quantity=1,
+        unit_price=Decimal("0.00"),
+        refunded_usd=Decimal("0.00"),
+        sku="Insert",
     )
 
     decision = decide(

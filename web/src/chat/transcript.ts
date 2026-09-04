@@ -22,6 +22,7 @@ import type {
   DraftedEmail,
   GateResult,
   Order,
+  PrecedentSet,
   PreflightResult,
   Shipment,
   TerminalReason,
@@ -54,6 +55,13 @@ export type MessageBody =
   | { readonly kind: "findings"; readonly findings: string[] }
   | { readonly kind: "email"; readonly email: DraftedEmail }
   | { readonly kind: "escalation" }
+  | {
+      readonly kind: "precedent";
+      /** What the search found. `null` when the request itself never got an answer. */
+      readonly found: PrecedentSet | null;
+      /** Why nothing could be looked up. `null` when it could be. */
+      readonly failureMessage: string | null;
+    }
   | { readonly kind: "note"; readonly text: string }
   | { readonly kind: "failure"; readonly failure: FailureKind; readonly message: string };
 
@@ -83,6 +91,19 @@ export function pickedMessage(caseId: string): TranscriptMessage {
 }
 
 /**
+ * What the search for similar past claims came back with.
+ *
+ * `sought` is the field that matters: it says whether the question was asked at all, which
+ * is a different thing from its having been asked and answered with nothing. A stopped
+ * claim is never asked about, so nothing about similar claims appears in its conversation.
+ */
+export interface PrecedentLookup {
+  readonly found: PrecedentSet | null;
+  readonly failureMessage: string | null;
+  readonly sought: boolean;
+}
+
+/**
  * Lay a finished screening out as a conversation.
  *
  * @param pickedId - The claim the representative asked for. Used only for their opening
@@ -90,9 +111,16 @@ export function pickedMessage(caseId: string): TranscriptMessage {
  * @param result - The answer the service returned, whole. Nothing here is optional: a
  *   screening always carries all four checks and everything that was read, and only a
  *   stopped claim carries a write-up and an email.
+ * @param precedent - What the search for similar claims found, and whether it was even
+ *   asked. It is asked only on a claim that passed, so `sought` being false is the ordinary
+ *   state for a stopped one and means no message about it appears at all.
  * @returns The messages in the order they should appear, opening line first.
  */
-export function transcriptFor(pickedId: string, result: PreflightResult): TranscriptMessage[] {
+export function transcriptFor(
+  pickedId: string,
+  result: PreflightResult,
+  precedent: PrecedentLookup = { found: null, failureMessage: null, sought: false },
+): TranscriptMessage[] {
   const messages: TranscriptMessage[] = [pickedMessage(pickedId)];
 
   messages.push({
@@ -152,6 +180,21 @@ export function transcriptFor(pickedId: string, result: PreflightResult): Transc
   // A stopped claim is owed an explanation, so the service writes one up and drafts the
   // email. A claim that passes carries neither, because there is nothing to explain yet.
   if (result.report === null) {
+    // Only a claim that passed is asked about, so this only ever appears here. It comes
+    // before the note about the missing stage because it is the one thing on a passing
+    // claim a representative can actually use today.
+    if (precedent.sought) {
+      messages.push({
+        id: "precedent",
+        speaker: "system",
+        label: "Similar claims handled before",
+        body: {
+          kind: "precedent",
+          found: precedent.found,
+          failureMessage: precedent.failureMessage,
+        },
+      });
+    }
     messages.push({
       id: "next-stage",
       speaker: "page",

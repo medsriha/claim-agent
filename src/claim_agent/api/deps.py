@@ -22,6 +22,7 @@ from claim_agent.policy import Policy
 from claim_agent.settings import Settings
 from claim_agent.shipbob.client import ShipBobClient
 from claim_agent.storage.merchant_memory import MerchantMemory
+from claim_agent.storage.precedent_store import PrecedentStore
 
 
 def get_settings(request: Request) -> Settings:
@@ -66,8 +67,15 @@ def get_merchant_memory(request: Request) -> MerchantMemory:
     return memory
 
 
+def get_precedent_store(request: Request) -> PrecedentStore:
+    """Return the record of claims already investigated (FR-S.1, FR-S.5)."""
+    store: PrecedentStore = request.app.state.precedent_store
+    return store
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 PolicyDep = Annotated[Policy, Depends(get_policy)]
 LivePolicyDep = Annotated[LivePolicy, Depends(get_live_policy)]
 ShipBobClientDep = Annotated[ShipBobClient, Depends(get_shipbob_client)]
 MerchantMemoryDep = Annotated[MerchantMemory, Depends(get_merchant_memory)]
+PrecedentStoreDep = Annotated[PrecedentStore, Depends(get_precedent_store)]

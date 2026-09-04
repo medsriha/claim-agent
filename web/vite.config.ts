@@ -19,6 +19,7 @@ export default defineConfig({
     proxy: {
       "/cases": { target: CLAIMS_SERVICE, changeOrigin: true },
       "/admin": { target: CLAIMS_SERVICE, changeOrigin: true },
+      "/precedent": { target: CLAIMS_SERVICE, changeOrigin: true },
       "/health": { target: CLAIMS_SERVICE, changeOrigin: true },
     },
   },

@@ -1100,3 +1100,78 @@ p {
   padding-top: 16px;
   border-top: 1px solid var(--sb-line);
 }
+
+/* --- The past claims that resemble this one ------------------------------ */
+
+.similar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.similar {
+  padding-left: 12px;
+  border-left: 3px solid var(--sb-line);
+}
+
+/* The shut state, and all a rep needs to judge consistency at a glance: which claim,
+   which product, what it closed on. Everything else waits behind the fold. */
+.similar-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.similar-summary:focus-visible {
+  outline: 2px solid var(--sb-brand);
+  outline-offset: 2px;
+}
+
+.similar-case {
+  font-weight: 600;
+}
+
+.similar-product {
+  color: var(--sb-ink-soft);
+}
+
+/* Every past claim shown was closed by a representative, so there is one style here
+   rather than two: no record needs marking out as weaker than another. */
+.similar-closed {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--sb-pass-tint);
+  color: var(--sb-pass);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.similar-more {
+  margin-top: 8px;
+}
+
+.similar-reasons {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--sb-ink-soft);
+  font-size: 13px;
+}
+
+.similar-note {
+  margin: 8px 0 0;
+  font-style: italic;
+}
+
+.similar-none,
+.similar-unavailable {
+  margin: 0;
+  color: var(--sb-ink-soft);
+}

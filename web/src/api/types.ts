@@ -178,3 +178,68 @@ export interface PreflightResult {
   report: TerminalReport | null;
   evaluated_at: string;
 }
+
+/** How the damaged product related to the order it came from. */
+export type MatchOutcome = "matched" | "not_on_order" | "ambiguous";
+
+/** What a claim line closed on. */
+export type Recommendation = "approve" | "request_info" | "deny" | "escalate";
+
+/**
+ * One damaged product whose claim was closed.
+ *
+ * **Everything here was decided by a representative.** A claim still in review has no
+ * outcome and is never stored, so there is no such thing as a record nobody agreed to and
+ * nothing to weigh differently.
+ *
+ * `unit_price` and `amount_usd` are text — see the note at the top. `outcome` is what the
+ * claim actually closed on, and `amount_usd` is what was paid — `null` when it paid nothing.
+ */
+export interface PrecedentRecord {
+  precedent_id: string;
+  case_id: string;
+  claim_line_id: string;
+  user_id: string | null;
+  product_name: string;
+  sku: string | null;
+  unit_price: string | null;
+  merchant_account: string | null;
+  match: MatchOutcome;
+  outcome: Recommendation;
+  amount_usd: string | null;
+  cap_applied: boolean;
+  rep_note: string | null;
+  withdrawn: boolean;
+  closed_at: string;
+}
+
+/**
+ * How alike two claims are, and why. `reasons` are the service's own sentences, so a
+ * representative can disagree with the comparison rather than take it on trust.
+ */
+export interface PrecedentSimilarity {
+  score: number;
+  reasons: string[];
+}
+
+/** One past claim that was found to be similar, with the score and reasons behind it. */
+export interface RetrievedPrecedent {
+  record: PrecedentRecord;
+  similarity: PrecedentSimilarity;
+}
+
+/**
+ * What a search for similar claims found.
+ *
+ * **`was_read` is the field to check before saying anything.** True means the store was
+ * read, whether or not it held anything; false means it could not be read at all, and
+ * `unavailable_reason` says so in the service's own words. An empty `retrieved` means
+ * different things in the two cases, and telling somebody there is no comparable history
+ * when nobody looked is the one wrong answer.
+ */
+export interface PrecedentSet {
+  retrieved: RetrievedPrecedent[];
+  considered: number;
+  unavailable_reason: string | null;
+  was_read: boolean;
+}

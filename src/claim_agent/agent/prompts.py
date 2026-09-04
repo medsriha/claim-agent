@@ -51,6 +51,7 @@ from claim_agent.domain.claim_line import ClaimLine, MatchOutcome
 from claim_agent.domain.evidence import EvidenceFinding
 from claim_agent.domain.models import Attachment, Case, MerchantCorrection, Order, OrderLineItem
 from claim_agent.preflight.models import ClaimContext
+from claim_agent.storage.precedent_store import PrecedentSet, RetrievedPrecedent
 
 # --- Marking text we did not write ------------------------------------------
 
@@ -156,6 +157,29 @@ Every claim needs four things, named exactly like this:
 THE FOUR THINGS YOU MAY RECOMMEND
 approve, request_info, deny, escalate. Nothing else, ever. Each is a proposal put to a
 representative, and none of them does anything on its own.
+
+SIMILAR CLAIMS HANDLED BEFORE
+You may be shown claims from the past that resemble the one in front of you, so that two
+alike claims do not get two different answers. They are there to make you consistent, and
+for nothing else. They are not rules, and they are not a second source of authority.
+
+Every one of them was closed by a ShipBob representative, so each is a record of what
+ShipBob actually did about such a claim rather than of what anybody suggested doing. Claims
+still waiting on a decision are never shown to you, because they have no outcome yet.
+
+What precedent can never do: supply evidence this claim does not have, raise any limit,
+excuse a piece of evidence that is missing, or settle a question the images in front of you
+answer differently. A claim with no photographs does not become payable because a claim that
+had photographs was paid. Where a past claim and the evidence in front of you disagree, the
+evidence wins.
+
+If a past claim changed what you concluded, say which one and say how. If you are about to
+recommend something different from how alike claims were handled, say that too, and say why
+- that sentence is the single most useful thing you can write, because it is the moment
+somebody can catch an inconsistency before a merchant is told anything.
+
+Never mention any of this to the merchant. Another merchant's claim, product or wording must
+not appear in the email you write, and no past claim is ever a reason you give them.
 """
 
 
@@ -446,6 +470,7 @@ def build_investigation_messages(
     claim_line: ClaimLine,
     other_lines: Sequence[ClaimLine] = (),
     shared_evidence: Sequence[EvidenceFinding] = (),
+    precedent: PrecedentSet | None = None,
 ) -> list[BaseMessage]:
     """Ask what should happen to one product on a claim (FR-1b.1, FR-1b.2).
 
@@ -470,6 +495,11 @@ def build_investigation_messages(
             than any one product and are settled once for the whole claim
             (FR-1a.3). Empty when nothing has been settled yet, and then no section
             about it appears at all.
+        precedent: The past claims most like this one, gathered before the run
+            started rather than looked up by the model (FR-S.6). `None` when
+            precedent was never sought, which shows no section at all; a set that was
+            sought and found nothing says so, because "we looked and there is none"
+            and "nobody looked" are different facts (FR-S.13).
 
     Returns:
         The shared rules, then the investigation question with this claim's facts
@@ -484,6 +514,7 @@ def build_investigation_messages(
         _render_other_lines(other_lines),
     ]
     sections.extend(_render_shared_evidence(shared_evidence))
+    sections.extend(_render_precedent(precedent))
     sections.extend(_render_corrections(context.merchant_corrections))
     return _messages("\n\n".join(sections))
 
@@ -712,6 +743,86 @@ def _render_finding(finding: EvidenceFinding) -> str:
     where = f" from {finding.attachment_id}" if finding.attachment_id is not None else ""
     problem = f" Problem: {finding.problem}" if finding.problem is not None else ""
     return f"- {finding.kind.value}: {finding.state.value}{where} — {finding.observed}{problem}"
+
+
+def _render_precedent(precedent: PrecedentSet | None) -> list[str]:
+    """The past claims most like this one, all of them closed (FR-S.6).
+
+    Three things can be true and all three are said differently, because a
+    representative reading the report later has to be able to tell them apart
+    (FR-S.13):
+
+    - nobody looked, which shows no section at all;
+    - the store was read and held nothing alike, which is said plainly;
+    - the store could not be read, which is said as its own thing, because reporting
+      it as "none found" would claim there is no comparable history when in fact
+      nobody managed to look.
+
+    **No amount appears here.** Records carry what was paid, and the model is
+    forbidden to write a figure (FR-1.21). The surest way to stop it repeating one is
+    never to put one in front of it — the same reason the order's total value is left
+    out of the claim's own section.
+    """
+    if precedent is None:
+        return []
+
+    if not precedent.was_read:
+        return [
+            _section(
+                "SIMILAR CLAIMS HANDLED BEFORE",
+                "The record of past claims could not be read, so you are working without it. "
+                "That is not the same as there being none. Do not say anything about how "
+                "claims like this one have been handled, because nobody managed to look.",
+            )
+        ]
+
+    if not precedent.retrieved:
+        return [
+            _section(
+                "SIMILAR CLAIMS HANDLED BEFORE",
+                "The record of past claims was read and holds nothing much like this one. "
+                "That is ordinary, and it is a fact rather than a gap: judge this claim on "
+                "its own evidence.",
+            )
+        ]
+
+    listed = "\n\n".join(_render_one_precedent(found) for found in precedent.retrieved)
+    body = "\n".join(
+        [
+            f"{len(precedent.retrieved)} past claim(s), most alike first. Every one was "
+            "closed by a representative.",
+            listed,
+        ]
+    )
+    return [_section("SIMILAR CLAIMS HANDLED BEFORE", body)]
+
+
+def _render_one_precedent(found: RetrievedPrecedent) -> str:
+    """One closed claim: what it was, how it ended, and why it was thought alike.
+
+    The merchant's words and the product's name came from outside ShipBob, so they
+    are marked as text we did not write, exactly as they are on the claim in hand. A
+    past claim is one of the more inviting places to hide an instruction, because it
+    reaches the model wearing our own formatting.
+    """
+    record = found.record
+    lines = [
+        f"- Claim {record.case_id}, closed as: {record.outcome.value}.",
+        f"  Product: {quote_untrusted('PAST_PRODUCT_NAME', record.product_name)}",
+    ]
+    if record.merchant_account is not None:
+        lines.append(
+            f"  What that merchant said: "
+            f"{quote_untrusted('PAST_MERCHANT_DESCRIPTION', record.merchant_account)}"
+        )
+    if record.rep_note is not None:
+        lines.append(
+            f"  What the representative said about it: "
+            f"{quote_untrusted('PAST_REP_NOTE', record.rep_note)}"
+        )
+    if found.similarity.reasons:
+        lines.append(f"  Judged alike because {'; '.join(found.similarity.reasons)}.")
+    return "\n".join(lines)
 
 
 def _render_corrections(corrections: Sequence[MerchantCorrection]) -> list[str]:

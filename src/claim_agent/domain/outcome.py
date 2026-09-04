@@ -94,11 +94,24 @@ class OverrideReason(StrEnum):
     than being thrown away (FR-1.16). `PRODUCT_NOT_PRICEABLE` means the damaged
     product could not be tied to exactly one line on the order, so there is no
     price to pay from (FR-1.13, FR-1a.2).
+
+    `CLAIM_CAP_EXCEEDED` is the odd one out, and worth understanding. Every other
+    reason here is decided from one product's own evidence. This one is decided from
+    the claim as a whole: the products being recommended for payment come to more
+    than the cap between them. It cannot be worked out per product, because three
+    products at fifty each are each fine and together are not — and a cap that only
+    ever looked at one product at a time could be got round by splitting a claim into
+    more of them, which is exactly what FR-1.20 warns about. So it is applied once,
+    after every product has been investigated on its own, and it is the single place
+    in this system where one product's outcome depends on what else was claimed
+    beside it. Nothing is trimmed to fit: the claim goes to a person, who decides
+    what to pay.
     """
 
     EVIDENCE_INCOMPLETE = "evidence_incomplete"
     EVIDENCE_UNREADABLE = "evidence_unreadable"
     INVESTIGATION_INCOMPLETE = "investigation_incomplete"
+    CLAIM_CAP_EXCEEDED = "claim_cap_exceeded"
     NOT_CONFIDENT_ENOUGH = "not_confident_enough"
     BUDGET_EXHAUSTED = "budget_exhausted"
     PRODUCT_NOT_PRICEABLE = "product_not_priceable"
@@ -141,6 +154,7 @@ _WITHHELD_RECOMMENDATION: dict[OverrideReason, Recommendation] = {
     OverrideReason.BUDGET_EXHAUSTED: Recommendation.ESCALATE,
     OverrideReason.EVIDENCE_UNREADABLE: Recommendation.ESCALATE,
     OverrideReason.INVESTIGATION_INCOMPLETE: Recommendation.ESCALATE,
+    OverrideReason.CLAIM_CAP_EXCEEDED: Recommendation.ESCALATE,
     OverrideReason.EVIDENCE_INCOMPLETE: Recommendation.REQUEST_INFO,
     OverrideReason.NOT_CONFIDENT_ENOUGH: Recommendation.ESCALATE,
     OverrideReason.PRODUCT_NOT_PRICEABLE: Recommendation.ESCALATE,

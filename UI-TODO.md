@@ -244,6 +244,42 @@ time and starts at UI-20.
     typechecks and lints clean. But nobody has clicked a checkbox, moved a ranking entry, or
     looked at the layout. The session that wrote it had no browser.
 
+## v4 — showing how similar claims went
+
+- [x] UI-26 — Similar past claims, fetched after a screening that passes and shown at the end of
+  the conversation.
+  - **What was built:** `POST /precedent/search` is called from `screens/PreflightScreen.tsx` once
+    the screening comes back, **only when the verdict is "proceed"**. The answer is drawn by
+    `components/SimilarClaims.tsx` after the decision and before the note about the missing
+    investigation stage. The dev proxy now forwards `/precedent`.
+  - **Conclusion:** it is still a replay, not a race. Both requests finish before the first message
+    appears, so nothing on screen ever shows a finished-looking step for work that had not
+    finished. A stopped claim is never asked about at all — that is `sought: false`, which is
+    deliberately a third state alongside "found nothing" and "could not look".
+  - **Be aware:** the screen sends **only the merchant's description**, because a claim has not
+    been split into products at this point and choosing a product in the browser would be the
+    screen deciding something. So these results are coarser than what the investigation will
+    eventually be shown, which also weighs the product, its price and the evidence pattern.
+  - **Be aware:** a failed search does not fail the screening — it becomes a sentence inside the
+    similar-claims message and everything else stands (NFR-4). "We looked and found none" and "we
+    could not look" render differently on purpose; collapsing them would tell a rep there is no
+    comparable history when nobody actually looked.
+  - **Be aware:** `chat/pageWords.ts` went from one sentence to three. The service has no wording
+    for "read the store, nothing was close enough" or for a request that never got an answer, so
+    the screen owns those two. Check them there before adding a fourth.
+  - **Each past claim is folded shut**, using the page's own fold — the same one a check card
+    uses, so no state and no library. Shut it shows the case, the product and what the claim
+    closed on; open it adds the reasons, the other merchant's account and the rep's note.
+  - **Revised after the first build.** The panel used to show a review-state pill on every row,
+    green for a claim a rep decided and grey for one nobody had looked at. Both are gone: the
+    service now stores only closed claims, so every row is a decision and there is nothing to
+    mark out as weaker. Each row shows what the claim closed on instead.
+
+- [ ] UI-27 — Tried in a browser.
+  - **Not done.** The flow was exercised against the live service — both verdicts, the exact
+    request the screen makes, a seeded precedent coming back with its score and reasons — and the
+    project builds, typechecks and lints clean. Nobody has watched it render.
+
 ## Reference — what the endpoint returns
 
 Field names as they appear on the wire, so UI-3 does not have to be reverse-engineered from

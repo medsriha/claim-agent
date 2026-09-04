@@ -21,4 +21,27 @@ export const PAGE_WORDS = {
   investigationNotBuilt:
     "The stage that investigates a claim has not been built yet, so there is no email " +
     "for this one and nothing to send.",
+
+  /**
+   * Shown when the record of past claims was read and held nothing much like this claim.
+   *
+   * The service has no sentence for this. It answers with an empty list and a flag saying
+   * it managed to look, which is a fact rather than words — so something has to put the
+   * fact into a sentence, and an empty box would read as a page that broke.
+   */
+  noSimilarClaims:
+    "No past claim resembles this one closely enough to be worth showing. That is ordinary, " +
+    "and it is not the same as this being the first claim of its kind.",
+
+  /**
+   * Shown when the past claims could not be looked up at all.
+   *
+   * The service sends its own sentence whenever it is the store that failed, and that
+   * sentence is preferred over this one. This covers the case where the request never got
+   * an answer, so there is no sentence from anybody. It must never read as "none found":
+   * saying there is no comparable history when nobody looked is the one wrong answer here.
+   */
+  pastClaimsUnreadable:
+    "The past claims could not be looked up, so nothing is known about how similar claims " +
+    "were handled. This is not the same as there being none.",
 } as const;

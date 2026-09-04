@@ -855,33 +855,29 @@ every merchant. A claim may have both, one, or neither. They are two lookups ove
 and must reach the rep as two things: merged into one list, a single past case can read as two
 independent confirmations of the same point.
 
-**FR-S.1 — Record every claim line the agent investigates.**
-A precedent record is written for every line that reaches an agent run, whatever state that line
-ends in — recommended and awaiting review, sent back and revised, approved, or abandoned without
-anyone ever looking at it. Recording only approved lines would leave the store empty for as long
-as claims sit in review, and the claims that most need precedent — the early ones — would have
-none at all.
+**FR-S.1 — Record a claim line only once it is closed.**
+A precedent record is written when a claim line reaches its end: a representative decided it,
+and that decision took effect. Nothing is recorded before then.
 
-**FR-S.2 — Mark every record with its review state, and keep that mark current.**
-Each record says plainly what a person did about it: approved as recommended, approved after
-revision, sent back with feedback, edited, or never reviewed. The mark changes as the claim moves
-through the review loop, so a record written at recommendation time is updated when the rep acts
-on it.
+Precedent exists to make recommendations consistent, and only a decided claim says anything
+about how ShipBob actually handles a situation. A line still sitting in review has no outcome —
+the system suggested something and nobody has agreed or disagreed yet. Showing that to a later
+investigation would teach it what this system already guessed, which is not consistency but
+repetition: the first guess about a kind of claim becomes the reason to guess the same way
+again, and every claim then agrees with the last one while nobody has checked any of them.
 
-This mark is the load-bearing part of FR-S.1, not bookkeeping around it. Because unreviewed
-recommendations are stored, the agent will sooner or later be shown its own earlier output as
-precedent. Left unmarked, that closes a loop: the system's first guess about a kind of claim
-becomes a reason to guess the same way again, and repetition starts to look like established
-practice. That is inconsistency's quieter cousin and a harder one to catch, because on the
-surface every claim now agrees with the last one. The review state is what stops "a person
-decided this" and "we once suggested this" from reading alike, and FR-S.7 says what the agent
-must do with the difference.
+So being in the store *means* the claim was closed. There is no record with an unsettled
+outcome, and therefore nothing to weigh differently.
+
+**FR-S.2 — Removed.** This required every record to carry what a representative did about it, so
+that a decided outcome could be told apart from an unreviewed suggestion. FR-S.1 now keeps
+unreviewed lines out of the store altogether, so there is nothing left to distinguish.
 
 **FR-S.3 — Record enough to judge whether two claims are really alike.**
 A record holds what the merchant said happened, which product was claimed and what kind of thing
 it is, which of the four evidence items were present and what each assessment concluded, the
-recommended outcome, the amount and whether the cap bound it, and any rep feedback with the
-correction it produced. The test is a human one: someone reading a record should be able to say
+outcome the claim closed on, the amount paid and whether the cap bound it, and any note the
+representative left explaining the decision. The test is a human one: someone reading a record should be able to say
 "yes, that is the same situation" or "no, it is not". A precedent nobody can check is worse than
 no precedent, because it still carries weight.
 
@@ -904,12 +900,10 @@ something the agent may choose to look up. If it were, two runs of the same clai
 purely in whether the agent thought to search — precisely the run-to-run variance NFR-1 forbids,
 introduced by the feature meant to reduce it.
 
-**FR-S.7 — Weigh a record by its review state.**
-A rep-approved outcome is evidence of how ShipBob actually handles a situation. A record nobody
-reviewed is evidence only of what this system once suggested, and carries no authority. A
-corrected record carries its correction — what the rep changed and why is the precedent, not the
-recommendation they rejected. The agent is given the state alongside every record and must not
-treat an unreviewed one as settled practice.
+**FR-S.7 — Removed.** This required the agent to weigh a record according to who decided it,
+because the store held both settled outcomes and the system's own unreviewed suggestions. FR-S.1
+now admits only closed claims, so every record carries a decision somebody stood behind and they
+all count the same.
 
 **FR-S.8 — Never let precedent stand in for evidence, or override a rule.**
 A claim with no photographs does not become approvable because a comparable claim that had
@@ -960,6 +954,8 @@ untouched (NFR-5), and a report that already cited the record still shows what t
 given (FR-S.11).
 
 > **Reference — what a record holds, and why none exist yet**
+> Every record is a *closed* claim: there is no field saying whether anybody reviewed it,
+> because an unreviewed line is never written (FR-S.1).
 > ```json
 > {
 >   "precedent_id": "PREC-CASE-1001-COLLAGEN1",
@@ -969,10 +965,9 @@ given (FR-S.11).
 >   "merchant_account": "Product arrived damaged. Both product and shipping box damaged. Damage due to poor/bad packaging.",
 >   "evidence_present": ["invoice", "damaged_product_photo", "outer_packaging_photo"],
 >   "evidence_missing": ["customer_confirmation"],
->   "recommended_outcome": "request_info",
->   "recommended_amount": null,
->   "review_state": "not_reviewed",
->   "rep_feedback": null,
+>   "outcome": "request_info",
+>   "amount_usd": null,
+>   "rep_note": null,
 >   "withdrawn": false
 > }
 > ```

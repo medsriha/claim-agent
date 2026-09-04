@@ -28,7 +28,7 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
 ) -> None:
     """FR-0.7: the panel is offered the values it is meant to change, and no others.
 
-    The four it is not offered are still policy values, still read by whatever reads
+    The eight it is not offered are still policy values, still read by whatever reads
     them, and still set from the environment — they are simply not changeable from a
     browser while the service runs.
     """
@@ -41,6 +41,7 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
         "reimbursement_cap_usd",
         "max_claim_age_days",
         "age_limit_inclusive",
+        "uninsured_refund_percentage",
         "high_value_order_usd",
         "high_value_inclusive",
         "damaged_in_transit_sub_category",
@@ -51,6 +52,8 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
         "max_agent_steps",
         "max_tool_retries",
         "max_image_analyses_per_run",
+        "precedent_results_per_line",
+        "min_precedent_similarity",
         "cap_applies_to_whole_claim",
     }
     assert body["matches_startup"] is True

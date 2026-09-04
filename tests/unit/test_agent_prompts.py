@@ -54,8 +54,13 @@ from claim_agent.domain.evidence import (
 )
 from claim_agent.domain.models import Attachment, Case, MerchantCorrection, Order, OrderLineItem
 from claim_agent.domain.outcome import Recommendation
+from claim_agent.domain.precedent import (
+    PrecedentRecord,
+    PrecedentSimilarity,
+)
 from claim_agent.errors import UpstreamError
 from claim_agent.preflight.models import ClaimContext
+from claim_agent.storage.precedent_store import PrecedentSet, RetrievedPrecedent
 
 
 class Verdict(BaseModel):
@@ -167,6 +172,24 @@ def investigation_text(**overrides: object) -> str:
     }
     arguments.update(overrides)
     return _spoken(build_investigation_messages(**arguments))  # type: ignore[arg-type]
+
+
+def investigation_question(**overrides: object) -> str:
+    """Only the claim-specific half of an investigation question.
+
+    The fixed rules are checked against `SYSTEM_PROMPT` directly. A test about what
+    *this claim* says has to look at this half alone, or a heading that appears in
+    both would make an assertion about one of them pass on the strength of the other.
+    """
+    arguments: dict[str, object] = {
+        "case": a_case(),
+        "order": an_order(),
+        "attachments": some_attachments(),
+        "context": a_context(),
+        "claim_line": a_claim_line(),
+    }
+    arguments.update(overrides)
+    return str(build_investigation_messages(**arguments)[-1].content)  # type: ignore[arg-type]
 
 
 def _spoken(messages: Sequence[BaseMessage]) -> str:
@@ -665,3 +688,148 @@ async def test_the_tools_the_model_was_offered_are_written_down_too() -> None:
 
     assert model.bound_tools == ["inspect_image"]
     assert model.asked[0].tool_names == ("inspect_image",)
+
+
+# --- Past claims inform; they never decide (FR-S.6 to FR-S.12) --------------
+
+
+def a_precedent(**overrides: object) -> PrecedentRecord:
+    """One past claim, so a test writes down only the part it is about."""
+    fields: dict[str, object] = {
+        "precedent_id": "PREC-CASE-0900-L01",
+        "case_id": "CASE-0900",
+        "claim_line_id": "CASE-0900-L01",
+        "user_id": "999999",
+        "product_name": "Liposomal Tripeptide Collagen",
+        "sku": "COLLAGEN1",
+        "unit_price": Decimal("52.00"),
+        "merchant_account": "The bottle arrived cracked in a crushed box.",
+        "match": MatchOutcome.MATCHED,
+        "evidence": (),
+        "assessments": (),
+        "outcome": Recommendation.APPROVE,
+        "amount_usd": Decimal("52.00"),
+        "cap_applied": False,
+        "rep_note": None,
+        "withdrawn": False,
+        "closed_at": datetime(2026, 2, 19, tzinfo=UTC),
+    }
+    fields.update(overrides)
+    return PrecedentRecord(**fields)
+
+
+def a_precedent_set(*records: PrecedentRecord) -> PrecedentSet:
+    """A retrieved set carrying the given records, all rated equally alike.
+
+    No records at all is the interesting case rather than an empty fixture: it is a
+    store that was read and held nothing like this claim, which reads differently from
+    a store that could not be read (FR-S.13).
+    """
+    return PrecedentSet(
+        retrieved=tuple(
+            RetrievedPrecedent(
+                record=record,
+                similarity=PrecedentSimilarity(
+                    score=0.8, reasons=("the product names share: collagen",)
+                ),
+            )
+            for record in records
+        )
+    )
+
+
+def test_the_rules_for_weighing_a_past_claim_are_in_the_wording_every_run_gets() -> None:
+    """FR-S.6: precedent is starting context, so its rules belong in the fixed wording."""
+    assert "SIMILAR CLAIMS HANDLED BEFORE" in SYSTEM_PROMPT
+    assert "They are not rules" in SYSTEM_PROMPT
+
+
+def test_the_model_is_told_precedent_cannot_stand_in_for_evidence() -> None:
+    """FR-S.8: a claim with no photographs does not become payable because another was paid."""
+    assert "does not become payable" in SYSTEM_PROMPT
+    assert "evidence wins" in SYSTEM_PROMPT
+
+
+def test_the_model_is_told_to_flag_a_departure_from_how_alike_claims_were_handled() -> None:
+    """FR-S.10: the moment an inconsistency can still be caught."""
+    assert "recommend something different from how alike claims were handled" in SYSTEM_PROMPT
+
+
+def test_no_past_claim_may_reach_the_merchant() -> None:
+    """FR-S.12: precedent is internal, and another merchant's claim is never a reason given."""
+    assert "Never mention any of this to the merchant." in SYSTEM_PROMPT
+
+
+def test_a_past_claim_is_shown_with_what_it_closed_on() -> None:
+    """FR-S.1: every record is a decision, so the outcome is the thing to show."""
+    said = investigation_question(precedent=a_precedent_set(a_precedent()))
+
+    assert "SIMILAR CLAIMS HANDLED BEFORE" in said
+    assert "closed as: approve" in said
+
+
+def test_the_model_is_told_every_past_claim_shown_was_closed_by_a_person() -> None:
+    """FR-S.1: nothing still in review reaches it, so nothing needs weighing differently."""
+    assert "closed by a ShipBob representative" in SYSTEM_PROMPT
+    assert "have no outcome yet" in SYSTEM_PROMPT
+
+
+def test_a_past_claim_is_marked_as_somebody_elses_words() -> None:
+    """FR-S.7: a past claim reaches the model wearing our formatting, so it is fenced off."""
+    said = investigation_question(precedent=a_precedent_set(a_precedent()))
+
+    assert '<untrusted source="PAST_MERCHANT_DESCRIPTION">' in said
+    assert '<untrusted source="PAST_PRODUCT_NAME">' in said
+
+
+def test_what_a_rep_said_about_the_decision_is_shown() -> None:
+    """FR-S.3: why a claim closed the way it did is what a later claim learns from."""
+    said = investigation_question(
+        precedent=a_precedent_set(
+            a_precedent(rep_note="The outer box photo shows a different parcel.")
+        )
+    )
+
+    assert '<untrusted source="PAST_REP_NOTE">' in said
+    assert "shows a different parcel" in said
+
+
+def test_no_amount_from_a_past_claim_is_put_in_front_of_the_model() -> None:
+    """FR-1.21: the surest way to stop it repeating a figure is never to show it one.
+
+    Scoped to the precedent section on purpose. The order's own line items do carry
+    prices, deliberately, so that two similar products can be told apart — a search
+    over the whole question would find those and prove nothing about precedent.
+    """
+    said = investigation_question(
+        precedent=a_precedent_set(
+            a_precedent(amount_usd=Decimal("52.00"), unit_price=Decimal("52.00"))
+        )
+    )
+    section = said[said.index("SIMILAR CLAIMS HANDLED BEFORE") :]
+
+    assert re.search(r"[$£€]\s?\d|\d+\.\d{2}", section) is None
+
+
+def test_a_store_that_was_read_and_held_nothing_says_so() -> None:
+    """FR-S.13: an ordinary answer, and the model should judge on the evidence alone."""
+    said = investigation_question(precedent=a_precedent_set())
+
+    assert "holds nothing much like this one" in said
+
+
+def test_a_store_that_could_not_be_read_is_never_reported_as_holding_nothing() -> None:
+    """FR-S.13: claiming there is no comparable history when nobody looked is worse than silence."""
+    said = investigation_question(
+        precedent=PrecedentSet(unavailable_reason="The store of past claims could not be read.")
+    )
+
+    assert "could not be read" in said
+    assert "holds nothing much like this one" not in said
+
+
+def test_a_run_that_never_sought_precedent_gets_no_section_about_it() -> None:
+    """FR-S.13: "nobody looked" and "we looked and found none" are different facts."""
+    said = investigation_question(precedent=None)
+
+    assert "SIMILAR CLAIMS HANDLED BEFORE" not in said

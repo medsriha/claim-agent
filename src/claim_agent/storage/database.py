@@ -1,9 +1,10 @@
 """The single file on disk where this service keeps what it has to remember.
 
 Some things cannot be looked up in ShipBob because ShipBob has nowhere to put
-them. Today that is one thing: the corrections a support rep made on a merchant's
+them. Today that is two things: the corrections a support rep made on a merchant's
 earlier claims, which the next claim from that merchant should start out knowing
-about (FR-0.5, FR-3.8).
+about (FR-0.5, FR-3.8); and a record of every damaged product whose claim has been
+closed, so a later claim like one of them can be handled the same way (FR-S.1).
 
 Those go into one SQLite database file. SQLite is a database that lives entirely
 in a single file, with no server to run alongside the service. It was chosen
@@ -29,7 +30,19 @@ from claim_agent.observability import get_logger
 logger = get_logger(__name__)
 
 # The tables, written so that running this on an existing database changes
-# nothing. `id` counts up on its own with each row, which also makes it the
+# nothing.
+#
+# `precedent_lines` keeps the whole record as JSON in one column, with only the
+# few fields a search filters or orders by broken out beside it. The record has
+# nested lists in it — four pieces of evidence, four judgements — and three side
+# tables to hold them would buy nothing: nothing queries inside them, because the
+# careful comparison happens in Python on a handful of candidates.
+#
+# `precedent_search` is SQLite's own full-text index, and it is there purely to
+# narrow the store cheaply: it finds records sharing any meaningful word with the
+# claim in hand, and the scoring then runs over that handful rather than over
+# everything ever stored. It holds words and an id, never a merchant's prose.
+# `id` counts up on its own with each row, which also makes it the
 # tie-breaker when two corrections carry the same moment: the one written first
 # has the lower number, so a read can always put them back in the order they
 # arrived (FR-0.6). `recorded_at` is text rather than a number because a date
@@ -45,6 +58,21 @@ CREATE TABLE IF NOT EXISTS rep_corrections (
 );
 
 CREATE INDEX IF NOT EXISTS rep_corrections_by_user ON rep_corrections (user_id);
+
+CREATE TABLE IF NOT EXISTS precedent_lines (
+    precedent_id TEXT PRIMARY KEY,
+    claim_line_id TEXT NOT NULL,
+    withdrawn INTEGER NOT NULL DEFAULT 0,
+    closed_at TEXT NOT NULL,
+    record TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS precedent_lines_live ON precedent_lines (withdrawn);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS precedent_search USING fts5 (
+    precedent_id UNINDEXED,
+    words
+);
 """
 
 

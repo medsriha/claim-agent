@@ -1032,6 +1032,210 @@ request — and which of them each rule means is our reading rather than ShipBob
 
 ---
 
+### Remembering how similar claims were handled
+
+**What it does** — Writes down every damaged product the system investigates, and when a new
+one arrives, finds the past ones most like it and puts them in front of the AI before it starts
+work.
+
+**Why we need it** — The rest of the system makes each claim *internally* consistent: same
+rules, same investigation, same report. None of it can make today's claim agree with a
+materially identical claim handled three weeks ago, because nothing remembered that claim. This
+is that memory (FR-S.1 to FR-S.14).
+
+It is not the same as [remembering a merchant](#remembering-a-merchant). That answers "what has
+*this merchant* been told before?" and is looked up by account number. This answers "how has a
+claim *like this one* been handled?" and is looked up by what happened, across every merchant.
+A claim can have both, one, or neither.
+
+**How it works**
+
+1. **Capture, but only at the end.** When a representative has decided a product and that
+   decision has taken effect, the system writes down what the merchant said happened, which
+   product it was, which of the four pieces of evidence were there and what each judgement
+   concluded, what the claim closed on, and what was paid. One record per damaged product, named
+   after that product's claim line, so closing the same line again replaces the record rather
+   than adding a second one.
+2. **Nothing still in review is kept.** A claim nobody has decided has no outcome — the system
+   suggested something and no person has agreed or disagreed. Being in the store therefore means
+   a person settled it, which is why no record needs weighing against another.
+3. **Retrieve.** Before the AI investigates a product, the system looks for the past products
+   most like it. It compares four things: the words the merchant used, the words in the product
+   name, which pieces of evidence were present and missing, and whether the damaged product
+   could be tied to a line on the order.
+4. **Score and cut.** Each candidate gets a score between nothing and one. Anything below the
+   threshold is dropped, and only a handful of the best are kept. Both numbers are policy values
+   an operator can change.
+5. **Show the AI.** The kept records go into the question the AI is asked, each with what it
+   closed on and why it was judged similar. The rules for how to treat them are in the fixed
+   wording the AI always gets.
+
+**Where the lookup happens.** Once the claim has been split into products, and before any
+product is investigated, the system looks each product up in turn and hands the result to that
+product's run. It is done in one pass, before the runs fan out, for two reasons: reading the
+store blocks, and doing it inside runs that are meant to happen at once would hold the others
+up; and every run then starts with its precedent already in hand rather than having to ask for
+it. The AI has no way to search the store — if it did, two runs of the same claim could differ
+purely in whether it thought to look, which is the very inconsistency this is meant to remove.
+
+**Why the records go in the claim's own question rather than the standing instructions.** The
+rules for weighing precedent are fixed and belong with the other standing instructions, so that
+is where they live. The records themselves belong with the claim, beside the merchant's
+description and the order — they change with every claim, and the standing instructions are also
+sent when the system asks what a single photograph shows, where past claims are irrelevant and
+would be paid for on every image.
+
+**Finding the candidates.** The database can search text on its own, so the system keeps a
+searchable line of words for each record and asks the database for records sharing any of them.
+That narrows thousands of records to a handful without reading them all, and the careful
+comparison then happens on that handful.
+
+**What it connects to** — It reads nothing from ShipBob. It is written after an investigation
+and read before the next one. The words it shows the AI sit alongside the merchant's own
+description and any past corrections, all marked as text we did not write.
+
+**Anyone can ask it directly.** Two addresses expose the same search the AI is given:
+
+- **`POST /precedent/search`** — describe a claim and get back the past ones most like it, each
+  with its score and the reasons it was thought similar. Everything in the request is optional,
+  because similarity is a matter of degree: a description on its own is a valid search.
+- **`GET /precedent/{id}`** — read one stored claim in full, so a precedent that was cited can
+  actually be checked. Withdrawn records are returned here, marked as withdrawn; hiding them
+  would make a bad record impossible to inspect or put right.
+
+On screen each past claim is **folded shut**, showing only which claim, which product and what
+it closed on. That is the least a representative needs to see whether this claim is going the
+same way as comparable ones; the reasons, the other merchant's words and the representative's
+note open on a click. Five past claims fully unfolded would put a wall of text in front of the
+claim actually being decided.
+
+The search deliberately compares on exactly what the AI compares on. An address that scored
+differently from the real thing would be worse than no address at all, because a representative
+would be carefully checking the wrong answer.
+
+An empty answer always says which kind of empty it is. `was_read` true means we looked and found
+nothing alike; false means the store could not be read. Both come back as successes, because
+being unable to look is not a bad request — but a caller that confused the two would tell a
+representative there is no comparable history when in fact nobody looked.
+
+**Choices we made**
+
+- **Only closed claims are kept.** This was reconsidered. An earlier version recorded every
+  product the moment it was investigated and marked each one with whether a person had looked at
+  it yet. That made the store circular: the AI could be shown its own earlier suggestion as
+  though it were precedent, and the first guess about a kind of claim would become the reason to
+  guess the same way again — inconsistency that is much harder to spot, because on the surface
+  every claim now agrees with the last one. Keeping only decided claims removes the problem at
+  the source rather than managing it. It also removes a whole layer of machinery: with no
+  unsettled records, there is nothing to weigh differently, nothing to mark, and nothing for a
+  reader to misread. The cost is that the store stays empty until claims start closing.
+- **No AI is used to find similar claims.** Comparing meaning with a model would need another
+  paid service, another key, and a network call, and would give slightly different answers on
+  two runs. Instead the comparison is plain word overlap plus the shape of the evidence, which
+  runs offline, costs nothing, and gives the same answer every time.
+- **Word overlap is the weak part, and we know it.** Words common to every claim — "damaged",
+  "order" — count as much as rare ones, so two unrelated claims share a floor of similarity. A
+  proper scheme would weigh a rare word more heavily. Written up under
+  [Would improve](#would-improve).
+- **The amount is stored but never shown to the AI.** A past payout is a fact a representative
+  may want, but the AI is forbidden to write a figure, and the surest way to stop it repeating
+  one is never to show it one.
+- **A store that cannot be read does not stop the claim.** This is the opposite of what merchant
+  memory does, on purpose. Merchant memory has no way to say "unknown" — an empty list would be
+  indistinguishable from a merchant with a clean record — so it fails loudly. Here the answer
+  can say which of the two happened, so a broken store reports itself as broken and the
+  investigation carries on without precedent.
+- **Retrieval happens outside the pre-flight checks.** Deciding whether two claims are alike is
+  a comparison of meaning, not a rule with a right answer, so it does not belong in the layer
+  that must stay strictly rule-based. Keeping it out also means a claim stopped at the gates is
+  never searched for and never written down.
+
+**When things go wrong** — An empty store is the ordinary answer for the first claim ever filed,
+and is reported as "none found" rather than as a failure. A store that cannot be read is
+reported as "could not be read", which is deliberately a different answer: telling a
+representative there is no comparable history, when in fact nobody looked, is worse than saying
+nothing. A record that turns out to be wrong can be withdrawn, which takes it out of future
+searches without touching the record of the claim it came from.
+
+**Not ready for production** — The two addresses have no sign-in, like the rest of this
+demonstration: anyone who can reach the service can read every past claim, across every merchant.
+The lookup blocks while it reads the file, which is fine for a local file and would not be for a
+real database. Nothing closes a claim yet, because the screen where a representative approves a
+report does not exist, so nothing writes a record either — the capture works and is exercised by the tests only,
+and a real store fills up only once claims start being decided. Withdrawing a bad record works
+but is not reachable over HTTP, so it needs a console today. The report a representative reads does not yet show which
+precedents were used, or flag a recommendation that departs from them, and the set a run was
+given is not yet pinned to that run — so the same claim investigated twice can see a different
+store. Those are FR-S.9, FR-S.10 and FR-S.11 and they wait on the report.
+
+**Where the code is** — `src/claim_agent/domain/precedent.py`,
+`src/claim_agent/storage/precedent_store.py`, `src/claim_agent/agent/precedent_context.py`,
+`src/claim_agent/agent/prompts.py`.
+
+---
+
+### Showing a representative how similar claims went
+
+**What it does** — When a claim clears all four checks, the screen asks the service which past
+claims resemble it and shows them at the end of the conversation, each with the service's own
+reasons for thinking it similar.
+
+**Why we need it** — A claim that passes the checks used to end on four green ticks and a note
+saying the investigation does not exist yet. There was nothing on screen a representative could
+actually use. The record of past claims is the one thing the system knows about a passing claim
+without any AI, so it is the one thing worth showing (FR-S.4, FR-S.5).
+
+**How it works**
+
+1. The screening runs as before, and the whole answer comes back.
+2. **Only if the verdict is "proceed"** does the screen ask a second question. A stopped claim
+   is owed an explanation and an email, not a comparison — nothing is going to be investigated,
+   so how comparable claims went does not help anybody.
+3. The screen sends the merchant's own description of what happened, which is all it has: the
+   claim has not been split into products yet, so there is no product or price to compare on.
+   The service does the comparing.
+4. Only when **both** answers are in does the conversation start playing out. The similar claims
+   appear after the verdict, before the note about the investigation.
+
+**What it connects to** — It reads `POST /precedent/search` and nothing else. It sends one field
+and adds nothing: which claims count as similar is entirely the service's judgement, and the
+screen shows the ranking and the reasons exactly as they arrive.
+
+**Choices we made**
+
+- **Only on a claim that passes.** Asked for directly, and right for its own reasons: a stopped
+  claim's conversation ends in an email a representative has to approve, and dropping a
+  comparison in front of that would bury the thing they actually have to act on.
+- **Still a replay, not a race.** Both requests finish before the first message appears. Starting
+  the conversation while the second was still in flight would put finished-looking steps on
+  screen for work that had not finished — the same trap the pacing already avoids.
+- **A failed search does not fail the screening.** The screening succeeded; throwing it away
+  because a second question went unanswered would lose work a representative can use. So the
+  similar-claims message says it could not look, and everything else stands.
+- **"We looked and found none" and "we could not look" are shown differently.** The service
+  distinguishes them and so does the screen. Telling somebody there is no comparable history when
+  in fact nobody managed to look is the one wrong answer here.
+- **The screen sends only the description.** It would be worse to guess at a product: choosing
+  which of an order's items a claim is about is exactly the judgement the splitting stage exists
+  to make, and doing it in the browser would be the screen deciding something. The results are
+  therefore looser than what the investigation will eventually see, which is honest — the screen
+  has less to go on at this point, because less is known.
+
+**When things go wrong** — The service being unreachable, or refusing the request, leaves a
+message saying the past claims could not be read and leaves the rest of the conversation intact.
+An empty result says so plainly rather than showing an empty box.
+
+**Not ready for production** — The search is on the merchant's description alone, so it is
+coarser than the comparison the investigation gets, which also weighs the product, its price and
+the evidence pattern. Nothing on screen says a past claim's outcome was never reviewed by a
+person beyond the label the service sends, and a representative skimming could read the two
+alike. There are still no tests for the UI.
+
+**Where the code is** — `web/src/screens/PreflightScreen.tsx`, `web/src/chat/transcript.ts`,
+`web/src/components/SimilarClaims.tsx`, `web/src/api/client.ts`.
+
+---
+
 ## Future production
 
 This project is an interview exercise. It is not complete and it is not production-hardened,

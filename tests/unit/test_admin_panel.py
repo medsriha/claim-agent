@@ -51,6 +51,7 @@ def test_every_policy_value_is_on_the_panel_exactly_once() -> None:
         "reimbursement_cap_usd",
         "max_claim_age_days",
         "age_limit_inclusive",
+        "uninsured_refund_percentage",
         "high_value_order_usd",
         "high_value_inclusive",
         "damaged_in_transit_sub_category",
@@ -60,9 +61,9 @@ def test_every_policy_value_is_on_the_panel_exactly_once() -> None:
 def test_the_values_left_off_the_panel_are_still_part_of_the_policy() -> None:
     """FR-0.7: off the panel is not gone — they are read, and set from the environment.
 
-    Five of them belong to the AI investigation, which is being built but is not yet
+    Seven of them belong to the AI investigation, which is being built but is not yet
     reachable, so changing one from a screen would do nothing anybody could see. The
-    sixth is the shortest acceptable description, which the checks do read; it is kept
+    eighth is the shortest acceptable description, which the checks do read; it is kept
     off the panel because it is not a knob for demonstrating anything.
     """
     view = describe_policy(in_force())
@@ -74,6 +75,8 @@ def test_the_values_left_off_the_panel_are_still_part_of_the_policy() -> None:
         "max_agent_steps",
         "max_tool_retries",
         "max_image_analyses_per_run",
+        "precedent_results_per_line",
+        "min_precedent_similarity",
         "cap_applies_to_whole_claim",
     }
     assert Policy().max_agent_steps == 12
