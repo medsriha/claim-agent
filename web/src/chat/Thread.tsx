@@ -1,11 +1,15 @@
 /**
  * The conversation about one claim.
  *
- * It draws as many messages as the pacing has counted to, keeps the newest one in view, and
- * offers a way to skip the waiting. It is drawn fresh for each claim — the screen replaces
- * it rather than clearing it — so nothing from the previous claim can survive here.
+ * It draws the messages that have arrived, each either working or settled, and keeps the
+ * newest one in view. It is drawn fresh for each claim — the screen replaces it rather than
+ * clearing it — so nothing from the previous claim can survive here.
+ *
+ * There is no way to skip ahead. Watching the work arrive is the point of the screen, and
+ * anyone who would rather not watch it is covered by asking their machine for less
+ * movement, which settles the whole conversation at once.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { Message } from "./Message";
 import { useReveal } from "./useReveal";
@@ -21,35 +25,36 @@ interface ThreadProps {
 }
 
 export function Thread({ messages, working, caseId, onRetry }: ThreadProps): React.JSX.Element {
-  const { revealed, showAll, revealing } = useReveal(messages.length);
+  // Only what the system reports spins. The representative's own line and the screen's own
+  // notes are nobody working on anything, so they arrive settled.
+  const spins = useMemo(() => messages.map((one) => one.speaker === "system"), [messages]);
+  const { stateOf, arrived } = useReveal(messages.length, spins);
   const foot = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Keeps the newest message in view as the conversation grows. Harmless when nothing
     // scrolls, and the browser decides whether to animate it.
     foot.current?.scrollIntoView({ block: "end" });
-  }, [revealed, working]);
+  }, [arrived, working]);
 
   return (
     <div className="thread">
       <ol className="turns">
-        {messages.slice(0, revealed).map((message) => (
-          <Message key={message.id} message={message} onRetry={onRetry} />
-        ))}
+        {messages.map((message, index) => {
+          const state = stateOf(index);
+          if (state === "hidden") {
+            return null;
+          }
+          return (
+            <Message key={message.id} message={message} state={state} onRetry={onRetry} />
+          );
+        })}
       </ol>
 
       {working && (
         <p className="working" role="status">
           Screening {caseId}…
         </p>
-      )}
-
-      {/* Only offered while there is something left to wait for, so nobody driving a
-          demonstration is held up by a timer. */}
-      {!working && revealing && (
-        <button className="button-secondary show-all" type="button" onClick={showAll}>
-          Show all
-        </button>
       )}
 
       <div ref={foot} />

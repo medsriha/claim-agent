@@ -6,30 +6,49 @@
  * draws were settled when the conversation was laid out.
  */
 import { EmailComposer } from "./EmailComposer";
+import type { MessageState } from "./useReveal";
 import { ClaimRead, OrderRead, ParcelRead } from "../components/CaseReads";
 import { ClaimNumbers } from "../components/ClaimNumbers";
 import { EvaluatedAt, Findings } from "../components/Findings";
 import { FailureNotice } from "../components/FailureNotice";
 import { GateCard } from "../components/GateCard";
+import { Spinner } from "../components/Spinner";
 import { VerdictBanner } from "../components/VerdictBanner";
 import type { TranscriptMessage } from "./transcript";
 
 interface MessageProps {
   message: TranscriptMessage;
+  /** Whether this message is still working or has settled into its finding. */
+  state: MessageState;
   /** Screen the same claim again. Only ever reached from a failure. */
   onRetry: () => void;
 }
 
-export function Message({ message, onRetry }: MessageProps): React.JSX.Element {
+export function Message({ message, state, onRetry }: MessageProps): React.JSX.Element {
   return (
     // Named outright rather than built from the speaker, so the one class that carries a
     // style is greppable and no class name is invented that the stylesheet has no rule for.
     <li className={message.speaker === "rep" ? "turn turn-rep" : "turn"}>
       {message.label !== null && <p className="turn-label">{message.label}</p>}
       <div className="turn-body">
-        <Body message={message} onRetry={onRetry} />
+        <Body message={message} state={state} onRetry={onRetry} />
       </div>
     </li>
+  );
+}
+
+/**
+ * What a message that is still working looks like: something turning, and a word for it.
+ *
+ * A check draws its own working state instead, because it already has a place for a mark
+ * and turning it into a spinner is what makes the mark's arrival read as an answer.
+ */
+function Working(): React.JSX.Element {
+  return (
+    <p className="bubble bubble-working">
+      <Spinner />
+      <span className="working-word">Working…</span>
+    </p>
   );
 }
 
@@ -39,8 +58,15 @@ export function Message({ message, onRetry }: MessageProps): React.JSX.Element {
  * A `switch` over every kind, with no fallback branch: adding a kind without drawing it
  * becomes a type error here rather than a blank space on screen.
  */
-function Body({ message, onRetry }: MessageProps): React.JSX.Element {
+function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
   const { body } = message;
+  const working = state === "working";
+
+  // A check keeps its own frame while it works, so the spinner sits exactly where the tick
+  // or cross will be. Everything else stands behind one plain working message.
+  if (working && body.kind !== "gate") {
+    return <Working />;
+  }
 
   switch (body.kind) {
     case "picked":
@@ -77,7 +103,7 @@ function Body({ message, onRetry }: MessageProps): React.JSX.Element {
     case "gate":
       // No bubble around it: a check card carries its own frame and its own colour down
       // the edge, and nesting that inside another box reads as two things, not one.
-      return <GateCard gate={body.gate} />;
+      return <GateCard gate={body.gate} working={working} />;
 
     case "verdict":
       return (

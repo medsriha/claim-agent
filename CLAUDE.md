@@ -248,9 +248,18 @@ demo choices, written up in DESIGN.md under "Future production".
   them — never sorted, and never summarised into "3 of 4 passed".
 
 - **The pacing is a replay, never a race.** The whole response is fetched first; only then are the
-  findings played out. Starting the reveal while the request is in flight would put a finished
-  step on screen for work that had not finished, or had already failed. A failure therefore shows
-  a failure and no findings at all. Keep it that way.
+  findings played out — each one turning for a moment before it settles, and a check's spinner
+  giving way to a tick or a cross in the same spot. Starting the reveal while the request is in
+  flight would put a finished step on screen for work that had not finished, or had already
+  failed. A failure therefore shows a failure and no findings at all. Keep it that way.
+
+- **The spinners are an illusion and the docs must keep saying so.** A check that appears to be
+  thinking was decided before the message existed. It is the one place this screen shows
+  something that is not so, chosen because a page that fills in silently does not show that the
+  system works in stages. There is deliberately no skip button — only `prefers-reduced-motion`
+  settles the whole conversation at once — so a stopped claim takes about thirteen seconds every
+  time. If you shorten, lengthen, or remove any of this, correct DESIGN.md's **Could break**
+  entry in the same commit; an undocumented fake is the thing to avoid, not the fake itself.
 - **Say as little as possible on screen.** Almost every sentence a rep reads should have come
   from the service. The UI adds labels, not commentary — it is a window onto the rules, and prose
   explaining itself is noise in front of them. The handful of sentences the UI does own live in

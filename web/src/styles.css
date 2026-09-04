@@ -380,6 +380,10 @@ p {
   box-shadow: var(--sb-shadow);
 }
 
+.gate-working {
+  border-left-color: var(--sb-line);
+}
+
 .gate-passed {
   border-left-color: var(--sb-pass);
 }
@@ -424,6 +428,14 @@ p {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.gate-working .gate-mark {
+  background: none;
+}
+
+.gate-working .gate-state {
+  color: var(--sb-ink-faint);
 }
 
 .gate-passed .gate-state {
@@ -722,6 +734,19 @@ p {
   box-shadow: var(--sb-shadow);
 }
 
+/* A step that has not reported yet. Sized so the message does not jump when it settles. */
+.bubble-working {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--sb-ink-faint);
+}
+
+.working-word {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
 .bubble-rep {
   padding: 9px 16px;
   color: var(--sb-on-brand);
@@ -759,8 +784,40 @@ p {
   margin-top: 12px;
 }
 
-.show-all {
-  margin-top: 14px;
+/*
+ * Something turning, to say a step is being worked on. The ring is one border with a
+ * single side coloured in, which is what makes the rotation visible.
+ */
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--sb-line);
+  border-top-color: var(--sb-brand);
+  border-radius: 50%;
+  animation: spinner-turn 640ms linear infinite;
+}
+
+.gate-working .spinner {
+  width: 18px;
+  height: 18px;
+}
+
+@keyframes spinner-turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/*
+ * Nothing should be turning for someone who asked for less movement — and they never see
+ * one anyway, because the conversation settles all at once for them. Belt and braces.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }
 
 /* --- Writing the email -------------------------------------------------- */

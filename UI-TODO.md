@@ -104,15 +104,23 @@ answering to the same id.
 
 - [x] UI-21 — The pacing, and the fact that it is a replay rather than a race.
   - **What was built:** the whole response is fetched first; only then does `chat/useReveal.ts`
-    count the messages out with a pause between each. A "Show all" button skips the wait, and a
-    machine set to reduce motion is given everything at once with no timer started.
+    play the messages out. Each message the system sends has two phases — **working**, showing its
+    heading and a spinner, then **settled**, showing the finding. A check spins and then the
+    spinner is replaced by a tick or a cross in the same place, so the answer lands where the eye
+    already is. About 1.15s per message, so roughly thirteen seconds for a stopped claim.
   - **Conclusion:** **this is the decision to preserve.** Revealing while the request is in flight
     would show a finished step for work that had not finished, or had already failed. Because the
     reveal only ever replays a response that arrived, a failed screening has no steps to show —
     which is structural, not something a check has to catch.
-  - **Be aware:** the pauses measure nothing and look like they might. That is written up in
-    DESIGN.md under **Could break**. The pause length is in the hook, not the theme file, because
-    a timer needs a number and a stylesheet cannot hand one over.
+  - **Be aware:** the spinners are a lie, and a convincing one — every check was decided before
+    its message existed. That is the biggest gap between this screen and the system, and it is
+    written up in DESIGN.md under **Could break**. Keep it written up. The two durations live in
+    the hook rather than the theme file, because a timer needs a number and a stylesheet cannot
+    hand one over.
+  - **Be aware:** there is **no skip button**. One was built and then removed on request — it
+    undercut the point of the screen. `prefers-reduced-motion` is the only way to get the whole
+    conversation at once, and it is an accessibility path, not a convenience, so do not remove it
+    as well. Anyone demoing the same claim repeatedly waits the full thirteen seconds each time.
 
 - [x] UI-22 — The case picker: the nine ids, and no typing box.
   - **What was built:** `components/CasePicker.tsx`, pinned below the conversation, with the

@@ -565,10 +565,13 @@ instead of competing with five others for attention.
    claim at a time, so there is never a doubt about which claim a finding belongs to.
 2. The page asks the system to screen it and says it is working. **Nothing else appears until the
    whole answer has come back.**
-3. Once it has, the page has everything, and it plays the findings out in order, a short pause
-   between each. The order is the order the system does the work in, not an order of ours.
-4. Every check is shown, passed or failed, each one its own finding, and each opens up to reveal
-   the values it looked at.
+3. Once it has, the page has everything, and it plays the findings out in order. Each one
+   appears busy first — its heading, with something turning where its answer will be — and then
+   settles into what was found. The order is the order the system does the work in, not an order
+   of ours.
+4. Every check is shown, passed or failed, each one its own finding. A check turns for a moment
+   and then the turning is replaced by a tick or a cross in the same place, so the answer lands
+   where the eye is already looking. Each one opens up to reveal the values it looked at.
 5. On a stopped claim, the last finding is the drafted email. The representative can change the
    subject and the wording, and press send.
 6. On a claim that passes, there is no email, because the system only writes one to explain a
@@ -587,10 +590,14 @@ writes nothing anywhere. It holds nothing between claims and nothing between vis
   failed a moment later. So the page waits for the whole answer first, and only then plays back
   what actually happened. Every finding on screen is a finding the system really produced.
   A claim that fails shows a failure and no findings whatsoever.
-- **The pauses between findings are the page's own, and they measure nothing.** They exist so a
-  reader can follow one finding before the next arrives. They are not how long any step took.
-  Anyone reading a demo should know that the rhythm on screen is a reading aid and not a
-  measurement.
+- **The rhythm is the page's own, and it measures nothing.** The pauses, and the turning before
+  each finding, exist so a reader can follow one finding before the next arrives. They are not
+  how long any step took — the screening had already finished before the first message appeared.
+  This is the one place the screen deliberately shows something that is not so, and it is worth
+  being blunt about: a check that appears to be thinking has already been decided. We chose it
+  because a page that fills in silently does not show that the system works in stages, and
+  showing that is most of the point of the screen. Anyone driving a demonstration should know
+  the rhythm is a reading aid rather than a measurement.
 - **Sending is a simulation.** There is a send button, and pressing it changes nothing outside
   the browser: no address is contacted, no record is written, and there is no address in the
   system behind the button to call. The stage that would really send an email does not exist.
@@ -620,9 +627,13 @@ writes nothing anywhere. It holds nothing between claims and nothing between vis
   content on screen that a reader could not tell from the real thing. The system's own words are
   reshaped to read rather than restated: the page shows "Claim too old" where the rules say
   `claim_too_old`, and never a phrase of its own choosing.
-- **There is a way to skip the pacing.** A button shows everything at once, and a machine set to
-  reduce motion gets everything at once without asking. Somebody driving a demo should never be
-  waiting on the page, and somebody who finds movement uncomfortable should not have to.
+- **There is no way to skip the pacing, except one.** A machine set to reduce movement is given
+  the whole conversation at once, with nothing turning and no timer started — somebody who finds
+  movement uncomfortable should not have to sit through it. There used to be a button that did
+  the same thing on request, and it was taken out: watching the work arrive is what the screen is
+  for, and a button offering to not do that undercut it. The cost is real, though — a stopped
+  claim takes about thirteen seconds to play out, and there is now nothing to press if you have
+  seen it before.
 - **The typing box is gone.** It was there to reach a claim the sample buttons did not list, and
   the stand-in for ShipBob only serves the nine that are listed, so it could only ever produce
   the "no such claim" answer. The buttons carry ids and nothing else, still: saying what each one
@@ -639,7 +650,8 @@ there is never a half-told story on screen.
 
 **Not ready for production** — One screen, showing the quick checks, because that is all that
 exists. It cannot approve a report, send an email anywhere real, ask for the claim to be looked
-at again, or fetch back a screening. An edit to an email is lost the moment another claim is
+at again, or fetch back a screening. It also cannot be hurried: about thirteen seconds to play
+out a stopped claim, every time, with nothing to press to skip it. An edit to an email is lost the moment another claim is
 picked, and is never recorded against the merchant, so the system still learns nothing from it.
 Nothing it shows is stored. It has no sign-in, no tests, and has never been tried by a
 representative or with a screen reader. The wordmark is not ShipBob's typeface.
@@ -814,12 +826,16 @@ finds in production.
   deliberate, and it means a figure arriving in an unexpected shape would appear on screen in
   that shape rather than being quietly tidied up. Tidying it up in the browser is the thing this
   project most wants to avoid, so the trade was made knowingly.
-- **The rhythm of the conversation is invented, and looks like it is not.** The findings appear
-  one at a time with a pause between them, and those pauses are the screen's own — they are a
-  reading aid and they measure nothing. Somebody watching a demonstration could easily take them
-  for how long each step took, and conclude the checks are slow or that the parcel took a moment
-  to read. The screen waits for the whole answer before it starts, so nothing shown is invented;
-  only the spacing is.
+- **The rhythm of the conversation is invented, and now looks convincingly like it is not.**
+  Each finding turns before it settles, which reads as a step being worked on. It is not: the
+  screening finished before the first message appeared, and every pause is a fixed length the
+  screen chose. Somebody watching could reasonably conclude that the checks take about a second
+  each, that the parcel was slow to read, or that a spinning check is still undecided — and be
+  wrong on all three. The findings themselves are never invented, because the screen waits for
+  the whole answer before it starts; only the timing is. This is the largest gap between what
+  this screen shows and what the system does, and the only defence against it is that it is
+  written down here and in the design notes beside the code. It would go away entirely if the
+  service reported its stages as it went — see **Would improve**.
 - **Only the conversation holds a screening.** It was true before that nothing was stored, and it
   bites harder now: picking a second claim throws the first conversation away without asking, and
   takes any rewording of its email with it. There is no way back to it.
