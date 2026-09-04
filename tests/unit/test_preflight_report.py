@@ -1,0 +1,177 @@
+"""The write-up a rep gets when a claim cannot be processed at all (FR-0.4).
+
+The email inside the write-up has its own tests next door; these are about the write-up
+around it — what it summarises, what it keeps, and what it deliberately never says.
+"""
+
+from __future__ import annotations
+
+from decimal import Decimal
+from typing import Any
+
+import pytest
+
+from claim_agent.domain.models import Case, GateName, TerminalReason
+from claim_agent.policy import Policy
+from claim_agent.preflight.models import ClaimContext, GateResult, TerminalReport
+from claim_agent.preflight.report import build_terminal_report
+from fixtures.shipbob import CASE_1004, without
+
+# What the age check recorded on CASE-1004: delivered 26 December 2025, opened 9 March
+# 2026, 73 days apart. Both dates and the day count are quoted in REQUIREMENTS.md.
+AGE_OBSERVED = {
+    "case_delivered_date": "2025-12-26T12:13:36+00:00",
+    "shipment_delivered_date": "2025-12-26T12:13:36+00:00",
+    "delivered_date_used": "2025-12-26T12:13:36+00:00",
+    "delivered_date_taken_from": "the claim record",
+    "case_created_date": "2026-03-09T18:51:42+00:00",
+    "days_since_delivery": "73",
+    "age_limit_days": "60",
+    "limit_day_still_counts": "yes",
+}
+
+AGE_FAILED = GateResult(
+    gate=GateName.AGE,
+    passed=False,
+    reason=TerminalReason.CLAIM_TOO_OLD,
+    explanation="The claim was opened 73 days after delivery, past the 60 day limit.",
+    observed=AGE_OBSERVED,
+)
+
+KEY_INFORMATION_FAILED = GateResult(
+    gate=GateName.KEY_INFORMATION,
+    passed=False,
+    reason=TerminalReason.MISSING_KEY_INFORMATION,
+    explanation="This claim is missing a description of what happened.",
+    observed={"missing": "a description of what happened"},
+)
+
+CLAIM_TYPE_PASSED = GateResult(
+    gate=GateName.CLAIM_TYPE,
+    passed=True,
+    explanation="The case is a damaged-in-transit claim.",
+    observed={"sub_category": "Claim | Damaged in Transit"},
+)
+
+INSURANCE_PASSED = GateResult(
+    gate=GateName.INSURANCE,
+    passed=True,
+    explanation="The shipment was not insured.",
+    observed={"is_insured": "false"},
+)
+
+ALL_FOUR_GATES = (AGE_FAILED, CLAIM_TYPE_PASSED, KEY_INFORMATION_FAILED, INSURANCE_PASSED)
+
+
+def make_context(**overrides: Any) -> ClaimContext:
+    """Build the facts worked out about CASE-1004 before the checks ran."""
+    fields: dict[str, Any] = {
+        "order_value_usd": Decimal("60.50"),
+        "is_high_value": False,
+        "days_since_delivery": 73,
+        "delivered_date": "2025-12-26T12:13:36+00:00",
+    }
+    fields.update(overrides)
+    return ClaimContext(**fields)
+
+
+def build(
+    *,
+    case: Case | None = None,
+    reasons: tuple[TerminalReason, ...] = (TerminalReason.CLAIM_TOO_OLD,),
+    gates: tuple[GateResult, ...] = ALL_FOUR_GATES,
+    context: ClaimContext | None = None,
+) -> TerminalReport:
+    """Write up CASE-1004 as a stopped claim, varying only what a test cares about."""
+    return build_terminal_report(
+        case if case is not None else Case.model_validate(CASE_1004),
+        reasons,
+        gates,
+        context if context is not None else make_context(),
+        Policy(),
+    )
+
+
+def test_a_stopped_claim_produces_a_write_up_carrying_a_drafted_email() -> None:
+    """FR-0.4: a claim that cannot be processed still reaches a rep as something to approve."""
+    report = build()
+
+    assert report.case_id == "CASE-1004"
+    assert report.drafted_email.body
+    assert report.requires_rep_approval is True
+
+
+def test_the_write_up_says_who_the_claim_is_from() -> None:
+    """FR-0.4: a rep approving a closure needs to see whose claim they are closing."""
+    report = build()
+
+    assert report.account_name == "Catalyze-X"
+    assert report.user_id == "374167"
+
+
+def test_a_case_naming_no_merchant_still_produces_a_write_up() -> None:
+    """FR-0.4: the merchant name is display text and can be absent; the claim still closes."""
+    report = build(case=Case.model_validate(without(CASE_1004, "account_name", "user_id")))
+
+    assert report.account_name is None
+    assert report.user_id is None
+    assert report.drafted_email.body
+
+
+def test_the_summary_holds_one_sentence_for_each_check_that_failed() -> None:
+    """NFR-3: a rep reads why the claim stopped without having to decode the raw values."""
+    report = build(reasons=(TerminalReason.CLAIM_TOO_OLD, TerminalReason.MISSING_KEY_INFORMATION))
+
+    assert report.findings == (AGE_FAILED.explanation, KEY_INFORMATION_FAILED.explanation)
+
+
+def test_the_write_up_keeps_the_checks_that_passed_as_well() -> None:
+    """NFR-3: a rep can see the insurance check ran and passed, rather than infer it."""
+    report = build()
+
+    assert len(report.gates) == 4
+    assert [gate.gate for gate in report.gates] == [
+        GateName.AGE,
+        GateName.CLAIM_TYPE,
+        GateName.KEY_INFORMATION,
+        GateName.INSURANCE,
+    ]
+    assert [gate.passed for gate in report.gates] == [False, True, False, True]
+
+
+def test_the_reasons_are_kept_in_the_order_they_were_ranked() -> None:
+    """FR-0.4: the first reason is the one the email leads with, so the order matters."""
+    reasons = (TerminalReason.CLAIM_TOO_OLD, TerminalReason.MISSING_KEY_INFORMATION)
+
+    report = build(reasons=reasons)
+
+    assert report.reasons == reasons
+    assert "opened too long after delivery" in report.drafted_email.subject
+
+
+def test_the_facts_gathered_up_front_travel_with_the_write_up() -> None:
+    """FR-0.5: the work already done is not thrown away because the claim stopped."""
+    report = build()
+
+    assert report.context.days_since_delivery == 73
+    assert report.context.order_value_usd == Decimal("60.50")
+
+
+def test_the_write_up_names_no_amount_of_money() -> None:
+    """FR-0.4: the pre-flight screen recommends nothing, so it has no figure to give.
+
+    The value of the order still travels with the write-up as a fact a rep may want. What
+    must not appear is money in the words — a sum in a finding or in the merchant's email
+    would read as an offer nobody has made.
+    """
+    report = build()
+    written = " ".join([*report.findings, report.drafted_email.subject, report.drafted_email.body])
+
+    assert "$" not in written
+    assert "60.50" not in written
+
+
+def test_a_stopped_claim_with_no_reason_at_all_is_refused() -> None:
+    """FR-0.4: a claim stopped for nothing anyone can name would reach a rep as a blank."""
+    with pytest.raises(ValueError, match="at least one reason"):
+        build(reasons=())
