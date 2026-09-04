@@ -162,7 +162,7 @@ export function PolicyScreen(): React.JSX.Element {
             disabled={busy || !canPutBack}
             onClick={putBack}
           >
-            Put back the startup values
+            Reset
           </button>
         </div>
       </section>
