@@ -5,6 +5,11 @@ Every requirement in [REQUIREMENTS.md](REQUIREMENTS.md) — all 83 — by id onl
 There are no descriptions here on purpose: REQUIREMENTS.md already holds them, and a second
 copy would drift out of step with the first. Look the id up there.
 
+**The UI is tracked in [UI-TODO.md](UI-TODO.md), not here.** REQUIREMENTS.md puts the
+reviewer-facing UI out of scope — "specified separately" — and that separate specification is
+not in this repo, so UI work has no requirement id to trace to. It gets its own file and its own
+ids rather than boxes in this one.
+
 **Tick a box only when the requirement is genuinely done** — implemented, covered by a test
 that names the id, and explained in [DESIGN.md](DESIGN.md). Then write, underneath it, what
 was built, what a future reader should take away, and anything they need to be aware of. A

@@ -11,6 +11,10 @@ structured report plus a drafted merchant email.
 **The system recommends; a rep decides.** Nothing reaches a merchant, and no money moves,
 without explicit human approval.
 
+A **demo UI** in `web/` puts a screen in front of it. It shows a rep what the backend returned
+and nothing more — there is no send button, because nothing the UI can reach is able to send. It
+exists to show the system working, not to be run in production. See [The UI](#the-ui).
+
 ## Requirements
 
 **[REQUIREMENTS.md](REQUIREMENTS.md) is the authoritative source of project requirements.**
@@ -107,6 +111,10 @@ still has to say what it is for.
 the first time. This applies to docstrings, comments, log messages, error messages, and test
 names alike — anything a human reads.
 
+**None of this is about Python.** A React component and a TypeScript module get the same
+treatment as a function in `src/` — a plain-words opening comment saying what it is for,
+comments that explain why, and no `TODO`s.
+
 ## Progress
 
 **[TODO.md](TODO.md) tracks which requirements are done.** It lists every requirement id in
@@ -125,6 +133,12 @@ Keep it to a few lines; the full explanation belongs in DESIGN.md. Tick a box on
 requirement is genuinely done (see [Working on a feature](#working-on-a-feature)) — a tracker
 that overstates progress is worse than no tracker.
 
+**[UI-TODO.md](UI-TODO.md) tracks the UI.** REQUIREMENTS.md puts the reviewer-facing UI out of
+scope — "specified separately" — and that separate specification is not in this repo, so UI work
+has no requirement id to trace to. It is tracked under ids we made up (`UI-1`, `UI-2`) in their
+own file, which is why TODO.md can go on holding REQUIREMENTS.md ids and nothing else. Same tick
+discipline: a box goes green when the thing actually works, not when it is nearly done.
+
 ## Stack
 
 | Concern | Choice |
@@ -138,6 +152,13 @@ that overstates progress is worse than no tracker.
 | Types | mypy, strict |
 | Tests | pytest |
 | Automation | pre-commit + GitHub Actions |
+| UI | React + TypeScript on Vite, in `web/` |
+| UI packages | npm (`package.json` + committed `package-lock.json`) |
+| UI lint & types | eslint, `tsc --noEmit` |
+
+No Prettier, no component library, no state-management library. A demo screen does not earn
+them, and "prefer the standard library over a new dependency" applies to npm just as it does to
+Python.
 
 ## Layout
 
@@ -157,6 +178,11 @@ src/claim_agent/
   storage/        reports, versions, feedback, merchant memory, audit trail
 tests/unit/       fast, no I/O
 tests/integration/ through the HTTP surface
+
+web/              React + TypeScript demo UI
+  src/api/        typed client for the backend
+  src/theme/      ShipBob colours and logo — provisional values
+  src/screens/    one screen per thing a rep does
 ```
 
 Layer packages mirror REQUIREMENTS.md so a requirement maps to an obvious place.
@@ -176,6 +202,46 @@ These follow from the requirements and are not negotiable without changing them:
 - **Fail toward the human.** Timeouts, malformed responses, exhausted budgets all end in
   escalation, never in a silent approval or a dropped case (NFR-4).
 - **Business logic goes in `domain/`**, testable without a network, a model, or a database.
+
+## The UI
+
+A React and TypeScript screen in `web/`, served by Vite. It is a **demo**: it shows the system
+working. It has no sign-in, no idea which rep is using it, and stores nothing — the same gaps
+DESIGN.md already records for the backend.
+
+**What v1 does.** One screen. A rep types a case id; the UI calls
+`POST /cases/{case_id}/preflight` and renders the answer — the verdict, the four checks, the
+claim context, and, when a claim is stopped, the rep-facing report and the drafted merchant
+email. There is no request body to send: the case id in the path is the whole input.
+
+**The backend's rules do not stop at the browser.** Restated for anyone writing UI code:
+
+- **No business logic in the UI.** It renders what the API returned. It never works out a
+  verdict, never decides whether a check passed, never re-orders the reasons. The backend ranks
+  terminal reasons deliberately, because the first one heads the merchant's email — display them
+  in the order they arrive.
+- **No money arithmetic in JavaScript.** This is the browser half of "no money from model
+  output" (FR-1.21, NFR-2). A line item on the wire carries only `quantity` and a string
+  `unit_price`; the totals behind them are computed in Python and are **not** in the JSON. Do not
+  multiply them in TypeScript — show `context.order_value_usd`, which the backend worked out as
+  an exact decimal. Money arrives as a string (`"90.00"`) so that it never becomes a float. Keep
+  it a string.
+- **Fail toward the human** (NFR-4). Every failure renders something a rep can act on. The
+  backend speaks one error shape — `{"error": {"code", "message", "details"}}` — and the codes
+  reachable from Layer 0 are `not_found` (404) and `upstream_unavailable` (502). A blank screen
+  or an error only in the console is a bug.
+- **A draft is never a send.** `drafted_email.is_draft` is always true, and the UI is what makes
+  that visible: the word "draft" is deliberately absent from the email body so a marker can never
+  reach a merchant. v1 has no send action, and there is no endpoint behind one.
+- **Show all four checks, always.** The backend returns all four whether they passed or failed,
+  so a rep sees what passed rather than inferring it from silence. Do not hide the passing ones.
+
+**Theme.** Every colour, font and the logo path live in one file under `web/src/theme/`. Those
+hex values are our approximation of ShipBob's public branding, not values ShipBob gave us — the
+file must say so, the same way `policy.py` marks its provisional thresholds.
+
+**Writing it.** [Documenting the code](#documenting-the-code) applies unchanged. TypeScript is
+strict and `any` is not allowed, for the same reason mypy is strict over `src`.
 
 ## Working on a feature
 
@@ -203,6 +269,10 @@ session.
 
 Carry the requirement id into docstrings, test names, and commit messages, so any behaviour can
 be traced back to the requirement that motivated it.
+
+**UI work runs the same loop** — one item at a time, in progress then done — against
+[UI-TODO.md](UI-TODO.md) instead, and a UI feature still writes its DESIGN.md section before the
+code like everything else. There is no requirement id to carry, so carry the `UI-` id.
 
 ## Engineering standards
 
@@ -261,6 +331,11 @@ make test       # pytest with coverage
 make lint       # ruff check + format check
 make typecheck  # mypy
 make check      # everything CI runs
+
+make ui-install # npm install in web/
+make ui-dev     # vite dev server, proxying the API
+make ui-build   # production build
+make ui-lint    # eslint + tsc --noEmit
 ```
 
 ## Quality gates
@@ -269,6 +344,12 @@ Pre-commit runs ruff and mypy on every commit and pytest on every push. **Use th
 never bypass them with `--no-verify`.** CI (`.github/workflows/ci.yml`) runs lint, format,
 types, and tests on every push to `main` and every pull request. Run `make check` before
 pushing.
+
+**The UI is not gated, deliberately.** `make check` and CI are Python only — they do not lint,
+typecheck or build `web/`, and the pre-commit hooks are scoped to Python files so they will not
+fire on a change that only touches the UI. That is the trade we took for a demo artifact: the
+push loop stays fast and CI needs no Node. It means **nothing catches a broken UI for you** —
+run `make ui-lint` yourself before pushing UI changes.
 
 ## Git
 
@@ -295,8 +376,25 @@ Open engineering choices — decide with the user, then record the outcome here:
   numbers right.
 - **Reimbursement cap semantics** — per claim line or per claim (REQUIREMENTS.md open
   question 2).
+- **How the browser reaches the API.** Nothing configures cross-origin access today; the only
+  middleware the app adds is the one that tags a request with its id. Either add the framework's
+  cross-origin middleware, or proxy the API through the Vite dev server. The proxy is the
+  recommendation: it needs no backend change, and it avoids opening a service that has no
+  authentication to arbitrary origins.
+- **There is no ShipBob mock server in this repo.** The backend makes real HTTP calls to
+  `SHIPBOB_BASE_URL`, and the tests intercept them in-process, so nothing serves those payloads
+  outside a test run. A UI demo needs something at that address — this is the biggest practical
+  blocker to the whole thing working end to end.
+- **How the Layer 0 report and the Layer 2 report reconcile.** The report shape the UI renders
+  today is scoped to Layer 0. Layer 2 has its own requirements (FR-2.1–FR-2.10) that nobody has
+  built; TODO.md's FR-0.4 note says the two will need reconciling rather than one being extended.
+  A UI written tightly against today's shape will need rework then.
 
 Decided:
 
 - **Persistence backend: SQLite**, one file, path from `DATABASE_PATH`. Chosen for merchant
   memory in Layer 0. Reports, versions, feedback, and the audit trail still have no schema.
+- **The UI lives in `web/`**, React and TypeScript on Vite, in this repo. Demo-grade on purpose,
+  and outside the quality gates — see [The UI](#the-ui) and [Quality gates](#quality-gates).
+- **ShipBob's colours and logo are provisional**, kept in one theme file and marked as our
+  approximation, so correcting them later is one edit rather than a hunt.
