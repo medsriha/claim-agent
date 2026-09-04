@@ -39,5 +39,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return the process-wide settings, read once."""
+    """Return the settings for this process.
+
+    Cached, so the environment is read once at startup instead of on every request,
+    and every caller sees the same values.
+    """
     return Settings()

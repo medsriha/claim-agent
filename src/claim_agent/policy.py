@@ -62,5 +62,9 @@ class Policy(BaseSettings):
 
 @lru_cache
 def get_policy() -> Policy:
-    """Return the process-wide policy, read once."""
+    """Return the claim policy for this process.
+
+    Cached like the settings: read once, so a threshold cannot change midway through
+    judging a claim.
+    """
     return Policy()

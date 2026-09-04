@@ -71,6 +71,42 @@ limitation rather than something a reader has to discover.
 - Never quietly work around a gap or leave a `TODO` comment in the code instead. Write it down
   here, where someone will actually read it.
 
+## Documenting the code
+
+**The DESIGN.md rule applies inside the code too: write so someone who has never seen this
+project can follow it.** A reader should understand what a piece of code is for without already
+knowing the domain, the requirements, or the rest of the codebase. Assume the next person is
+new here — because they are.
+
+**Every module, class, and function gets a docstring.** Short ones included; a small function
+still has to say what it is for.
+
+- Open with one sentence in plain words saying what it does: "Work out how many days passed
+  between delivery and the merchant opening the case." Not "Compute the delta."
+- Say **why it exists** when that is not obvious, and name the requirement id it serves
+  (`FR-0.2`) so the reader can look up the full rule.
+- Explain a domain word the first time it appears. Nobody arrives knowing what a claim line, a
+  terminal verdict, or shared evidence means.
+- Tell the caller what they need: what goes in, what comes back, and what it raises. Say what an
+  empty or missing value means — in this project that is usually the interesting case.
+- Do not restate the signature. `"""Return the settings."""` on `get_settings()` earns its
+  space back only by saying something the name does not, such as why it is cached.
+
+**Comments explain why, never what.**
+
+- Comment the reasoning, the trade-off, or the surprise. If a line needs a comment to say what
+  it does, rename or simplify it instead.
+- Anything that looks wrong but is deliberate needs a comment saying so, or the next person will
+  helpfully "fix" it.
+- Keep comments true. One that describes code which has since changed is worse than none —
+  correct it in the same edit.
+- No commented-out code, and no `TODO` comments. Gaps belong in DESIGN.md under **Future
+  production**, where someone will actually read them.
+
+**Plain language throughout.** Short sentences, everyday words, and spell an abbreviation out
+the first time. This applies to docstrings, comments, log messages, error messages, and test
+names alike — anything a human reads.
+
 ## Progress
 
 **[TODO.md](TODO.md) tracks which requirements are done.** It lists every requirement id in
@@ -191,8 +227,8 @@ be traced back to the requirement that motivated it.
 - Small functions that do one thing and are named for that thing. Prefer an early return to a
   nested `if`.
 - Keep the main path a straight line down the page and push edge cases to the edges.
-- Comment *why*, never *what*. If a line needs a comment to say what it does, rename or simplify
-  it instead.
+- Docstrings and comments follow [Documenting the code](#documenting-the-code) — plain words,
+  readable by someone new to the project.
 - Build the simplest thing that satisfies the requirement. No configuration, indirection, or
   extension points for needs nobody has yet — an abstraction with one implementation is a
   liability, not foresight.
