@@ -49,7 +49,9 @@ class EventKind(StrEnum):
 
     They fall into three groups. `SCREENED`, `ATTACHMENTS_LISTED`,
     `IMAGE_CLASSIFIED`, `EVIDENCE_SETTLED` and `CLAIM_SPLIT` are about the claim
-    as a whole, and happen once. `LINE_STARTED`, `TOOL_CALLED`, `THINKING` and
+    as a whole, and happen once. `PRECEDENT_GATHERED` sits between the two groups:
+    the claim has been split by then, so it is about one product, but it happens
+    before any product's investigation starts. `LINE_STARTED`, `TOOL_CALLED`, `THINKING` and
     `LINE_FINISHED` are about one damaged product, and happen once per product —
     several products are investigated at the same time, so these interleave, and
     every one of them names the product it belongs to.
@@ -61,6 +63,13 @@ class EventKind(StrEnum):
     `TOOL_CALLED` is the interesting one to watch: it is the investigation
     choosing what to look at next, which is the whole reason this is an agent and
     not a fixed sequence of steps (FR-1.1).
+
+    `PRECEDENT_GATHERED` is the one a representative is most likely to want to
+    stop and read, because it says what comparable claims were actually decided
+    before this one. It has to distinguish three answers and not two: records were
+    found, the store was read and held nothing alike, or the store could not be
+    read at all. Collapsing the last two would tell somebody there is no comparable
+    history when in truth nobody managed to look (FR-S.13).
     """
 
     SCREENED = "screened"
@@ -68,6 +77,7 @@ class EventKind(StrEnum):
     IMAGE_CLASSIFIED = "image_classified"
     EVIDENCE_SETTLED = "evidence_settled"
     CLAIM_SPLIT = "claim_split"
+    PRECEDENT_GATHERED = "precedent_gathered"
     LINE_STARTED = "line_started"
     TOOL_CALLED = "tool_called"
     THINKING = "thinking"

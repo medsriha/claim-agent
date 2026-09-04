@@ -313,3 +313,17 @@ async def test_the_form_that_was_asked_for_is_named_in_the_failure_details() -> 
     assert raised.value.details == {"form": "Verdict"}
     # The provider's own wording never travels out through the API.
     assert "the key is wrong" not in raised.value.message
+
+
+def test_a_key_set_to_nothing_counts_as_no_key_at_all() -> None:
+    """NFR-6: the ordinary state of an unconfigured machine has to be handled.
+
+    `.env.example` ships `ANTHROPIC_API_KEY=` with nothing after it, which is what a
+    machine nobody has configured yet looks like. An empty string is not `None`, so a
+    check for `None` alone would let it through and the run would fail much later as an
+    unhelpful complaint from the provider — instead of one sentence naming the setting
+    to fill in.
+    """
+    for nothing in ("", "   "):
+        with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
+            build_chat_model(Settings(environment="test", anthropic_api_key=nothing))

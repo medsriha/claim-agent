@@ -29,7 +29,7 @@ the product's own investigation did not already decide — apart from that cap.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
 from langchain_core.language_models import BaseChatModel
@@ -168,6 +168,7 @@ async def investigate_claim(
     precedent = _precedent_for_each(
         store=precedent_store, case=record.case, lines=triage.claim_lines, policy=policy
     )
+    await _say_what_precedent_was_found(precedent, lines=triage.claim_lines, events=events)
 
     # Each product gets its own investigation, and they run together. Nothing is
     # shared between them but read-only facts: the same records, the same settled
@@ -243,6 +244,62 @@ def _precedent_for_each(
         )
         for line in lines
     }
+
+
+async def _say_what_precedent_was_found(
+    precedent: Mapping[str, PrecedentSet],
+    *,
+    lines: Sequence[ClaimLine],
+    events: EventStream,
+) -> None:
+    """Tell whoever is watching what comparable past claims were found, product by product.
+
+    Said before any product is investigated, because that is when it is known and
+    because it is context a representative reads rather than a result they wait for: it
+    says how claims like this one were actually decided (FR-S.5, FR-S.6).
+
+    **Three answers, never two.** Records were found; the store was read and held nothing
+    alike; or the store could not be read. The last two must not be run together — a
+    representative told "no comparable history" when in truth nobody managed to look has
+    been given a fact that was never established (FR-S.13). A product with no entry at
+    all is a fourth thing again, and says plainly that no lookup was made.
+
+    Emitted in the order the products will be investigated, so two runs of one claim
+    narrate themselves identically (NFR-1).
+    """
+    for line in lines:
+        found = precedent.get(line.claim_line_id)
+
+        if found is None:
+            summary = "No past claims were looked up for this product."
+            outcome = "not_looked_up"
+            count = 0
+        elif not found.was_read:
+            summary = (
+                "Past claims could not be read for this product, so nothing is known "
+                "about how claims like it were handled."
+            )
+            outcome = "unreadable"
+            count = 0
+        elif not found.retrieved:
+            summary = "No past claim close enough to this product was found."
+            outcome = "none_alike"
+            count = 0
+        else:
+            count = len(found.retrieved)
+            summary = (
+                f"Found {count} past claim(s) like this product, out of "
+                f"{found.considered} looked at."
+            )
+            outcome = "found"
+
+        await events.emit(
+            EventKind.PRECEDENT_GATHERED,
+            summary,
+            claim_line_id=line.claim_line_id,
+            outcome=outcome,
+            found=str(count),
+        )
 
 
 class ClaimCapVerdict(BaseModel):

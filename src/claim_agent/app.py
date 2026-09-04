@@ -9,14 +9,16 @@ import httpx
 from fastapi import FastAPI
 
 from claim_agent import __version__
+from claim_agent.agent.images import ImageFetcher
 from claim_agent.api.exception_handlers import register_exception_handlers
 from claim_agent.api.middleware import RequestContextMiddleware
-from claim_agent.api.routes import admin, health, precedent, preflight
+from claim_agent.api.routes import admin, health, investigate, precedent, preflight
 from claim_agent.live_policy import LivePolicy
 from claim_agent.observability import configure_logging, get_logger
 from claim_agent.policy import Policy, get_policy
 from claim_agent.settings import Settings, get_settings
 from claim_agent.shipbob.client import ShipBobClient
+from claim_agent.shipbob.evidence_client import EvidenceClient
 from claim_agent.storage.merchant_memory import MerchantMemory
 from claim_agent.storage.precedent_store import PrecedentStore
 
@@ -32,6 +34,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # server stops. Only the closing happens here; see `create_app` for why the client
     # itself is not built here.
     await app.state.shipbob.aclose()
+    await app.state.evidence.aclose()
+    await app.state.attachment_http.aclose()
     logger.info("service_stopping")
 
 
@@ -76,12 +80,28 @@ def create_app(
         ),
         max_attempts=settings.shipbob_max_attempts,
     )
+    # The images an investigation looks at live at a storage address that has nothing
+    # to do with ShipBob's API, so they are fetched with a client of their own. Sharing
+    # ShipBob's would mean sending its credentials to a storage host, which is the kind
+    # of thing that only has to happen once to be a problem.
+    app.state.evidence = EvidenceClient(
+        httpx.AsyncClient(
+            base_url=settings.shipbob_base_url,
+            timeout=settings.shipbob_timeout_seconds,
+        ),
+        max_attempts=settings.shipbob_max_attempts,
+    )
+    app.state.attachment_http = httpx.AsyncClient(
+        timeout=settings.attachment_timeout_seconds, follow_redirects=False
+    )
+    app.state.image_fetcher = ImageFetcher(app.state.attachment_http, settings)
     app.state.merchant_memory = merchant_memory or MerchantMemory(settings.database_path)
     app.state.precedent_store = precedent_store or PrecedentStore(settings.database_path)
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(preflight.router)
+    app.include_router(investigate.router)
     app.include_router(admin.router)
     app.include_router(precedent.router)
     return app

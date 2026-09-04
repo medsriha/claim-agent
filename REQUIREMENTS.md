@@ -50,6 +50,8 @@ specified separately.
 | **Report** | The structured output the agent produces for the rep to act on — one per claim line. |
 | **Precedent** | A record of a claim line this system investigated before, kept so a later claim like it can be handled the same way. |
 | **Precedent store** | Where those records are kept and searched. The system writes it itself; no ShipBob endpoint supplies it. |
+| **Merchant memory** | What a rep has already corrected on a merchant's earlier claims, found by that merchant's id. The system keeps this itself too. |
+| **Decision record** | What a rep did with a report — approved it, edited it, sent it back, overrode it. The system's own record of the moment a recommendation became a decision. |
 
 ## Available data
 
@@ -91,6 +93,7 @@ Layer 2   Report           structured     →  one report per product; the rep d
    ├── rep gives feedback →  Layer R  same agent, re-run  →  revised report, back to Layer 2
    └── rep approves       →  Layer 3
 Layer 3   Execution        deterministic  →  one email and one reimbursement per product
+   └── what the rep decided   →  merchant memory + the precedent store  →  the next claim
 ```
 
 A claim can cover more than one damaged product. Everything from Layer 1b onward operates
@@ -107,6 +110,10 @@ Precedent is not a fifth layer. It is a store the system keeps for itself: every
 Layer 1b investigates is written into it, and every later line that resembles one is given it to
 read. It exists because the layers above make each claim *internally* consistent and cannot make
 two separate claims agree with each other. See **Claim precedent** below.
+
+Both stores are read on the way in and written on the way out, and the write is triggered by a
+rep deciding a claim line rather than by any layer finishing. That step is specified in
+**Carry-forward** below, after the precedent section it depends on.
 
 Note the distinction between a recommendation and a decision. The agent produces a
 recommended outcome because the rep needs a starting point and the email cannot be drafted
@@ -985,6 +992,157 @@ long a record stays relevant before a policy change makes it misleading are all 
 that nobody has ruled on. They belong in the single policy place (FR-0.7) so they can be
 corrected once real guidance exists, and no starting value for any of them should be read as
 ShipBob's position.
+
+---
+
+# Carry-forward — what a rep decided, and what the next claim knows
+
+Two things in this system are meant to get better with use. Merchant memory remembers what a rep
+has already corrected for a particular merchant (FR-3.8). The precedent store remembers how a
+claim like this one was handled, whoever it belonged to (FR-S.1). Both are read on the way in:
+memory arrives with the facts computed before the agent runs (FR-0.5), and precedent arrives
+before each per-line investigation (FR-S.6).
+
+Both are written on the way out, and that half is the one nothing so far specifies. Every write is
+caused by the same event — **a rep deciding a claim line** — and no requirement says that event is
+written down anywhere. FR-2.8 says what a rep may do. FR-3.1 says an approval is what releases
+execution. FR-3.8 and FR-R.14 say a correction is persisted against the merchant. FR-S.1 says a
+precedent record is written when a line closes. None of them says who writes those records, or
+from what. So the promise the system makes — *better on the next claim, not just this one* — rests
+on a step that does not exist, and both stores can currently only be read.
+
+This section specifies that step. It is deliberately small: one record of what a person decided,
+and two writes derived from it.
+
+**Recording a decision is not executing one.** Writing down what a rep chose sends no email and
+moves no money. FR-3.1 still governs execution and nothing here relaxes it. Keeping the two apart
+is also what lets the decision survive a failed send (FR-3.6): what the rep decided is a fact
+about the rep, not about whether an API call worked.
+
+**FR-C.1 — Record what the rep decided, per claim line.**
+Every review action (FR-2.8) produces one durable record: which claim line it was taken on, which
+version of the report the rep was looking at (FR-R.13), which action they took, what they changed
+if anything, their own words if they gave any, and when. This record is the only thing FR-C.2 and
+FR-C.3 read, and it is the audit trail's account of where the human intervened (NFR-5).
+
+Recorded per line, because approval is per line (FR-3.1a). A rep who approves one line and sends
+another back has taken two decisions, and both are recorded.
+
+> **Reference — what a decision record holds**
+> ```json
+> {
+>   "decision_id": "DEC-CASE-1001-COLLAGEN1-01",
+>   "case_id": "CASE-1001",
+>   "claim_line_id": "CASE-1001-COLLAGEN1",
+>   "report_version": 2,
+>   "action": "approved_with_override",
+>   "recommended": { "outcome": "request_info", "amount_usd": null },
+>   "decided":     { "outcome": "approve",      "amount_usd": "31.20" },
+>   "rep_words": "Customer confirmation came in by phone, logged separately.",
+>   "decided_by": null,
+>   "decided_at": "2026-03-21T10:04:11.000+0000"
+> }
+> ```
+> Illustrative, not specified. No ShipBob endpoint knows about this shape; the system writes it
+> itself, as it does merchant memory and precedent.
+>
+> **`decided_by` has nowhere to come from.** There is no sign-in anywhere in this system, so the
+> record cannot say which rep decided. The field must exist and be left empty rather than filled
+> with a guess or dropped: an audit record that silently has no author is worse than one that says
+> plainly that it does not know.
+
+**FR-C.2 — Write a merchant correction from a difference, not from a narrative.**
+A correction is stored only when what the rep decided differs from what the system recommended: a
+different outcome, a different amount, a different set of damaged items, or an edit that changed
+what the email *tells* the merchant rather than how it reads. FR-2.8 already draws that line —
+direct edits are for wording, feedback is for substance — and only substance is worth remembering.
+
+The correction is keyed to the merchant's stable identifier (FR-3.8's reference note: `user_id`,
+never `account_name`). It must say what the system got wrong and what the right answer was, in
+enough words for the next investigation to act on it. "The amount was wrong" carries nothing. "The
+two-pack was claimed, not the single bottle" changes the next run.
+
+**A decision that agrees with the recommendation writes no correction.** A memory of every
+decision is a memory of nothing: it would fill the next claim's context with confirmations and
+bury the one correction that mattered.
+
+**FR-C.3 — Close a claim line explicitly, and write its precedent then.**
+FR-S.1 says a precedent record is written when a line closes and never before. This says what
+closes it: an approval that took effect. A report sent back for revision does not close a line
+(FR-R.1). Neither does an approval whose execution failed (FR-3.6) — a line whose email never
+reached the merchant has not been settled with them.
+
+The record carries the outcome that actually took effect and the amount actually submitted, not
+the outcome the agent recommended. Where a rep overrode the recommendation, precedent must show
+what ShipBob did rather than what this system suggested; remembering decisions is the entire point
+of the store, and remembering its own guesses is the failure FR-S.1 exists to prevent.
+
+**FR-C.4 — Make both writes repeatable, and never let them fail a decision.**
+Deciding the same line twice — a double-click, a retry after a timeout — must leave one
+correction and one precedent record rather than two (FR-3.5, and FR-S.1's rule that closing a line
+again replaces its record rather than adding a second).
+
+If either write fails, the decision stands and execution proceeds. Losing the record of what was
+learned is bad; losing the decision a person made is worse. But the failure must be visible in the
+case's audit record (NFR-5) and recoverable, because a silent failure here means the system
+quietly stops improving — which looks exactly like it working.
+
+**FR-C.5 — Make a carried-forward influence traceable in both directions.**
+Forwards: a report influenced by a past correction names it and says how (FR-2.6), the same way it
+names the precedent it relied on (FR-S.9).
+
+Backwards: a stored correction names the case, the claim line and the decision it came from, so a
+rep reading "this merchant was corrected about X" can open the claim where that happened and judge
+whether it still applies. A correction whose origin cannot be checked cannot be trusted, argued
+with, or safely removed.
+
+**FR-C.6 — Allow a correction to be withdrawn.**
+Corrections can be wrong, and a wrong one is repeated on every future claim by that merchant. This
+is the same failure FR-S.14 addresses for precedent, and merchant memory has no way out of it
+today. Withdrawal affects future claims only: a report already influenced by the correction still
+shows what that run was given (FR-S.11).
+
+**FR-C.7 — Say what "more care" means for a high-value claim.**
+A high-value shipment is worked out before the agent runs (FR-0.5) and shown to the rep, and
+nothing else in the system treats it differently. It is a line of context and no more. That may be
+the intent, or a high-value claim may be meant to be handled differently — and the requirement has
+to say which, because "warrants more care" is currently satisfied by one sentence of prompt text
+that no rule depends on.
+
+Three readings, none of them chosen:
+
+1. **Presentation only.** The rep is told, and decides what extra care to take. This is what
+   exists today.
+2. **Never recommend approval above the threshold.** A high-value claim is recommended for
+   escalation with its value as the stated reason, however good the evidence is.
+3. **A higher bar, not a different outcome.** High-value claims are held to a stricter confidence
+   threshold than FR-1.15's, so the same quality of evidence approves a small claim and escalates
+   a large one.
+
+Whichever is chosen, the rule belongs beside the threshold in the single policy place (FR-0.7,
+NFR-7), and it must be a deterministic rule if it changes an outcome. Asking a model to try harder
+on expensive claims is not a control, and would show up as run-to-run variance (NFR-1) rather than
+as care.
+
+**FR-C.8 — Demonstrate carry-forward on constructed data, and label it as constructed.**
+The sample data cannot show any of this. All five cases belong to five different merchants
+(FR-3.8's reference note) and no two of them are alike (the precedent reference note), so no case
+ever sees a correction or a precedent produced by another. A demonstration needs a constructed
+second case sharing a `user_id` with an existing one, and a first case carried all the way to a
+decision.
+
+That data is development-only. It must say in its own words that it is invented, must be written
+through the same stores a real decision writes to rather than around them, and must be removable
+again — otherwise invented history on a screen is indistinguishable from real history, and a rep
+has no way to tell.
+
+**Not specified by ShipBob.** Whether a correction should ever expire, or stop applying after a
+policy change; whether a correction made on one merchant should ever inform a claim by another
+(FR-S.4 deliberately ignores identity, which pulls the other way); how many corrections an
+investigation should be shown before they crowd out the evidence in front of it; and whether a
+high-value claim is handled differently at all (FR-C.7) are all judgement calls nobody has ruled
+on. They belong in the single policy place (FR-0.7), and no starting value for any of them should
+be read as ShipBob's position.
 
 ---
 

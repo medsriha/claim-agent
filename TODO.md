@@ -1,6 +1,6 @@
 # Requirement tracker
 
-Every requirement in [REQUIREMENTS.md](REQUIREMENTS.md) — all 97 — by id only.
+Every requirement in [REQUIREMENTS.md](REQUIREMENTS.md) — all 105 — by id only.
 
 There are no descriptions here on purpose: REQUIREMENTS.md already holds them, and a second
 copy would drift out of step with the first. Look the id up there.
@@ -124,10 +124,16 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
 ## Layer 1a — Triage: splitting the claim into lines
 
 **Read this before the ticks below.** Everything in Layer 1a, Layer 1b and Layer 1 is
-built, tested and explained in DESIGN.md — but **none of it is reachable over HTTP yet**.
-There is no route, so no representative can actually investigate a claim; the endpoint
-and its wiring are the next piece of work. The ticks mean the behaviour exists and is
-proven, not that the system can be used.
+built, tested, explained in DESIGN.md, and **now reachable**: `POST
+/cases/{case_id}/investigate` screens a claim, investigates every damaged product on it,
+and reports what it is doing as it happens rather than answering at the end. A claim the
+screen turns away never reaches the agent and costs no AI at all.
+
+Two caveats that the ticks do not cover. **Nothing is stored**, so a stream cannot be
+replayed and a representative who reloads starts again — which is why NFR-3 and NFR-5 are
+still unticked below. And **the demo screen has not been moved onto it**: it still shows
+the quick checks through the older one-reply route and still invents its own pacing, so
+the honest streaming exists without being what anybody sees yet.
 
 - [x] FR-1a.1 — One agent pass over the whole claim that reads the description and the
   photographs and says which products are being claimed for.
@@ -354,7 +360,10 @@ proven, not that the system can be used.
 - [ ] FR-2.4
 - [ ] FR-2.5
 - [ ] FR-2.5a
-- [ ] FR-2.6
+- [ ] FR-2.6 — the two things this asks for are already computed and already reach the model:
+  the high-value flag and the merchant's past corrections. What is missing is a rep-facing
+  report to put them on, and the third clause — *which* past correction influenced this
+  recommendation — needs the decision record of FR-C.1 before there is anything to name.
 - [ ] FR-2.7
 - [ ] FR-2.8
 - [ ] FR-2.9
@@ -378,7 +387,8 @@ proven, not that the system can be used.
 - [ ] FR-R.11
 - [ ] FR-R.12
 - [ ] FR-R.13
-- [ ] FR-R.14
+- [ ] FR-R.14 — blocked on FR-C.1 and FR-C.2, not on Layer R. There is no step anywhere that
+  captures a rep's correction, so there is nothing for this requirement to feed forward.
 
 ## Layer 3 — Execution after approval
 
@@ -390,7 +400,9 @@ proven, not that the system can be used.
 - [ ] FR-3.5
 - [ ] FR-3.6
 - [ ] FR-3.7
-- [ ] FR-3.8
+- [ ] FR-3.8 — half built, and the half that exists is the reading half. Do not tick this on
+  the strength of the store: `MerchantMemory.record_correction` exists and is tested, and
+  nothing in `src/` calls it. The writer is specified in FR-C.2.
 
 ## Claim precedent — finding similar past claims
 
@@ -502,6 +514,55 @@ proven, not that the system can be used.
     a bad precedent can at least be found and inspected before somebody removes it. This matters
     more now than it did: with only closed claims stored, a wrong decision is the only kind of
     bad precedent there is, and withdrawal is the only way back out.
+
+## Carry-forward — what a rep decided, and what the next claim knows
+
+**Read this before starting.** These eight requirements are all unbuilt, and they are the reason
+three earlier ones cannot be finished — FR-3.8, FR-R.14 and FR-S.1's writer all wait on the same
+missing step: nothing in this system records that a rep decided anything.
+
+What already exists, so it is not rebuilt:
+
+- **Merchant memory, read side.** `corrections_for(user_id)` → `preflight/service.py` →
+  the computed context → the agent's prompt → the rep's screen. Done under FR-0.5.
+- **Merchant memory, write side.** `MerchantMemory.record_correction` works and is tested. Its
+  only caller in the repo is `tools/seed_merchant_memory.py`, which writes invented data on
+  purpose. Nothing in `src/` calls it.
+- **Precedent, read side.** Retrieval, similarity, the per-line lookup, and two HTTP routes. Done
+  under FR-S.1–FR-S.8 and FR-S.13.
+- **Precedent, write side.** `capture_closed_line` in `domain/precedent.py` and
+  `PrecedentStore.record` both work and are tested. Their only callers are the tests, because
+  nothing closes a claim line.
+- **Execution.** `execution/` holds a docstring and nothing else. Layer 3 is unbuilt, so an
+  approval has nowhere to take effect.
+
+So the work is a capture point and two writes, not two stores. Suggested order: FR-C.1 first,
+because FR-C.2 and FR-C.3 read it and neither can be built without it; then FR-C.4 alongside them,
+since retry-safety is cheaper to build in than to add; then FR-C.5–FR-C.6; FR-C.8 last, since a
+demonstration needs the rest to exist. FR-C.7 is a question for whoever owns the requirements and
+should be asked, not answered here.
+
+- [ ] FR-C.1 — the decision record. Sits between FR-2.8 (what a rep may do) and FR-3.1 (what an
+  approval releases), and belongs to neither: recording a decision sends nothing. Note that
+  `decided_by` cannot be filled in — there is no sign-in anywhere in this service.
+- [ ] FR-C.2 — the merchant correction, written only where the decision differs from the
+  recommendation. Store already exists; the difference test and the wording do not.
+- [ ] FR-C.3 — the close event that writes precedent. FR-S.1 says when a record is written;
+  this says what closes a line, and it is not the same thing as an approval being recorded — a
+  failed send leaves the line open (FR-3.6).
+- [ ] FR-C.4 — one correction and one precedent record however many times a decision is repeated,
+  and a failed write that never fails the decision.
+- [ ] FR-C.5 — a report naming the correction that influenced it, and a correction naming the
+  decision it came from. The backwards half is what makes FR-C.6 safe to use.
+- [ ] FR-C.6 — withdrawing a correction, as FR-S.14 already allows for a precedent record.
+- [ ] FR-C.7 — **a question, not an implementation.** High value is computed, shown, and acted on
+  by nothing. Ask which of the three readings in REQUIREMENTS.md is intended before building any
+  of them; option 1 is what exists today, so "no change" is a legitimate answer that only needs
+  writing down.
+- [ ] FR-C.8 — the constructed data that makes any of this demonstrable. Five sample cases, five
+  merchants, no two alike, so nothing carries forward on the real set. Follow the rules
+  `tools/seed_merchant_memory.py` already sets: outside `src/`, invented in its own words,
+  written through the real store, removable again.
 
 ## Non-functional requirements
 

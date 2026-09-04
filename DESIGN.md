@@ -115,13 +115,18 @@ machine's own settings say.
 Nothing is stored. The answer exists only in the reply, so a representative cannot fetch a
 screening again, and there is no lasting record of one. Closing the page loses what it showed.
 
-**Stages 2 and 3 are being built, and none of it runs yet.** The pieces exist and are tested
-separately: the rules that decide an outcome, the arithmetic that works out an amount, the count
-of steps a run may take, the record of what it did, the way to reach the AI, and the reads that
-fetch a case's images and price a shipment. Nothing joins them together. There is no way to ask
-for an investigation, no tools have been put in the AI's hands, and no claim has ever been
-investigated — so in practice a photograph has still never been read and a claim has still never
-been split into separate products.
+**Stages 2 and 3 are built and can be asked for.** A claim can be investigated over the web:
+the system screens it, finds its photographs, works out what each one is, looks up how
+comparable claims were decided, splits the claim into the products being claimed for, and
+investigates each of those separately — choosing for itself which images to look at. It then
+hands back, per product, what the evidence showed, what it recommends, how the amount was
+arrived at, and a draft email. **It reports all of that while it happens** rather than going
+quiet and answering at the end.
+
+Two things are worth being clear about. The AI recommends and never decides, and the money is
+arithmetic rather than anything the AI produced — it is not shown a figure and has nowhere to
+write one. And the screen has not been moved onto this yet: it still shows the quick checks
+through the older one-reply route.
 
 **Stage 4 is untouched**, and nothing has ever been sent to a merchant or paid out. The parts of
 the system that could do those things do not exist.
@@ -1236,6 +1241,93 @@ alike. There are still no tests for the UI.
 
 ---
 
+### Watching an investigation happen
+
+**What it does** — Gives an investigation a way in over the web, and reports what it is
+doing while it does it rather than going quiet and answering at the end.
+
+**Why we need it** — An investigation is slow. It screens the claim, reads photographs one
+at a time, looks up how comparable claims were decided, works out which products were
+damaged, and only then reaches a recommendation for each of them. Answering all of that in
+one reply means a representative watches a blank screen for most of a minute with no way to
+tell whether anything is happening, which of several products is being worked on, or
+whether it has quietly failed.
+
+It also settles something that was not honest before. The screen used to play the quick
+checks out one at a time as though they were happening; in truth the answer had arrived
+whole and every pause was a length the screen invented. This is the real version of that.
+
+**How it works**
+
+1. A caller asks about one claim. The case id is the whole request — there is nothing to
+   send with it.
+2. The reply opens immediately as a stream, and stays open. Everything that follows arrives
+   on it in pieces.
+3. The quick checks run first. Their verdict is the first thing sent.
+4. **A claim the checks turn away stops there.** Its explanation and its draft email are
+   sent as the result, and no photograph is ever looked at — an ineligible claim costs three
+   cheap reads and no AI at all.
+5. Otherwise the investigation starts, and says what it is doing as it goes: the images it
+   found, what each one turned out to be, what the shared evidence came to, how the claim
+   was split, **what comparable past claims were found for each product**, and then, for
+   each product, which tool it chose to look at next and what it concluded.
+6. When every product is finished, one last message carries everything a representative
+   decides from: the split, each product's findings and reasoning, its recommendation, how
+   its amount was worked out, and its draft email.
+7. A closing message ends the stream.
+
+**What it connects to** — It is the only way in to the investigation, and the only place the
+quick checks and the investigation meet. It reads from ShipBob and from the store of past
+claims, and writes nothing anywhere.
+
+**Choices we made**
+
+- **The messages are the service's own words.** Each one arrives as a finished sentence,
+  ready to put on screen unchanged. The screen adds labels and nothing else — it never works
+  out a verdict, re-orders anything, or writes a sentence of its own about what was found.
+  That is what keeps the browser a window onto the investigation rather than a second
+  opinion about it.
+- **Somebody closing their browser cannot fail a claim.** Whoever is watching is outside our
+  control: a connection drops, a tab closes. None of that says anything about the claim, so
+  a message that cannot be delivered is noted and ignored, and the investigation carries on.
+- **What the investigation says is drained before the result is sent.** A run can say
+  several things and finish in the same breath, and stopping the moment the work is done
+  would throw those away — including, on a claim that failed, the messages saying what it
+  had managed to establish first.
+- **The model is not built until the claim is going on.** Building one needs a key, and a
+  claim the checks turn away needs no model at all. Asking for one up front would refuse an
+  ineligible claim for want of a credential it was never going to use.
+- **The result is sent whole, not in pieces.** A report read half-arrived is worse than one
+  that arrives a moment later.
+- **Failing part way through is said, not signalled.** Once a stream has opened there is no
+  status left to change, so a failure arrives as a message and the stream still closes
+  tidily. A connection that simply stops is the thing this whole shape exists to prevent.
+- **Asked for as a POST**, even though it changes nothing today. Investigating is a step in
+  the claim pipeline, and once results are kept the step will record one.
+
+**When things go wrong** — Every failure ends the stream with a message saying what happened
+and then a close. A case ShipBob does not have, a ShipBob that cannot be reached, a missing
+model key, a run that used up its steps, a photograph that cannot be fetched: each arrives
+as something a representative can act on. Nothing ends in an empty connection, and nothing
+ends in a payment.
+
+**Not ready for production** — **The screen does not use this yet.** The endpoint exists and
+the screen still calls the old one-reply route for the quick checks, so what a representative
+sees today is still the invented pacing described under [Future
+production](#future-production). Moving the screen across is what makes that entry go away,
+and until then both exist side by side. Nothing is stored, so a stream cannot be caught up
+with or replayed — a representative who reloads has to start the investigation again, and
+one who closes the tab half way through loses the work. There is no keep-alive on a quiet
+connection, so anything between the browser and the service that times out an idle stream
+would cut a long investigation off. And a caller who goes away does not stop the
+investigation: it runs to the end and its findings are discarded.
+
+**Where the code is** — `src/claim_agent/api/routes/investigate.py` is the way in,
+`src/claim_agent/agent/events.py` is what a run says about itself, and
+`src/claim_agent/agent/run.py` is the investigation it narrates.
+
+---
+
 ## Future production
 
 This project is an interview exercise. It is not complete and it is not production-hardened,
@@ -1359,6 +1451,13 @@ finds in production.
   that shape rather than being quietly tidied up. Tidying it up in the browser is the thing this
   project most wants to avoid, so the trade was made knowingly.
 - **The rhythm of the conversation is invented, and now looks convincingly like it is not.**
+  *There is now a real alternative, and the screen is not using it.* An investigation can be
+  watched as it happens (see [Watching an investigation
+  happen](#watching-an-investigation-happen)), which is the honest version of what this
+  entry describes. The screen still calls the older one-reply route for the quick checks and
+  still invents the pauses, so everything below remains true of what a representative sees
+  today. Moving the screen across is what retires it.
+
   Each finding turns before it settles, which reads as a step being worked on. It is not: the
   screening finished before the first message appeared, and every pause is a fixed length the
   screen chose. Somebody watching could reasonably conclude that the checks take about a second

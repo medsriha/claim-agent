@@ -99,7 +99,13 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
             provider is unavailable would send them looking at Anthropic's status
             page instead of at their own environment.
     """
-    if settings.anthropic_api_key is None:
+    # An empty key counts as no key. `.env.example` ships the setting with nothing after
+    # the equals sign, which is the ordinary state of a machine nobody has configured yet,
+    # and an empty string is not `None` — so testing only for `None` would let that
+    # through and fail later as an unhelpful complaint from the provider instead of a
+    # sentence naming the setting to fill in (NFR-6).
+    key = settings.anthropic_api_key
+    if key is None or not key.get_secret_value().strip():
         logger.warning("model_key_missing", model=settings.model)
         raise ConfigurationError(
             "The claim investigation needs an Anthropic API key and none is configured. "
