@@ -95,12 +95,20 @@ representative has corrected for that merchant before, runs the four checks, and
 *carry on* or *stop, and here is why* — with, in the second case, a write-up for a
 representative and a draft email to the merchant listing every reason.
 
-**There is a screen to see it on.** A web page asks for a case id and lays the answer out: the
-decision, all four checks with the values behind each, what the claim is worth and how old it
-is, and — on a stopped claim — the write-up and the draft email. It is a demonstration: anyone
-who opens it can screen any claim, it decides nothing itself, and it cannot approve or send
-anything. Alongside it there is a stand-in for ShipBob, so the whole thing can be run on a
-laptop without being connected to anything.
+**There is a screen to see it on.** A web page offers the sample claims, and lays the answer out
+as a conversation: what was read, what the claim is worth, each of the four checks in turn, the
+decision, and — on a stopped claim — the write-up and the draft email, which can be reworded on
+the spot. It is a demonstration: anyone who opens it can screen any claim, and it decides nothing
+itself. It has a send button, and that button reaches nothing — no email leaves the browser,
+because the stage that would send one does not exist; the screen says so when it is pressed.
+Alongside it there is a stand-in for ShipBob, so the whole thing can be run on a laptop without
+being connected to anything.
+
+**The rules can be changed from that screen too.** A second page lists every threshold the checks
+judge by — how old a claim may be, what counts as a high-value order, how the reasons for turning a
+claim away are ranked — and lets someone change one and watch the next claim be screened by the new
+number, with no restart. Nothing about a change is stored: a restart puts every value back to what
+the machine's own settings say.
 
 Nothing is stored. The answer exists only in the reply, so a representative cannot fetch a
 screening again, and there is no lasting record of one. Closing the page loses what it showed.
@@ -503,6 +511,11 @@ ShipBob from. Nothing in the system knows or cares that it is a stand-in.
 - **It serves the very same records the tests use, rather than its own copy.** Two sets of sample
   data drift apart, and then the screen shows one thing and the tests prove another. There is one
   definition of what CASE-1001 looks like and both read it.
+- **Those records are ShipBob's own, not our approximation of them.** All five claims, their
+  parcels and their orders were copied from ShipBob's published collection and then checked back
+  against it field by field, cents included. An earlier version filled the gaps with invented
+  parcels, invented orders and a merchant that does not exist, which meant a test could pass
+  against a shape ShipBob never sends.
 - **It is not part of the system.** It sits outside the application's own code and nothing in the
   application can reach it. It cannot be started by accident in production, because production
   never runs it.
@@ -527,62 +540,196 @@ what the screen displays.
 
 ### The screen a representative uses
 
-**What it does** — Puts a web page in front of the quick checks. A representative types a case
-id and sees what the screening decided: carry on or stop, what each of the four checks found,
-what the claim is worth and how old it is, and — when the claim is stopped — the write-up and the
-draft email waiting for their approval.
+**What it does** — Puts a web page in front of the quick checks, laid out as a conversation. A
+representative picks one of the sample claims from a row of buttons. The findings then arrive one
+at a time, the way a person would tell you them: here is what I read, here is what the claim is
+worth, here is the first check, the second, the third, the fourth, here is the decision. When the
+claim is stopped, the last thing to arrive is the email to the merchant, which the representative
+can edit on the spot and send.
 
-**Why we need it** — Everything the system worked out was reachable only by sending a
-hand-written request and reading raw data back. Fine for proving the rules are right, useless for
-showing anyone what the system does.
+**Why we need it** — Two reasons, and the second is the one that changed the screen.
+
+Everything the system works out used to be reachable only by sending a hand-written request and
+reading raw data back. Fine for proving the rules are right, useless for showing anyone what the
+system does. That is why there is a screen at all.
+
+But the first screen showed the answer as one wall of panels that appeared together. The system
+does not work that way — it works through a claim in stages, and each stage produces something —
+and a wall of panels hides exactly the thing that is interesting about it. Laying the findings
+out one after another shows the shape of the work, and it makes each finding readable on its own
+instead of competing with five others for attention.
 
 **How it works**
 
-1. The representative types a case id, or picks one of the sample claims, and presses the button.
-2. The page asks the system to screen it, and says it is working while it waits.
-3. The answer comes back and is laid out: the decision, then — on a stopped claim — the write-up
-   and the draft email, then the four checks, the numbers, and what was read.
-4. Every check is shown, passed or failed, and each opens up to reveal the values it looked at.
-5. If the claim cannot be screened, the page says which of the three things went wrong and
-   offers to try again.
+1. The representative picks a claim. Whatever the last claim left on screen is cleared — one
+   claim at a time, so there is never a doubt about which claim a finding belongs to.
+2. The page asks the system to screen it and says it is working. **Nothing else appears until the
+   whole answer has come back.**
+3. Once it has, the page has everything, and it plays the findings out in order, a short pause
+   between each. The order is the order the system does the work in, not an order of ours.
+4. Every check is shown, passed or failed, each one its own finding, and each opens up to reveal
+   the values it looked at.
+5. On a stopped claim, the last finding is the drafted email. The representative can change the
+   subject and the wording, and press send.
+6. On a claim that passes, there is no email, because the system only writes one to explain a
+   stop. The page says so, and says the stage that would investigate the claim does not exist yet.
+7. If the claim cannot be screened, the page says which of the four things went wrong and offers
+   to try again. No findings appear at all.
 
 **What it connects to** — It reads from the one screening address the system already offers and
-writes nothing anywhere. It holds nothing between visits.
+writes nothing anywhere. It holds nothing between claims and nothing between visits.
 
 **Choices we made**
 
+- **The pacing is a replay, not a race.** This is the important one. The obvious way to build
+  this is to start playing the findings out while the request is still in flight — and then the
+  page can say "read the parcel ✓" for a read that has not finished, or worse, for one that
+  failed a moment later. So the page waits for the whole answer first, and only then plays back
+  what actually happened. Every finding on screen is a finding the system really produced.
+  A claim that fails shows a failure and no findings whatsoever.
+- **The pauses between findings are the page's own, and they measure nothing.** They exist so a
+  reader can follow one finding before the next arrives. They are not how long any step took.
+  Anyone reading a demo should know that the rhythm on screen is a reading aid and not a
+  measurement.
+- **Sending is a simulation.** There is a send button, and pressing it changes nothing outside
+  the browser: no address is contacted, no record is written, and there is no address in the
+  system behind the button to call. The stage that would really send an email does not exist.
+  Because a button that looks like it sends is a dangerous thing to leave unexplained, the page
+  says plainly, after sending, that nothing was sent.
+- **A missing recipient stops the send.** A claim with no contact address on it produces an email
+  with nobody to send it to, and the button is unavailable rather than merely unwise. That is the
+  rule the real sending stage will have to follow, so the screen follows it now.
 - **The page decides nothing.** It never works out a verdict, judges a check, or re-orders the
   reasons. The order the reasons arrive in matters — the first heads the merchant's email — so
-  they are printed as given and never sorted.
+  they are printed as given and never sorted. Turning one answer into a list of findings is
+  arranging, not deciding: the page chooses what order to *show* things in, and nothing else.
 - **No arithmetic on money.** The value of an order is worked out once, by the rules, and sent as
   text. The page prints that text. Multiplying a price by a quantity on screen is the habit that
   ends with a payment built on a rounding error, so the page shows both and stops there.
 - **The page says as little as it can.** Almost every sentence on it came from the system. The
-  page adds labels, not commentary: a reader should be looking at what the rules decided, not at
-  the screen explaining itself.
+  page adds labels, not commentary. There are exactly two places it speaks for itself, both
+  because the system has no way to say the thing for it: that nothing was really sent, and that
+  the investigation stage a passing claim would go to does not exist. Both are marked on screen
+  as the page's own words rather than the system's.
 - **The draft email is marked as a draft.** The email's own words never say so, deliberately, so
   that a marker can never reach a merchant — which leaves the screen as the only place that state
-  is visible. There is no send button and nothing behind one.
+  is visible.
 - **Nothing on the page is invented.** It shows what the screening returned and nothing else. A
   merchant with no past corrections shows an empty list, because that is what the system knows —
   writing sample history into the store to make the panel look fuller would put fabricated
   content on screen that a reader could not tell from the real thing. The system's own words are
   reshaped to read rather than restated: the page shows "Claim too old" where the rules say
   `claim_too_old`, and never a phrase of its own choosing.
+- **There is a way to skip the pacing.** A button shows everything at once, and a machine set to
+  reduce motion gets everything at once without asking. Somebody driving a demo should never be
+  waiting on the page, and somebody who finds movement uncomfortable should not have to.
+- **The typing box is gone.** It was there to reach a claim the sample buttons did not list, and
+  the stand-in for ShipBob only serves the nine that are listed, so it could only ever produce
+  the "no such claim" answer. The buttons carry ids and nothing else, still: saying what each one
+  demonstrates would be the page asserting an outcome it does not decide.
 - **The ShipBob look is taken from the real logo.** The two brand colours are sampled from the
   artwork and the box mark's outline is traced from it. The wordmark is set in the page's own
   typeface, which is not the one ShipBob uses.
 
-**When things go wrong** — Three failures are handled separately because they need different
+**When things go wrong** — Four failures are handled separately because they need different
 things from the reader: a case that does not exist is a typo, ShipBob being unreachable is a
-wait, and the system not answering usually means it is not running.
+wait, the system not answering usually means it is not running, and anything else is kept apart
+rather than guessed at. In every case the conversation shows the failure and no findings, so
+there is never a half-told story on screen.
 
 **Not ready for production** — One screen, showing the quick checks, because that is all that
-exists. It cannot approve, send, or fetch back a screening. Nothing it shows is stored. It has
-no sign-in, no tests, and has never been tried by a representative or with a screen reader. The
-wordmark is not ShipBob's typeface.
+exists. It cannot approve a report, send an email anywhere real, ask for the claim to be looked
+at again, or fetch back a screening. An edit to an email is lost the moment another claim is
+picked, and is never recorded against the merchant, so the system still learns nothing from it.
+Nothing it shows is stored. It has no sign-in, no tests, and has never been tried by a
+representative or with a screen reader. The wordmark is not ShipBob's typeface.
 
 **Where the code is** — `web/`, entry point `web/src/App.tsx`.
+
+---
+
+### Changing the rules from a screen
+
+**What it does** — Puts the numbers the quick checks judge by onto a screen. Someone can change
+one — the age limit, say — press save, and the very next claim is screened by the new number. No
+restart, and no editing a file on the machine.
+
+**Why we need it** — Almost every threshold in this system is a placeholder we invented so the
+code would run: how old a claim may be, what counts as a high-value order, how short a
+description is too short. Only the $100 reimbursement cap is a real ShipBob figure. They all sit
+in one file so they can be corrected without touching any logic (FR-0.7, NFR-7), but until now
+correcting one meant setting an environment variable and restarting the service. That is fine for
+an engineer and useless for showing someone what a different limit would do to a real claim.
+
+**How it works**
+
+1. When the service starts it reads the policy once — from the environment, or the built-in
+   defaults — and keeps a copy of it as *the values it started with*.
+2. From then on there is one place holding *the policy in force*. Every screening asks that place
+   for the policy once, when the request arrives, and hands what it gets to all four checks.
+3. The panel asks the service what the policy is. The answer is one entry per value: its name,
+   the sentence from the policy file explaining what the value is for, what kind of thing it is
+   (a whole number, an amount of money, a yes or no, some words, a ranking), what it is now, and
+   what it started as.
+4. Someone edits the form and saves. The panel sends back every value on it, not just the ones
+   they touched.
+5. The service lays what arrived over what is in force and checks the result as a whole — the
+   same checking a policy gets at startup, so a number outside its allowed range or a ranking
+   that leaves a reason out is refused here exactly as it would be there. If anything is wrong,
+   **nothing changes at all**, and the panel is told which values were rejected and why, value by
+   value.
+6. If everything is good, the finished policy replaces the one in force in a single step, and the
+   moment is recorded. Claims already halfway through screening finish on the values they
+   started with; every claim after that point uses the new ones.
+7. Reset puts back the values the service started with, as though nobody had touched it.
+
+**What it connects to** — It reads the same policy file the checks read, and writes nothing
+anywhere: not to the database, not to disk. The screening reads the policy in force through the
+same one place the panel writes to, which is what makes a change take effect immediately.
+
+**Choices we made**
+
+- **Every value travels as text**, numbers included. An amount of money must never become a
+  browser number, or a cap of $100.00 comes back as 100.00000000000001; sending whole numbers and
+  fractions the same way means the screen has one rule to follow instead of two, and the service
+  is the only thing that ever reads a number out of what was typed.
+- **The panel is drawn from the policy file**, not from a list of its own. Every label and every
+  explanation on screen comes out of the file the values live in, so the two cannot drift apart
+  and a value added to the file later appears on the panel without anyone touching the screen.
+- **The policy is swapped whole, never edited value by value.** A claim judged half by the old
+  age limit and half by the new one would be unexplainable afterwards, and that is exactly what
+  editing in place invites.
+- **Nothing is stored.** A restart puts every value back to what the environment says. That is
+  deliberate for a demonstration, and it is a trap in anything longer-lived: a change made this
+  morning is silently gone after a restart this afternoon.
+- **No sign-in.** Anyone who can reach the screen can change what every claim is judged by. The
+  rest of this demo has no sign-in either, and adding one here alone would be a false comfort.
+- **The ranking is reordered with buttons, not by dragging.** Up and down buttons work with a
+  keyboard, need no library, and cannot half-drop a reason somewhere unexpected.
+- **One sentence on the panel is ours**, the one saying a change is lost on restart. It sits with
+  the screen's other two invented sentences, in the single file that holds them, and is marked out
+  on screen as the screen's words rather than the system's. Everything else on the panel is either
+  a label or the system's own wording: the explanation under each threshold is the sentence written
+  beside that threshold in the code, "PROVISIONAL" and all.
+
+**When things go wrong** — A value the service will not accept leaves the policy exactly as it
+was: the panel shows the service's own complaint under each value it rejected, and the form still
+holds what was typed so it can be corrected rather than typed again. A ranking that lists a
+reason twice, or leaves one out, is refused by the same rule that has always refused it, because
+a claim could otherwise fail a check whose reason has nowhere to sit. If the service is not
+answering at all, the panel says so instead of showing a policy that might not be the real one.
+
+**Not ready for production** — No sign-in, so no idea who made a change. No record of what was
+changed, by whom, or when, beyond a line in the log and the time the last change landed. Nothing
+is stored, so a restart loses it. No confirmation step before a change that affects every claim
+that follows. And it holds for one running copy of the service only: a second copy would carry on
+judging claims by its own values, which is the sort of split-brain that is very hard to see from
+either screen.
+
+**Where the code is** — `src/claim_agent/live_policy.py` holds the policy in force,
+`src/claim_agent/admin/` turns it into what a panel needs and back again,
+`src/claim_agent/api/routes/admin.py` is the way in, and the screen is
+`web/src/screens/PolicyScreen.tsx`.
 
 ---
 
@@ -609,9 +756,19 @@ finds in production.
   unauthenticated service up to any web page anywhere. A built page served from a real address
   has no such helper, and nothing has been decided about what it would use instead.
 - **Anything on the screen beyond the quick checks.** It shows what has been built, which is one
-  stage of four. Approving a report, sending an email back with feedback, editing the wording,
-  seeing a claim's separate products — all of those are later requirements with nothing behind
-  them yet.
+  stage of four. Approving a report, sending an email back with feedback, seeing a claim's
+  separate products — all of those are later requirements with nothing behind them yet. The
+  wording of an email *can* be edited, but only on screen: see the two entries below.
+- **Any real sending.** The send button is a simulation. Nothing is contacted, nothing is
+  recorded, and there is no address in the system behind it — the whole of stage 4 is empty. The
+  screen says outright that nothing was sent, which is the only thing making that safe. Whoever
+  builds the real sending stage should replace the simulation rather than wire something up
+  behind it, because the real one owes several things this one does not: refusing to send twice,
+  checking what is being sent against what was approved, and keeping a record of it.
+- **Any record of an edited email.** A representative can reword a draft, and the rewording is
+  gone the moment another claim is picked. Nothing keeps it, and nothing learns from it — so the
+  requirement that a representative's corrections improve the next claim from that merchant is
+  still entirely unmet, even though the screen now has the edit that would feed it.
 
 - **Stages 2, 3 and 4 of the claim pipeline.** The triage that splits a claim into products, the
   per-product investigation, the report the AI produces, the revision loop, and the post-approval
@@ -639,6 +796,14 @@ finds in production.
   invoice, send an email or pay anyone — deliberately, so the cheap stage cannot become expensive
   by accident, but it does mean later stages start by adding to it.
 
+- **Any sign-in on the policy panel.** Anyone who can reach it can change the numbers every claim
+  after them is judged by, and nothing records who did. That is the access-control gap above with
+  sharper consequences: reading a claim exposes a merchant's details, whereas changing the age
+  limit changes outcomes.
+- **Anywhere to keep a policy change.** A changed threshold lives in the running process and
+  nowhere else. There is no history of what the policy was on a given day, no note of who changed
+  it or why, and a restart silently puts every value back to what the environment says.
+
 ### Could break
 
 - **The stand-in for ShipBob is not ShipBob.** It serves nine claims from the same sample records
@@ -649,13 +814,22 @@ finds in production.
   deliberate, and it means a figure arriving in an unexpected shape would appear on screen in
   that shape rather than being quietly tidied up. Tidying it up in the browser is the thing this
   project most wants to avoid, so the trade was made knowingly.
+- **The rhythm of the conversation is invented, and looks like it is not.** The findings appear
+  one at a time with a pause between them, and those pauses are the screen's own — they are a
+  reading aid and they measure nothing. Somebody watching a demonstration could easily take them
+  for how long each step took, and conclude the checks are slow or that the parcel took a moment
+  to read. The screen waits for the whole answer before it starts, so nothing shown is invented;
+  only the spacing is.
+- **Only the conversation holds a screening.** It was true before that nothing was stored, and it
+  bites harder now: picking a second claim throws the first conversation away without asking, and
+  takes any rewording of its email with it. There is no way back to it.
 
-- **The sample data is mostly invented.** Only one case, one parcel and three orders are quoted in
-  full in the requirements; the rest of what the tests run against we made up, because the
-  document describing ShipBob's replies is not in this repository. Our tests can pass here and
-  still fail against the real system if a field name or a status word differs. Every invented
-  identifier starts with a 9, so real and made-up data can be told apart at a glance, but that is
-  a convention, not a guarantee.
+- **Four made-up claims sit alongside the five real ones.** ShipBob's own five claims, their
+  parcels and their orders are now exactly what ShipBob serves, checked record by record against
+  the published collection. The four we constructed are still ours, top to bottom, and exist only
+  because three of the quick checks cannot be shown on ShipBob's data at all. Every identifier we
+  invented starts with a 9, so the two can be told apart at a glance, but that is a convention
+  rather than a guarantee.
 - **Three behaviours have never run against real data.** No sample parcel is insured, no sample
   complaint is the wrong type, and no sample order comes near the high-value figure. All three
   are proven only by cases we constructed. If the real system words any of them differently, we
@@ -708,11 +882,26 @@ finds in production.
   service and never runs it — every test does — leaves a connection pool open. Harmless in a
   short-lived process; it would accumulate in a long-lived one that rebuilt services.
 
+- **The same claim can now be screened twice and answer differently.** The quick checks are still
+  fixed rules, but the policy they judge against is an input, and that input can be changed from a
+  screen between two runs. Each check does record the limit it used, so a single answer can still
+  be explained on its own; what is missing is any stamp saying which policy produced it, and any
+  way to ask what the policy was once the process has moved on.
+- **One running copy of the service only.** The policy in force is held in memory in one process.
+  Run two copies behind a load balancer and a change reaches whichever one answered the request:
+  the two then judge claims by different numbers, and neither screen shows anything wrong.
+
 ### Would improve
 
 - **A record of every screening, and the ability to fetch one back.** This is the single biggest
   gap: it blocks an audit trail, protection against doing something twice, and a representative
   simply reopening what they were looking at yesterday.
+- **A screening that reports its stages as they happen.** The screen plays the findings out one
+  at a time, but the service still answers in a single reply, so the pacing is the screen's
+  invention. The service works through a claim in stages already, and having it say so as it goes
+  would make the conversation real rather than a replay — the reads are the slow part, and a
+  representative would see which one they are waiting on. It would also give the screen something
+  honest to show during a long wait instead of one unchanging line.
 - **A reason of its own for "we could not assess this claim",** separate from "the merchant left
   something out", so nobody is asked for information that would not have helped.
 - **A readiness check as well as a liveness check.** The current health check only says the

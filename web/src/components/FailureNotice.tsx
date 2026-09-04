@@ -3,7 +3,7 @@
  *
  * The sentence comes from the service wherever it sent one; only the heading is ours.
  */
-import type { FailureKind } from "../api/client";
+import type { FailureKind } from "../api/failure";
 
 interface FailureNoticeProps {
   kind: FailureKind;
@@ -15,6 +15,7 @@ interface FailureNoticeProps {
 const HEADINGS: Record<FailureKind, string> = {
   not_found: "No such claim",
   upstream_unavailable: "ShipBob could not be read",
+  invalid_request: "The service would not accept that",
   unreachable: "The claims service is not answering",
   unexpected: "Something went wrong",
 };

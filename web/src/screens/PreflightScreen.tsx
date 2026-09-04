@@ -1,91 +1,105 @@
 /**
- * The one screen: type a case id, see what the eligibility checks decided.
+ * The one screen: pick a claim, watch the screening report back, act on the email.
  *
- * A result and a failure are never on screen together — a new screening clears whatever
- * the last one left — because a stale verdict beside a fresh error is worse than nothing.
- * Nothing is kept between visits.
+ * The important decision here is that **the pacing is a replay, not a race.** The whole
+ * answer is fetched first, and only then are the findings played out one at a time. The
+ * tempting alternative — start playing findings while the request is still in flight — can
+ * put "read the parcel ✓" on screen for a read that has not finished, or for one that
+ * failed a moment later. Waiting first means every finding shown is a finding the service
+ * really produced, and a claim that fails shows a failure and no findings at all.
+ *
+ * One claim at a time. Picking a claim replaces the conversation rather than adding to it,
+ * so a finding can never be read against the wrong claim. Nothing is kept between visits.
  */
 import { useCallback, useState } from "react";
 
-import { ScreeningFailure, screenCase } from "../api/client";
-import { CaseLookup } from "../components/CaseLookup";
-import { ClaimContextPanel } from "../components/ClaimContextPanel";
-import { FailureNotice } from "../components/FailureNotice";
-import { GateList } from "../components/GateList";
-import { RecordPanel } from "../components/RecordPanel";
-import { EvaluatedAt, TerminalReportPanel } from "../components/TerminalReportPanel";
-import { VerdictBanner } from "../components/VerdictBanner";
-import type { PreflightResult } from "../api/types";
+import { ApiFailure } from "../api/failure";
+import { screenCase } from "../api/client";
+import { CasePicker } from "../components/CasePicker";
+import { Thread } from "../chat/Thread";
+import { failureTranscript, pickedMessage, transcriptFor } from "../chat/transcript";
+import type { TranscriptMessage } from "../chat/transcript";
+
+/** One claim's conversation, and whether it is still being screened. */
+interface Conversation {
+  /**
+   * Counts up with every claim picked. Used to draw the conversation afresh, which is what
+   * resets the pacing — including when the same claim is picked twice in a row.
+   */
+  readonly sequence: number;
+  readonly caseId: string;
+  readonly messages: TranscriptMessage[];
+  readonly working: boolean;
+}
 
 export function PreflightScreen(): React.JSX.Element {
-  const [screenedId, setScreenedId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<PreflightResult | null>(null);
-  const [failure, setFailure] = useState<ScreeningFailure | null>(null);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
 
-  const run = useCallback((caseId: string): void => {
-    setScreenedId(caseId);
-    setBusy(true);
-    setResult(null);
-    setFailure(null);
+  const screen = useCallback((caseId: string): void => {
+    // Opens with the representative's own line and nothing else. The findings cannot be
+    // laid out until there is an answer to lay out.
+    setConversation((previous) => ({
+      sequence: (previous?.sequence ?? 0) + 1,
+      caseId,
+      messages: [pickedMessage(caseId)],
+      working: true,
+    }));
 
     screenCase(caseId)
-      .then((screened) => {
-        setResult(screened);
-      })
-      .catch((error: unknown) => {
-        // The client promises to throw only its own failure type. Anything else would be
-        // a bug in this screen rather than a problem with the claim, and it still has to
-        // end in something readable rather than a blank page.
-        setFailure(
-          error instanceof ScreeningFailure
-            ? error
-            : new ScreeningFailure("unexpected", "This screen ran into a problem of its own."),
+      .then((result) => {
+        setConversation((current) =>
+          // A conversation that has moved on is left alone: an answer for a claim nobody is
+          // looking at any more must not overwrite the one they are.
+          current === null || current.caseId !== caseId
+            ? current
+            : { ...current, messages: transcriptFor(caseId, result), working: false },
         );
       })
-      .finally(() => {
-        setBusy(false);
+      .catch((error: unknown) => {
+        // The client promises to throw only its own failure type. Anything else would be a
+        // bug in this screen rather than a problem with the claim, and it still has to end
+        // in something readable rather than a blank page.
+        const failure =
+          error instanceof ApiFailure
+            ? error
+            : new ApiFailure("unexpected", "This screen ran into a problem of its own.");
+        setConversation((current) =>
+          current === null || current.caseId !== caseId
+            ? current
+            : {
+                ...current,
+                messages: failureTranscript(caseId, failure.kind, failure.message),
+                working: false,
+              },
+        );
       });
   }, []);
 
   const retry = useCallback((): void => {
-    if (screenedId !== null) {
-      run(screenedId);
+    if (conversation !== null) {
+      screen(conversation.caseId);
     }
-  }, [run, screenedId]);
+  }, [conversation, screen]);
 
   return (
-    <main className="screen">
-      <CaseLookup onScreen={run} busy={busy} />
-
-      {busy && (
-        <p className="working" role="status">
-          Screening {screenedId ?? "the claim"}…
-        </p>
+    <main className="screen screen-chat">
+      {conversation === null ? (
+        <p className="intro">Pick a claim to screen.</p>
+      ) : (
+        <Thread
+          key={conversation.sequence}
+          messages={conversation.messages}
+          working={conversation.working}
+          caseId={conversation.caseId}
+          onRetry={retry}
+        />
       )}
 
-      {!busy && failure !== null && (
-        <FailureNotice kind={failure.kind} message={failure.message} onRetry={retry} />
-      )}
-
-      {!busy && result !== null && (
-        <div className="result">
-          <VerdictBanner
-            caseId={result.case_id}
-            verdict={result.verdict}
-            reasons={result.terminal_reasons}
-          />
-          {result.report !== null && <TerminalReportPanel report={result.report} />}
-          <GateList gates={result.gates} />
-          <ClaimContextPanel context={result.context} />
-          <RecordPanel record={result.record} />
-          <EvaluatedAt moment={result.evaluated_at} />
-        </div>
-      )}
-
-      {!busy && result === null && failure === null && (
-        <p className="intro">Enter a case id, or pick one of the samples.</p>
-      )}
+      <CasePicker
+        onPick={screen}
+        busy={conversation?.working ?? false}
+        picked={conversation?.caseId ?? null}
+      />
     </main>
   );
 }

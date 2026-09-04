@@ -166,6 +166,7 @@ Python.
 src/claim_agent/
   settings.py     process config: env, credentials, endpoints
   policy.py       claim thresholds — the one named place (FR-0.7, NFR-7)
+  live_policy.py  the policy in force; swapped whole when an admin changes one
   errors.py       deliberate failures, each carrying its HTTP response
   observability.py structured logging
   app.py          FastAPI application factory
@@ -173,6 +174,7 @@ src/claim_agent/
   domain/         pure models and rules — no I/O, no framework, no LLM
   shipbob/        client for the ShipBob mock API
   preflight/      Layer 0 — deterministic screening
+  admin/          the policy panel's view of policy.py, and what it sends back
   agent/          Layers 1a, 1b, R — the LangGraph agent
   execution/      Layer 3 — post-approval email and reimbursement
   storage/        reports, versions, feedback, merchant memory, audit trail
@@ -182,6 +184,7 @@ tests/integration/ through the HTTP surface
 web/              React + TypeScript demo UI
   src/api/        typed client for the backend
   src/theme/      ShipBob colours and logo — provisional values
+  src/chat/       the conversation: what to say, in what order, and how it appears
   src/components/ the pieces a screen is built from
   src/screens/    one screen per thing a rep does
 tools/            development only — a ShipBob stand-in, and demo data
@@ -208,9 +211,18 @@ These follow from the requirements and are not negotiable without changing them:
 ## The UI
 
 A React and TypeScript screen in `web/`, served by Vite. It is a **demo**: no sign-in, no idea
-who is using it, and nothing stored. One screen — a rep types a case id, the UI calls
-`POST /cases/{case_id}/preflight` (the case id in the path is the whole input) and renders the
-answer.
+who is using it, and nothing stored. A rep picks one of the sample claims, the UI calls
+`POST /cases/{case_id}/preflight` (the case id in the path is the whole input) and lays the
+answer out as a conversation: the findings appear one at a time, and a stopped claim ends in
+its drafted email, which the rep can reword and send.
+
+**A second screen is the policy panel**, reached from the header. It lists every threshold in
+`policy.py` and can change one while the service runs: `GET /admin/policy`,
+`PUT /admin/policy`, `POST /admin/policy/reset`. The panel is drawn from the policy file itself —
+each value's label, explanation and control come from how the file declares it — so a threshold
+added there appears on screen without the UI being touched. **There is no sign-in on it**, and a
+change is held in memory only, so a restart silently puts every value back. Both are deliberate
+demo choices, written up in DESIGN.md under "Future production".
 
 **The backend's rules do not stop at the browser:**
 
@@ -224,14 +236,27 @@ answer.
 - **Fail toward the human** (NFR-4). Every failure renders something a rep can act on. The error
   shape is `{"error": {"code", "message", "details"}}`; from Layer 0 the codes are `not_found`
   (404) and `upstream_unavailable` (502). A blank screen is a bug.
-- **A draft is never a send.** `drafted_email.is_draft` is always true and the UI is what makes
-  that visible — the email's own words never say "draft". There is no send action and no endpoint
-  behind one.
+- **The send is a simulation, and the screen says so.** `drafted_email.is_draft` is always true
+  and the UI is what makes that visible — the email's own words never say "draft". There *is* a
+  send button, and it reaches nothing: no address is contacted, nothing is stored, and there is
+  still no endpoint behind it, because Layer 3 does not exist. A control that looks like it sends
+  is too dangerous to leave unexplained, so pressing it puts the screen's own sentence on screen
+  saying nothing was sent. Never make that sentence quieter, and never let the button imply more
+  than it does. A missing `drafted_email.to` disables the send outright.
 - **Show all four checks, always.** The service returns all four so a rep sees what passed rather
-  than inferring it from silence.
+  than inferring it from silence. Each one is its own message, in the order the service evaluated
+  them — never sorted, and never summarised into "3 of 4 passed".
+
+- **The pacing is a replay, never a race.** The whole response is fetched first; only then are the
+  findings played out. Starting the reveal while the request is in flight would put a finished
+  step on screen for work that had not finished, or had already failed. A failure therefore shows
+  a failure and no findings at all. Keep it that way.
 - **Say as little as possible on screen.** Almost every sentence a rep reads should have come
   from the service. The UI adds labels, not commentary — it is a window onto the rules, and prose
-  explaining itself is noise in front of them.
+  explaining itself is noise in front of them. The handful of sentences the UI does own live in
+  `web/src/chat/pageWords.ts` and nowhere else, each marked on screen as the screen's own words
+  rather than the service's, so the whole list is checkable in one place. Add to it only when the
+  service genuinely cannot say the thing instead.
 - **Never invent data, and never seed any.** The screen shows what the endpoint returned and
   nothing else. An empty list is shown as empty. Do not write sample records into the store to
   make a panel look fuller — fabricated content on screen is indistinguishable from real
@@ -409,3 +434,20 @@ Decided:
 - **`tools/` holds development-only programs**, typechecked and linted like everything else but
   unreachable from `src/`. It has the ShipBob stand-in the demo reads from, which serves the very
   same sample records the tests use so the two can never disagree.
+- **The screen is a conversation, and its pacing is faked in the browser.** No streaming endpoint
+  was added: the service still answers in one response, and the screen plays it back. This was a
+  deliberate call to keep the change to the UI. The honest version — the service emitting each
+  stage as it completes — is written up under **Would improve** in DESIGN.md.
+- **The send is faked too**, for the same reason: Layer 3 is unbuilt, and building it was out of
+  scope for a UI change. The screen states plainly that nothing was sent. Whoever builds Layer 3
+  replaces the simulation rather than adding to it.
+- **The policy panel has no sign-in and keeps nothing.** Anyone who can reach the service can
+  change what every later claim is judged by, and a restart loses the change. Chosen knowingly for
+  a demo that is shown once, over a shared admin token and a SQLite table, both of which were
+  offered. Neither is a defensible choice for anything longer-lived: see DESIGN.md.
+- **Every policy value is editable from the panel**, the stated $100 cap included. It is shown with
+  the service's own explanation, which says which values are provisional and which is ShipBob's.
+- **The policy is read once per request**, through the same dependency as before, and replaced
+  whole rather than value by value. A claim being screened finishes on the values it started with;
+  the next claim sees the change. That is what keeps Layer 0 deterministic (FR-0.6) while its
+  thresholds are editable.

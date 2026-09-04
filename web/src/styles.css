@@ -39,7 +39,7 @@ p {
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100dvh;
 }
 
 /* --- Header ------------------------------------------------------------- */
@@ -99,36 +99,35 @@ p {
 
 /* --- Page --------------------------------------------------------------- */
 
+/*
+ * Every screen sits in the same column. The shell is the height of the window, so a screen
+ * scrolls inside it rather than growing the page — which keeps the header in place.
+ */
 .screen {
   flex: 1;
+  /* Without this a flex child refuses to shrink below its contents, so it would grow the
+     shell instead of scrolling inside it. */
+  min-height: 0;
+  overflow-y: auto;
   width: 100%;
   max-width: 960px;
   margin: 0 auto;
   padding: 24px 20px 48px;
 }
 
-/* --- Lookup ------------------------------------------------------------- */
-
-.lookup {
-  padding: 18px 20px;
-  background: var(--sb-surface);
-  border: 1px solid var(--sb-line);
-  border-radius: var(--sb-radius);
-  box-shadow: var(--sb-shadow);
-}
-
-.lookup-form {
+/*
+ * The conversation does its own scrolling instead: the messages scroll, and the row of
+ * claims stays put at the bottom. So this screen never scrolls as a whole, and it drops the
+ * page padding because the parts inside it space themselves.
+ */
+.screen-chat {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 20px;
 }
 
-.lookup-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--sb-ink-soft);
-}
+/* --- Picking a claim ---------------------------------------------------- */
 
 .lookup-input {
   flex: 1;
@@ -146,7 +145,9 @@ p {
 .chip:focus-visible,
 .button-primary:focus-visible,
 .button-secondary:focus-visible,
-.observed-summary:focus-visible {
+.observed-summary:focus-visible,
+.composer-subject:focus-visible,
+.composer-body:focus-visible {
   outline: 2px solid var(--sb-brand);
   outline-offset: 2px;
 }
@@ -185,13 +186,13 @@ p {
   cursor: not-allowed;
 }
 
-.samples {
+/* Sits below the conversation and stays put while it scrolls. */
+.picker {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  margin-top: 14px;
-  padding-top: 14px;
+  padding: 14px 0 18px;
   border-top: 1px solid var(--sb-line);
 }
 
@@ -224,24 +225,35 @@ p {
   border-color: var(--sb-brand);
 }
 
+/* The claim on screen, so it is clear which conversation belongs to which button. */
+.chip-picked {
+  color: var(--sb-on-brand);
+  background: var(--sb-brand);
+  border-color: var(--sb-brand);
+}
+
 /* --- States ------------------------------------------------------------- */
 
-.working,
-.intro {
-  margin-top: 20px;
-  padding: 20px;
+.working {
+  margin-top: 18px;
+  padding: 14px 18px;
   background: var(--sb-surface);
   border: 1px solid var(--sb-line);
   border-radius: var(--sb-radius);
   color: var(--sb-ink-soft);
-}
-
-.working {
   font-weight: 600;
 }
 
+/* Before any claim is picked. Deliberately not a box: there is no content to frame. */
+.intro {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: var(--sb-ink-soft);
+}
+
 .failure {
-  margin-top: 20px;
   padding: 20px;
   background: var(--sb-stop-tint);
   border: 1px solid var(--sb-stop);
@@ -261,13 +273,6 @@ p {
 }
 
 /* --- Verdict ------------------------------------------------------------ */
-
-.result {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 20px;
-}
 
 .verdict {
   padding: 20px;
@@ -366,20 +371,13 @@ p {
 
 /* --- Gates -------------------------------------------------------------- */
 
-.gate-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
 .gate {
-  padding: 14px 16px;
+  padding: 16px 18px;
+  background: var(--sb-surface);
   border: 1px solid var(--sb-line);
   border-left-width: 4px;
-  border-radius: var(--sb-radius-small);
+  border-radius: var(--sb-radius);
+  box-shadow: var(--sb-shadow);
 }
 
 .gate-passed {
@@ -657,6 +655,162 @@ p {
   text-align: right;
 }
 
+/* --- The conversation --------------------------------------------------- */
+
+/* The one region that scrolls. Everything above and below it stays where it is. */
+.thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 0 8px;
+}
+
+.turns {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: turn-in var(--sb-turn-in) ease-out;
+}
+
+@keyframes turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The pacing itself is skipped in the code; this is the movement of a single message
+   arriving, which has to go too. */
+@media (prefers-reduced-motion: reduce) {
+  .turn {
+    animation: none;
+  }
+}
+
+/* What the rep did, set apart from what the system answered. */
+.turn-rep {
+  align-items: flex-end;
+}
+
+.turn-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sb-ink-faint);
+}
+
+.bubble {
+  padding: 16px 18px;
+  background: var(--sb-surface);
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius);
+  box-shadow: var(--sb-shadow);
+}
+
+.bubble-rep {
+  padding: 9px 16px;
+  color: var(--sb-on-brand);
+  background: var(--sb-brand);
+  border-color: var(--sb-brand);
+  border-radius: 999px;
+  box-shadow: none;
+  font-family: var(--sb-font-mono);
+  font-size: 13.5px;
+}
+
+/*
+ * The screen's own words, marked so nobody mistakes them for the system's. Dashed on
+ * purpose — it is the one thing on screen that did not come out of the service.
+ */
+.note {
+  padding: 14px 16px;
+  background: var(--sb-flag-tint);
+  border: 1px dashed var(--sb-flag);
+  border-radius: var(--sb-radius);
+  max-width: 72ch;
+}
+
+.note-mark {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sb-flag);
+}
+
+.note-inline {
+  margin-top: 12px;
+}
+
+.show-all {
+  margin-top: 14px;
+}
+
+/* --- Writing the email -------------------------------------------------- */
+
+.composer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--sb-line);
+}
+
+.composer-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sb-ink-faint);
+}
+
+.composer-subject,
+.composer-body {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--sb-ink);
+  background: var(--sb-surface);
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius-small);
+}
+
+.composer-body {
+  /* Only upwards: a wider box would break the reading measure the wording is set to. */
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.composer-blocked {
+  font-size: 13px;
+  color: var(--sb-stop);
+}
+
 /* --- Narrow screens ----------------------------------------------------- */
 
 @media (width <= 620px) {
@@ -669,4 +823,222 @@ p {
     margin-left: 0;
     flex-basis: 100%;
   }
+}
+
+/* --- Policy panel -------------------------------------------------------- */
+
+.header-nav {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.header-tab {
+  padding: 6px 12px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--sb-ink-soft);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--sb-radius-small);
+  cursor: pointer;
+}
+
+.header-tab:hover:not(.header-tab-current) {
+  color: var(--sb-ink);
+  background: var(--sb-canvas);
+}
+
+.header-tab-current {
+  color: var(--sb-brand);
+  background: var(--sb-brand-tint);
+}
+
+.header-tab:focus-visible,
+.ranking-move:focus-visible,
+.policy-input:focus-visible {
+  outline: 2px solid var(--sb-brand);
+  outline-offset: 2px;
+}
+
+/* The one sentence on this screen the service did not write, so it is marked out as
+   somebody's warning rather than read as part of the policy. */
+.policy-warning {
+  margin-top: 10px;
+  padding: 10px 14px;
+  max-width: 68ch;
+  background: var(--sb-flag-tint);
+  border-left: 4px solid var(--sb-flag);
+  border-radius: var(--sb-radius-small);
+  color: var(--sb-ink);
+}
+
+.policy-force {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--sb-ink-faint);
+}
+
+.policy-values {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.policy-value {
+  padding: 14px 16px;
+  border: 1px solid var(--sb-line);
+  border-left: 4px solid var(--sb-line);
+  border-radius: var(--sb-radius-small);
+}
+
+.policy-value-refused {
+  border-left-color: var(--sb-stop);
+  background: var(--sb-stop-tint);
+}
+
+.policy-value-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.policy-value-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.policy-value-changed {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sb-flag-tint);
+  color: var(--sb-flag);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.policy-value-description {
+  margin-top: 4px;
+  max-width: 78ch;
+  font-size: 13px;
+  color: var(--sb-ink-soft);
+}
+
+.policy-input {
+  margin-top: 10px;
+  max-width: 340px;
+}
+
+.policy-value-startup,
+.policy-value-problem {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.policy-value-startup {
+  color: var(--sb-ink-faint);
+}
+
+.policy-value-problem {
+  font-weight: 600;
+  color: var(--sb-stop);
+}
+
+.policy-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ranking {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 420px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ranking-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--sb-surface);
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius-small);
+}
+
+.ranking-position {
+  width: 20px;
+  font-family: var(--sb-font-mono);
+  font-size: 12.5px;
+  color: var(--sb-ink-faint);
+}
+
+.ranking-name {
+  font-weight: 600;
+}
+
+.ranking-moves {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.ranking-move {
+  width: 28px;
+  padding: 2px 0;
+  font: inherit;
+  color: var(--sb-brand);
+  background: var(--sb-brand-tint);
+  border: 1px solid transparent;
+  border-radius: var(--sb-radius-small);
+  cursor: pointer;
+}
+
+.ranking-move:hover:not(:disabled) {
+  border-color: var(--sb-brand);
+}
+
+.ranking-move:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.policy-refusal,
+.policy-saved {
+  max-width: 68ch;
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: var(--sb-radius-small);
+  font-weight: 600;
+}
+
+.policy-refusal {
+  background: var(--sb-stop-tint);
+  color: var(--sb-stop);
+}
+
+.policy-saved {
+  background: var(--sb-pass-tint);
+  color: var(--sb-pass);
+}
+
+.policy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--sb-line);
 }

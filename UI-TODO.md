@@ -42,6 +42,8 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
 - [x] UI-5 — Case lookup: an input, a button, and the nine sample ids.
   - **Be aware:** the sample buttons carry ids and nothing else. Labelling what each one
     demonstrates would be the page asserting an outcome it does not decide.
+  - **Superseded by UI-22.** The input and its button are gone; the nine ids remain. The rule
+    about not labelling them still holds.
 
 - [x] UI-6 — The verdict, with the reasons in the order the service ranked them.
   - **Conclusion:** the verdict and the reasons are the service's own values, reshaped to read —
@@ -62,6 +64,8 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
 - [x] UI-9 — The stopped-claim findings and the drafted email, marked as a draft.
   - **Conclusion:** the draft note sits above the email because the email's own words never say
     it. No send button, and no endpoint behind one.
+  - **Superseded by UI-23 and UI-24.** The email is editable now and there is a send button. It
+    still reaches no endpoint — that part has not changed, and the screen says so.
 
 - [x] UI-10 — Failure: four named kinds, each with its own heading and one line on what to do.
   - **Conclusion:** the explanation comes from the service where it sent one.
@@ -76,6 +80,133 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
 
 - [x] UI-12 — `make ui-install`, `ui-dev`, `ui-build`, `ui-lint`, plus `mock`.
   - **Be aware:** deliberately not part of `make check` or CI, so nothing catches a broken UI.
+
+## v2 — the same screening, as a conversation
+
+The findings arrive one at a time instead of all at once, and a stopped claim ends in an email a
+rep can reword and send. Same endpoint behind it — `POST /cases/{case_id}/preflight` — and no
+backend change of any kind.
+
+**Why these start at UI-20.** The policy panel was being built at the same time and had first
+claim on the numbers after UI-12. Leaving UI-13 to UI-19 free was cheaper than two features
+answering to the same id.
+
+- [x] UI-20 — The conversation: one screening laid out as an ordered list of messages.
+  - **What was built:** `web/src/chat/transcript.ts` turns one result into messages — three reads,
+    the numbers, one message per check, the decision, then the write-up and the email on a stopped
+    claim. `chat/Message.tsx` is the only place that knows which component draws which kind.
+  - **Conclusion:** the order is the service's running order, not ours, and the transcript file
+    arranges without deciding — it reads no rule and computes no figure. It is the file here most
+    likely to drift into deciding something, so keep it dull.
+  - **Be aware:** the old panels were split to make this work — `RecordPanel` became three read
+    components, `GateList` became a single `GateCard`. The panel frame now comes from the message
+    bubble, which is why those components no longer carry one.
+
+- [x] UI-21 — The pacing, and the fact that it is a replay rather than a race.
+  - **What was built:** the whole response is fetched first; only then does `chat/useReveal.ts`
+    count the messages out with a pause between each. A "Show all" button skips the wait, and a
+    machine set to reduce motion is given everything at once with no timer started.
+  - **Conclusion:** **this is the decision to preserve.** Revealing while the request is in flight
+    would show a finished step for work that had not finished, or had already failed. Because the
+    reveal only ever replays a response that arrived, a failed screening has no steps to show —
+    which is structural, not something a check has to catch.
+  - **Be aware:** the pauses measure nothing and look like they might. That is written up in
+    DESIGN.md under **Could break**. The pause length is in the hook, not the theme file, because
+    a timer needs a number and a stylesheet cannot hand one over.
+
+- [x] UI-22 — The case picker: the nine ids, and no typing box.
+  - **What was built:** `components/CasePicker.tsx`, pinned below the conversation, with the
+    picked claim marked. `SAMPLE_CASE_IDS` moved to `web/src/sampleCases.ts`.
+  - **Conclusion:** the box could only ever produce "no such claim" — the stand-in serves these
+    nine and nothing else — so removing it took a dead end off the screen.
+  - **Be aware:** `.lookup-input` stayed in the stylesheet on purpose. The policy panel borrows it.
+
+- [x] UI-23 — The editable email.
+  - **What was built:** `chat/EmailComposer.tsx`. Subject and wording are editable; the recipient
+    is not, because it comes from the claim's contact address and who hears about a claim is not a
+    rep's to change. A claim with no contact address disables the send and says why.
+  - **Be aware:** an edit lives in browser state and nothing else. Picking another claim discards
+    it silently, and nothing is recorded against the merchant — so FR-3.8 is still entirely unmet.
+
+- [x] UI-24 — The send, which sends nothing.
+  - **What was built:** a button that swaps the composer for a read-only view of the wording, with
+    the screen's own sentence saying nothing was sent.
+  - **Conclusion:** the user asked for a fake send knowing Layer 3 does not exist. What makes it
+    safe rather than dishonest is that the screen says so in its own words, marked as the screen's
+    words and not the service's. Do not make that sentence quieter.
+  - **Be aware:** the real thing owes several things this does not — refusing to send twice,
+    checking the payload against what was approved, keeping a record (FR-3.4, FR-3.5, FR-3.7).
+    Replace the simulation; do not wire something up behind it.
+
+- [ ] UI-25 — Tried in a browser.
+  - **Not done, and deliberately not ticked.** Every message was rendered to HTML against the live
+    service and checked — all four checks present, the composer only on stopped claims, no steps at
+    all on a failure — and the project builds, typechecks and lints clean. But nobody has watched
+    the pacing run, clicked send, or resized the window. The session that wrote it had no browser.
+
+## v3 — changing the rules from a screen
+
+The numbers the checks judge by, on a screen an admin can edit. The endpoints behind it —
+`GET /admin/policy`, `PUT /admin/policy`, `POST /admin/policy/reset` — were built for this and
+are new; everything about the claim policy already lived in one file (FR-0.7, NFR-7).
+
+**These are the reserved UI-13 to UI-19.** The conversation rewrite was being built at the same
+time and starts at UI-20.
+
+- [x] UI-13 — Two screens, and tabs in the header to move between them.
+  - **What was built:** `App.tsx` holds which screen is showing; the screening screen and the
+    policy panel are the two. The current tab is marked for anything reading the page aloud.
+  - **Be aware:** the screen you leave is taken down, not hidden, so a conversation is lost when
+    you switch. That is on purpose — a conversation screened under the old policy, sitting beside
+    a policy that has since changed, is the one thing on this page that could mislead.
+
+- [x] UI-14 — One failure type for both screens, and the dev proxy forwarding `/admin`.
+  - **What was built:** `api/failure.ts` holds the failure kinds, the error-envelope reading and
+    the per-value complaints; `api/request.ts` is now the only place that calls `fetch`. The
+    screening client and the policy client are both a few lines on top of it.
+  - **Conclusion:** the alternative was a second copy of the same careful failure handling. One
+    kind was added — `invalid_request`, which only the panel can cause — and the notice component
+    grew a heading for it.
+  - **Be aware:** this renamed `ScreeningFailure` to `ApiFailure`, which touched the screening
+    screen, the transcript and the failure notice. Nothing about screening behaviour changed.
+
+- [x] UI-15 — The panel: every threshold, with a control chosen by what sort of value it is.
+  - **What was built:** `screens/PolicyScreen.tsx` and `components/PolicyValueRow.tsx`. The
+    service sends a kind per value — whole number, money, fraction, words, yes-or-no, ranking —
+    and the row draws the matching control.
+  - **Conclusion:** the panel knows nothing about claims. Every label is the value's own name
+    reshaped to read, every explanation is the sentence from the policy file, and a threshold
+    added to that file appears here with no UI change. That includes the file's own "PROVISIONAL"
+    marker, which is worth a reader seeing rather than hiding.
+  - **Be aware:** every number is an ordinary text box, deliberately. A number box would round or
+    refuse on its own, and money must never pass through a browser number (FR-1.21, NFR-2). The
+    values arrive as text and are sent back as text, untouched.
+
+- [x] UI-16 — The reason ranking, reordered with up and down buttons.
+  - **Conclusion:** buttons rather than dragging — they work with a keyboard, need no library, and
+    cannot half-drop an entry. The positions are numbered because the numbering is the point: the
+    first reason heads the merchant's email.
+  - **Be aware:** the panel does not check the ranking. Losing or repeating a reason is refused by
+    the service, which has always had that rule, and its complaint appears under the control.
+
+- [x] UI-17 — Saving, being refused, and putting the startup values back.
+  - **What was built:** Save sends the whole form; the panel then draws whatever the service says
+    is in force. A refusal shows the service's sentence plus one complaint under each value it
+    named, and changes nothing. "Put back the startup values" is offered only when the service
+    says the policy has moved off them.
+  - **Conclusion:** the panel never decides what changed or whether a value is any good. It sends
+    what was typed and shows the answer, which is why it cannot disagree with the service.
+  - **Be aware:** one sentence on this screen is the screen's own — that a change is lost on
+    restart — and it lives in `chat/pageWords.ts` with the other two. The service cannot say that
+    about itself, and somebody changing what every later claim is judged by has to know it.
+
+- [ ] UI-18 — Tried in a browser.
+  - **Not done, and deliberately not ticked.** The whole chain was driven through the dev proxy
+    with the service and the ShipBob stand-in running: the policy read back, the age limit changed
+    to 5, `CASE-1001` turned away as too old with the new limit quoted in the merchant's email, a
+    refused change proved to have changed nothing, and reset putting it back. It builds,
+    typechecks and lints clean. But nobody has clicked a checkbox, moved a ranking entry, or
+    looked at the layout. The session that wrote it had no browser.
 
 ## Reference — what the endpoint returns
 
@@ -94,6 +225,18 @@ report   case_id, account_name, user_id, reasons[], findings[], gates[], context
 error    error{code, message, details} — "not_found" (404), "upstream_unavailable" (502)
 ```
 
+The policy panel's own shapes, from `src/claim_agent/admin/models.py`:
+
+```
+view     values[], changed_at (null until something changes), matches_startup
+value    name, description, changed, kind, value, startup_value
+         kind "integer" | "money" | "fraction" | "text" → value is text
+         kind "boolean"                                  → value is true or false
+         kind "ranking"                                  → value is a list of names, in order
+update   {"values": {name: text | true/false | [names]}} — partial; anything left out is kept
+error    also "invalid_request" (400), whose details carry values[{name, message}]
+```
+
 Money is a string on purpose. Line totals and the order total are computed in Python and are not
 in the JSON, so there is nothing to multiply in the browser — see
 [CLAUDE.md](CLAUDE.md#the-ui).
@@ -104,7 +247,11 @@ outage — which is enough to build every screen against without inventing sampl
 ## Not built
 
 Everything past the quick checks, because it does not exist in the service either: no approving,
-no feedback, no editing an email, no view over a claim's separate products, no fetching back a
-screening. Those are Layer 2 and Layer R.
+no feedback, no view over a claim's separate products, no fetching back a screening. Those are
+Layer 2 and Layer R.
+
+An email **can** be reworded now (UI-23) and **can** be sent (UI-24), but the send reaches
+nothing and the edit is kept nowhere. Both are simulations on a screen, not stages of the
+system.
 
 There are also **no tests for the UI**, and it is outside the checks that run before a push.

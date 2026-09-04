@@ -1,35 +1,20 @@
 /**
- * The four eligibility checks, all of them, whether they passed or failed.
+ * One of the four eligibility checks: what it decided, and the values it looked at.
  *
- * Showing the ones that passed matters as much as the one that failed: a rep can see the
- * insurance check ran and cleared rather than inferring it from silence. Each can be
- * opened to reveal the values it looked at, so a finding can be checked, not just trusted.
+ * Each check is reported on its own, and all four are always reported, whether they passed
+ * or failed. Showing the ones that passed matters as much as the one that failed — a
+ * representative can see the insurance check ran and cleared rather than inferring it from
+ * silence. Each card opens to reveal what the check read, so a finding can be checked
+ * rather than merely trusted.
  */
 import { humanise } from "../display";
 import type { GateResult } from "../api/types";
 
-interface GateListProps {
-  gates: GateResult[];
-}
-
-export function GateList({ gates }: GateListProps): React.JSX.Element {
-  return (
-    <section className="panel">
-      <h3 className="panel-title">The four checks</h3>
-      <ul className="gate-list">
-        {gates.map((gate) => (
-          <GateCard key={gate.gate} gate={gate} />
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function GateCard({ gate }: { gate: GateResult }): React.JSX.Element {
+export function GateCard({ gate }: { gate: GateResult }): React.JSX.Element {
   const observed = Object.entries(gate.observed);
 
   return (
-    <li className={gate.passed ? "gate gate-passed" : "gate gate-failed"}>
+    <div className={gate.passed ? "gate gate-passed" : "gate gate-failed"}>
       <div className="gate-head">
         <span className="gate-mark" aria-hidden="true">
           {gate.passed ? "✓" : "✕"}
@@ -55,6 +40,6 @@ function GateCard({ gate }: { gate: GateResult }): React.JSX.Element {
           </dl>
         </details>
       )}
-    </li>
+    </div>
   );
 }

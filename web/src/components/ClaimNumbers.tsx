@@ -2,23 +2,17 @@
  * What the claim is worth, how old it is, and what a rep corrected for this merchant before.
  *
  * The service works these out once, up front. The screen prints them and adds nothing —
- * in particular the order value arrives already worked out, and the order lines further
- * down the page are never added up here.
+ * in particular the order value arrives already worked out, and the order lines reported
+ * alongside it are never added up here.
  */
 import { formatDayCount, formatMoment, formatMoney } from "../display";
 import type { ClaimContext } from "../api/types";
 
-interface ClaimContextPanelProps {
-  context: ClaimContext;
-}
-
-export function ClaimContextPanel({ context }: ClaimContextPanelProps): React.JSX.Element {
+export function ClaimNumbers({ context }: { context: ClaimContext }): React.JSX.Element {
   const corrections = context.merchant_corrections;
 
   return (
-    <section className="panel">
-      <h3 className="panel-title">The claim in numbers</h3>
-
+    <>
       <div className="facts">
         <Fact label="Order value">{formatMoney(context.order_value_usd)}</Fact>
         <Fact label="High value">{context.is_high_value ? "Yes" : "No"}</Fact>
@@ -41,7 +35,7 @@ export function ClaimContextPanel({ context }: ClaimContextPanelProps): React.JS
           ))}
         </ul>
       )}
-    </section>
+    </>
   );
 }
 

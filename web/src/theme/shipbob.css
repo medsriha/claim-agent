@@ -38,6 +38,10 @@
     sans-serif;
   --sb-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
+  /* How long a message takes to fade in as the conversation plays out. The pause
+     *between* messages is a timer, so it lives in the code that runs it. */
+  --sb-turn-in: 220ms;
+
   --sb-radius: 10px;
   --sb-radius-small: 6px;
   --sb-shadow: 0 1px 2px rgb(9 8 58 / 6%), 0 4px 12px rgb(9 8 58 / 6%);
