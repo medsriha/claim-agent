@@ -3,8 +3,9 @@
 A "claim" here is a merchant telling ShipBob that a parcel arrived damaged. To
 judge one you need the support case the merchant opened, the shipment it is
 about, and the order the goods came from. This file holds those three, plus the
-email we draft back to the merchant and the record of a correction a rep made
-once before.
+two records an investigation adds — the images the merchant uploaded and the
+priced invoice ShipBob generates — plus the email we draft back to the merchant
+and the record of a correction a rep made once before.
 
 Nothing in here reaches out to anything: no web requests, no database, no AI.
 That is deliberate. The rules built on top of these shapes have to give the same
@@ -162,6 +163,63 @@ class Order(BaseModel):
         """
         total = sum((item.line_total for item in self.line_items), start=Decimal("0"))
         return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+class Attachment(BaseModel):
+    """One image the merchant uploaded to the case — a photo, or a screenshot.
+
+    Attachments are the evidence a damaged-in-transit claim rests on: pictures of
+    the broken product, pictures of the box it arrived in, a photograph of an
+    invoice, a screenshot of the end customer saying the parcel arrived damaged.
+
+    `attachment_id` is stable, so a finding can always name the exact image that
+    produced it (FR-2.2). `url` is where the image itself can be fetched from.
+
+    `file_name` and `content_type` are carried because ShipBob sends them, and are
+    **never** used to decide what an image is. They carry no signal at all: every
+    attachment in every sample case is a PNG or a JPEG whatever it depicts, two
+    files in one case have nearly identical names and are different kinds of
+    evidence, and names across the set include `329233.png`. What an attachment is
+    can only be settled by looking at it (FR-1.4).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    attachment_id: str
+    url: str
+    file_name: BlankToNone = None
+    content_type: BlankToNone = None
+
+
+class Invoice(BaseModel):
+    """ShipBob's priced record of what a shipment contained (FR-1.18).
+
+    Generated on request rather than stored, and it is the document a recommended
+    reimbursement is priced from: the agent says which products were damaged, and
+    the amount is worked out from these lines.
+
+    The lines are held as `OrderLineItem`, the same shape the order uses, because
+    the two payloads are field for field identical — ShipBob's generated invoice
+    applies no discount and has no discount field. Giving the same data two shapes
+    would only invite them to drift apart.
+
+    Two things about this record do not match what the requirements ask of it, and
+    both are ShipBob's data rather than our handling of it. It carries no discount,
+    so "the price after discounts" cannot be read from it. And `generated_at` is
+    the same fixed moment on every invoice in the sample set, postdating every
+    delivery, so it is a snapshot taken at claim time rather than a record frozen
+    at fulfilment.
+
+    An invoice that arrives with no lines prices nothing. That is a statement about
+    the data we were given, and the caller has to decide what to make of it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    invoice_id: str
+    shipment_id: BlankToNone = None
+    line_items: tuple[OrderLineItem, ...] = ()
+    generated_at: UtcDatetime | None = None
 
 
 class Shipment(BaseModel):

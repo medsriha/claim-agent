@@ -10,9 +10,10 @@ below are provisional placeholders and need ShipBob sign-off before production.
 **Some values are marked `NOT_ON_PANEL`.** The admin panel is built from this
 file, so by default a value here is a value someone can change from a screen
 while the service runs. That is only useful for a value the running service
-actually reads: three of the ones marked belong to the AI investigation, which
-does not exist yet, so changing them from a panel would do nothing observable and
-would suggest otherwise. The marking changes nothing about the value itself —
+actually reads: five of the ones marked belong to the AI investigation, which is
+being built and is not yet reachable, so changing them from a panel would do
+nothing observable and would suggest otherwise. Once the investigation runs, they
+are the marks to revisit. The marking changes nothing about the value itself —
 every one of them is still read, still overridable from the environment, and
 still used wherever it is used.
 """
@@ -96,9 +97,10 @@ class Policy(BaseSettings):
         "(FR-0.2). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
-    # The three below are read by the AI investigation, which is not built. Nothing in
-    # the running service looks at them, so a panel offering them would be offering a
-    # change nobody could see the effect of.
+    # The five below are read by the AI investigation, which is being built but is not
+    # yet reachable over HTTP. Nothing a running service does looks at them, so a panel
+    # offering them would be offering a change nobody could see the effect of. When the
+    # investigation is reachable, these markings are the ones to take off.
     min_assessment_confidence: float = Field(
         default=0.7,
         ge=0.0,
@@ -116,6 +118,20 @@ class Policy(BaseSettings):
         default=2,
         ge=0,
         description="Retries per tool call before failing toward the rep (FR-1.3). PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    max_image_analyses_per_run: int = Field(
+        default=20,
+        gt=0,
+        description="Most images one run may look at, whatever its step budget allows. Looking "
+        "at an image is the costliest thing the system does (NFR-8). PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    cap_applies_to_whole_claim: bool = Field(
+        default=True,
+        description="Whether the reimbursement cap limits the whole claim as well as each line. "
+        "REQUIREMENTS.md open question 2; when true, lines summing above the cap are escalated "
+        "rather than trimmed (FR-1.20). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
 

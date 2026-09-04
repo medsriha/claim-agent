@@ -115,9 +115,16 @@ machine's own settings say.
 Nothing is stored. The answer exists only in the reply, so a representative cannot fetch a
 screening again, and there is no lasting record of one. Closing the page loses what it showed.
 
-**Stages 2 to 4 are untouched.** Nothing reads photographs, nothing splits a claim into separate
-products, no AI is involved anywhere yet, and nothing has ever been sent to a merchant or paid
-out. The parts of the system that could do those things do not exist.
+**Stages 2 and 3 are being built, and none of it runs yet.** The pieces exist and are tested
+separately: the rules that decide an outcome, the arithmetic that works out an amount, the count
+of steps a run may take, the record of what it did, the way to reach the AI, and the reads that
+fetch a case's images and price a shipment. Nothing joins them together. There is no way to ask
+for an investigation, no tools have been put in the AI's hands, and no claim has ever been
+investigated — so in practice a photograph has still never been read and a claim has still never
+been split into separate products.
+
+**Stage 4 is untouched**, and nothing has ever been sent to a merchant or paid out. The parts of
+the system that could do those things do not exist.
 
 For what that leaves missing or fragile, see [Future production](#future-production).
 
@@ -829,6 +836,202 @@ either screen.
 
 ---
 
+### Splitting a claim into products
+
+**What it does** — Works out which products a merchant is actually claiming for, and turns each
+one into a separate piece of work. It also decides, once, what each uploaded photo is a photo of.
+
+**Why we need it** — A merchant opens one complaint, but it can cover several damaged products,
+and the complaint almost never names them. The descriptions say things like "1 order affected" or
+"Number of affected orders: 2". Meanwhile the payment system pays for one product per request,
+and a representative may well want to pay for one item and ask for more evidence about another.
+So the complaint has to be split before it can be investigated (FR-1a.1, FR-1a.2).
+
+This cannot be done by a rule. Working out which products are meant requires reading what the
+merchant wrote and looking at the pictures, which is why this is the first place in the system
+where an AI is involved at all.
+
+**How it works**
+
+1. Ask ShipBob for the list of images attached to the complaint. This is one cheap read and it is
+   the first time in the whole system that attachments are touched — a claim turned away by the
+   quick checks never gets this far, and so never costs anything to look at (NFR-8).
+2. Look at each image once and say what it is: an invoice, a screenshot of the end customer
+   confirming the damage, a photo of the outer box, or a photo of a damaged product. Also say
+   whether it is clear enough to be any use, and if not, why not — too dark, too blurry, too
+   cropped (FR-1.4, FR-1.5).
+   Names and file types are ignored completely. They carry no signal: two files in the sample data
+   have nearly identical names and are different kinds of evidence, and every attachment in every
+   sample case is a PNG or a JPEG whatever it shows.
+3. Three of those four kinds describe the whole parcel rather than any one product — the invoice,
+   the customer's confirmation, and the outer box. They are settled here, once, and every product
+   in the claim is handed the same answer (FR-1a.3). That is partly about cost, since the invoice
+   is not read once per product, and mostly about consistency: two products in one claim can never
+   disagree about whether the box was photographed.
+4. Then decide which products are being claimed for, by weighing what the merchant wrote against
+   the photos of damage and the list of items on the order. Each product identified has to be an
+   item that is really on the order, and it carries that item's name, code and price with it
+   (FR-1a.2). A claimed product that is not on the order cannot be paid for, and saying so is
+   itself a useful finding.
+5. If it cannot be established which products are meant, the claim is handed to a person with a
+   note saying exactly what is unclear, and no split is guessed at (FR-1a.4). A representative
+   told "the photos show a damaged 24oz bottle, but the order has two different 24oz bottles at
+   different prices" settles that in seconds. A wrong split is silent and expensive.
+6. One damaged product is one piece of work, through exactly the same machinery as five. There is
+   no shortcut for the simple case (FR-1a.5).
+
+**What it connects to** — It starts from what the quick checks already gathered, so it never
+re-reads the complaint, the parcel or the order. It reads the attachment list from ShipBob and
+looks at the images. It hands on a list of products, the settled verdict on the shared evidence,
+and what was seen in each image — which is exactly what the per-product investigation needs.
+
+**Choices we made**
+
+- **The AI chooses what to look at.** Nothing here is a fixed sequence of steps. It is given a
+  small set of things it is able to do — list the attachments, look at an image and answer a
+  question about it, produce an invoice, work out an amount — and it decides which to use, in
+  what order, and how many times, until it can justify an answer (FR-1.1). A complaint with no
+  photos costs a few steps; one with six earns as many as it needs.
+- **It can only read.** Sending an email and paying a merchant are not among the things it is
+  able to do — not discouraged, not guarded by a warning in its instructions, simply absent. It
+  could not take either action if it decided to (FR-1.2).
+- **Every answer it gives has a fixed shape.** It never replies with a paragraph to be
+  interpreted. Each answer is a form with named boxes, and a reply that does not fit the form is
+  rejected rather than patched up (NFR-2).
+- **Each image is looked at once per claim, not once per product.** Looking at pictures is by far
+  the most expensive thing this system does, so the answer to a given question about a given image
+  is remembered for the rest of the claim (NFR-8).
+- **A number of steps it cannot exceed.** Every run has a budget, and running out is an answer in
+  itself: the claim goes to a person, carrying whatever was established along the way, rather than
+  looping or coming back empty (FR-1.3, FR-1.16).
+- **Being unsure is a valid answer, and the preferred one.** Handing an ambiguous split to a
+  person is treated as success, not failure. The alternative — picking the likelier of two similar
+  bottles — produces a payment nobody checked.
+
+**When things go wrong** — Every failure ends with a person, never with a decision (NFR-4). If
+ShipBob will not give up the attachment list, if an image cannot be downloaded, if the AI is
+unreachable or replies with something unusable, or if the step budget runs out, the claim is
+escalated with whatever was learned so far attached. There is a difference the system is careful
+about: an image the merchant sent that is too blurry to use is *their* problem and they can be
+asked for a better one, whereas an image *we* could not fetch is *ours*, and asking the merchant
+to send it again would be dishonest. The two are recorded separately and lead to different places.
+
+**Not ready for production** — An AI reading a photograph does not give the same answer every
+time, which is in direct tension with the promise that the same claim is examined the same way.
+Everything around it is fixed and repeatable; the reading of the picture is not. Nothing about a
+split is stored, so it cannot be looked at again afterwards. And a photograph can contain writing,
+which means an image could in principle carry text aimed at the AI reading it; the damage that
+could do is limited by the AI not being able to send or pay anything, but it is not eliminated.
+
+**Where the code is** — `src/claim_agent/agent/triage.py`, with the shared machinery in
+`src/claim_agent/agent/` and the shapes it produces in `src/claim_agent/domain/`.
+
+---
+
+### Investigating one damaged product
+
+**What it does** — Takes one damaged product and works out what the evidence shows, whether it
+looks like something ShipBob should pay for, how sure it is, and what to say to the merchant. Then
+it stops.
+
+**Why we need it** — This is the slow part of a representative's day: opening the photos, checking
+the evidence is all there, deciding whether the damage is really visible, working out how much,
+and writing the email. Doing it the same way every time is what makes two identical claims arrive
+looking identical (FR-1b.1, NFR-1).
+
+**How it works**
+
+One run per product, and the runs happen at the same time as each other. Each run:
+
+1. Receives the whole claim — everything the merchant wrote, every image, every item on the order,
+   and what the other products in the same claim are — and one product it is responsible for
+   (FR-1b.2). It needs the wider view to read the evidence properly, because a photo showing two
+   broken items matters to both of them and the description is the only account of what happened.
+   Knowing about the whole claim and answering for one part of it are different things.
+2. Checks that four pieces of evidence are present and usable: proof of what was ordered and at
+   what price, confirmation from the person who received the parcel, photos of the damaged product,
+   and photos of the outer box. Three of those were settled once for the whole claim; the photos of
+   the damaged product are this product's own business.
+3. If any of the four is missing, or present but too poor to rely on, the run stops there and the
+   answer is to go back to the merchant — naming the specific thing that is needed, "a photo of the
+   outer shipping box", never "more information" (FR-1.6, FR-1.7). Nothing is inferred, assumed, or
+   half-approved.
+4. If all four are there, it answers four questions, each with its reasoning and each with how
+   sure it is: is the damage actually visible; can the damaged product be identified; does that
+   product appear on the invoice; and was the outer box photographed (FR-1.8–FR-1.11). The box
+   needs to have been *photographed*, not to be damaged — an intact box with a broken product
+   inside is a perfectly good claim.
+5. It then recommends one of four things and says why: pay, ask the merchant for something, refuse,
+   or hand it to a person (FR-1.14).
+6. If it recommends paying, the amount is worked out by arithmetic, not by the AI. The AI says
+   which items were damaged; a fixed calculation takes those items' prices from the invoice, adds
+   them up, and applies the cap (FR-1.21).
+7. A draft email to the merchant is written to match, with the amount filled in afterwards by the
+   same calculation.
+
+**What it connects to** — It starts from the split and the shared evidence verdict, and from the
+facts the quick checks worked out — what the order was worth, whether it counts as high value, and
+anything a representative has corrected for this merchant before. It produces, for each product, a
+recommendation, the evidence behind it, the four answers with their reasoning, how the amount was
+arrived at, and the draft email. Nothing is sent and nothing is stored.
+
+**Choices we made**
+
+- **The AI recommends; it does not decide.** All four outcomes are its own judgement, including
+  refusing a claim. There is one narrow exception, in one direction only: where the rules say an
+  approval is not available — a piece of evidence is missing, it is not sure enough, or it ran out
+  of steps — the recommendation is moved to asking the merchant or handing it to a person, and what
+  the AI originally said is recorded next to it. Nothing can move a recommendation *towards* paying.
+- **No amount of money ever comes out of the AI.** Not as a figure it calculates, and not as words
+  a figure is read out of. The forms it fills in have no box for an amount at all, so it is not
+  that it is asked not to give one — there is nowhere to put it. The number in front of a
+  representative is arithmetic they can check (FR-1.21).
+- **The email is written by the AI, with a gap where the money goes.** The wording is the AI's, so
+  it can speak to the actual claim, but every figure is put in afterwards by the calculation. Any
+  amount of money found anywhere else in what it wrote is rejected.
+- **How sure it is, is part of the answer.** Each of the four questions carries its own confidence,
+  and so does the identification of which product was damaged, because that is the judgement the
+  money rests on. Below a set level, paying is not available and the claim goes to a person with
+  the doubt spelled out (FR-1.15). The figure is shown to a representative either way — a number
+  someone can see is worth more than a threshold they cannot.
+- **Each product is judged on its own.** A poorly evidenced product cannot drag down a
+  well-evidenced one, and a strong one cannot carry a weak one (FR-1b.3). One product can be
+  recommended for payment while its neighbour is waiting on a photograph.
+- **A product reaches the same answer whether it was claimed alone or with five others**
+  (FR-1b.4). This one is worth explaining, because it is built into the shape of the code rather
+  than being asked for politely. The question "could this be one of two similar bottles?" is
+  settled against *the items on the order*, which are the same no matter how the claim was split —
+  never against the other products being claimed for, which are not. And the parts that decide the
+  outcome and the amount are handed nothing at all about the neighbouring products, so they could
+  not take them into account even by mistake.
+- **Every run has its own budget.** A claim covering four products has four budgets, not one
+  divided four ways, so a complicated product cannot starve a simple one (FR-1.3).
+- **Nothing is presented as settled.** The result says what is recommended and why. The email is a
+  draft, and is marked as one on the outside rather than in its own words, so no marker can ever
+  reach a merchant (FR-1.17).
+
+**When things go wrong** — Everything ends with a person (NFR-4). Running out of steps, an AI that
+cannot be reached, a reply that does not fit its form, an image that cannot be fetched, and
+ShipBob refusing to produce an invoice all lead to the same place: the claim is handed over with
+whatever was established, and never to a payment or a silently dropped case. Where an invoice
+cannot be produced, the claim is escalated rather than the price being taken from the order
+instead — the two happen to be identical in the sample data, and quietly swapping one for the
+other would put a number in front of a representative that did not come from where the report says
+it came from.
+
+**Not ready for production** — The confidence figure is the AI's own opinion of itself. We use it
+to withhold payments, because there is nothing better to use, but nobody has ever checked it
+against what actually turned out to be true. The same is true of the level we set it at. Nothing
+is stored, so there is no lasting record of an investigation. And "the invoice" means two different
+things in the requirements — the picture the merchant uploaded, and the one ShipBob generates on
+request — and which of them each rule means is our reading rather than ShipBob's.
+
+**Where the code is** — `src/claim_agent/agent/investigate.py` for one product,
+`src/claim_agent/agent/run.py` for the claim as a whole, the rules with no AI in them in
+`src/claim_agent/domain/`, and the way in at `src/claim_agent/api/routes/investigate.py`.
+
+---
+
 ## Future production
 
 This project is an interview exercise. It is not complete and it is not production-hardened,
@@ -909,6 +1112,37 @@ finds in production.
 - **Anywhere to keep a policy change.** A changed threshold lives in the running process and
   nowhere else. There is no history of what the policy was on a given day, no note of who changed
   it or why, and a restart silently puts every value back to what the environment says.
+
+
+- **The investigation is built in pieces and none of it runs yet.** The parts that judge an
+  outcome, work out an amount, count a run's steps, keep its record, reach the model, and read
+  images and invoices from ShipBob all exist and are tested. Nothing joins them up: there is no
+  loop that spends the budget, no tools bound to the model, and no way to reach any of it over
+  the web. So the promises that a run always terminates and that running out of steps hands the
+  claim to a person are wired but not yet kept, and no claim has ever been investigated.
+- **Nothing caches an image.** The requirement that an image is looked at once per claim, not
+  once per damaged product, has nowhere to live yet — the client re-lists attachments on every
+  call and remembers nothing. Looking at pictures is the most expensive thing this system does,
+  so this is the single biggest cost risk in the layer.
+- **The stand-in for ShipBob serves neither new endpoint.** It answers the three cheap reads and
+  nothing else, so even once the investigation is joined up, it cannot be demonstrated end to end
+  on a laptop until the stand-in can list attachments and price a shipment.
+- **The whole-claim cap is not enforced anywhere.** There is a setting saying the cap should limit
+  a whole claim as well as each product in it, and nothing reads it. The amount function caps only
+  what it is handed, one product at a time, so until whoever joins the pieces up enforces it, the
+  cap can be exceeded simply by splitting a claim into more products — the exact hole the
+  requirements warn about.
+- **Nothing records that a claimed quantity was reduced.** A merchant claiming five of a product
+  the invoice shows two of is quietly paid for two. The reduction is correct and it is invisible:
+  there is no field for it, so no report shows it and no email mentions it. The merchant is left
+  to notice the shortfall themselves.
+- **An amount that came to nothing does not say why.** No invoice, a product the invoice does not
+  list, and a product the invoice prices at nothing all produce the same empty result, and every
+  reader has to work out which of the three happened from the surrounding fields. Three different
+  problems deserve to be said once rather than reconstructed three times.
+- **The record of a run is not kept.** It exists for as long as the reply takes and is then gone.
+  The requirement asking for an ordered record of what was done to each case is unmet, and the
+  record has ordering but no times, because nothing fills them in.
 
 ### Could break
 
@@ -1002,6 +1236,44 @@ finds in production.
   Run two copies behind a load balancer and a change reaches whichever one answered the request:
   the two then judge claims by different numbers, and neither screen shows anything wrong.
 
+
+- **Asking the same question twice can give two different answers.** Everything around the AI is
+  fixed and repeatable — the arithmetic, the rules, the ordering, the identifiers — and the
+  reading of a photograph is not. The model is asked for its most likely answer rather than a
+  fresh one each time, which helps and is not a guarantee: the same name can be served by a
+  changed model, and the provider's own arithmetic is not identical run to run. This is the
+  clearest gap between what the system promises about consistency and what it can actually
+  deliver, and the honest defence is that the parts that decide money and outcomes are not the
+  parts that vary.
+- **The confidence figure now withholds real payments.** It is the AI's own opinion of how sure it
+  is, nothing in this system has ever checked it against what turned out to be true, and the level
+  we compare it against is a number we invented. A model that is confidently wrong will say so
+  confidently, and a model that is habitually modest will send good claims to a person for no
+  reason.
+- **A mistake in our own loop reaches a rep as a blank error.** Spending more steps than the
+  budget allows is treated as a fault in our code rather than an outcome for the claim, and
+  nothing translates it into an answer. Safe, in that no claim is ever paid or closed by it, but
+  the rep gets an opaque failure with no way to resume.
+- **A reply the AI malforms is never asked for again.** It goes straight to a person. That is
+  deliberate — the identical question asked the identical way is the least likely thing to come
+  back differently — but it means a single badly-shaped answer costs a whole investigation.
+- **One label covers three different reasons a product cannot be priced.** An ambiguous product,
+  no invoice at all, and a product the invoice prices at nothing are all reported the same way.
+  The sentence a rep reads tells them apart; the label does not, so anything built on the label
+  alone will treat them as one thing.
+- **The invoice cannot be matched to the order by product code.** The requirements say the two
+  documents carry identical lines, and the example invoice has no product code on its lines, so a
+  product can only be tied to an invoice by its code or its name as written. A merchant with two
+  similarly named products is exactly where that goes wrong, and that is the case this system
+  most needs to get right.
+- **We guessed how ShipBob says it will not price a shipment.** Only the status code is
+  load-bearing. If it signals that refusal some other way, every such shipment is reported as
+  ShipBob being broken instead, and a rep is sent looking for an outage that is not happening.
+- **The two ShipBob clients now hold the same code twice.** Retrying, parsing, and the careful
+  handling that stops money losing its cents were copied rather than shared, because the second
+  client was written without touching the first. They agree today. A fix applied to one will
+  silently miss the other.
+
 ### Would improve
 
 - **A record of every screening, and the ability to fetch one back.** This is the single biggest
@@ -1032,6 +1304,18 @@ finds in production.
 - **A container image and a deployment path.** There is currently no defined way to run this
   anywhere but a developer's laptop.
 
+
+- **One reading of ShipBob, not two.** The client that screens a claim and the client that
+  fetches its evidence now hold the same retrying and parsing code twice, because the second was
+  written without touching the first. Sharing it would leave one copy to fix.
+- **A second, differently-worded attempt when the AI malforms its answer.** Feeding the
+  complaint back and asking again would recover some investigations that currently go to a
+  person. It was deliberately not done, because deciding what to say the second time is a
+  question about wording rather than plumbing.
+- **Reasons as a list rather than one long sentence.** A claim line with five things wrong
+  produces a single very long sentence. It is complete and true, and a rep would read it faster
+  as a list.
+
 ### Questions for whoever owns the requirements
 
 - **The requirements refer to "open question 2" and "open question 3" but contain no list of open
@@ -1052,3 +1336,13 @@ finds in production.
   with age, then wrong type, then missing information. They are told every reason either way —
   the order settles which one they read first and which one is in the subject line, not which
   ones they hear. Nobody has confirmed that this is the right emphasis.
+- **Which "invoice" does each rule mean?** The word covers two different documents: the picture
+  the merchant uploaded as proof of what they bought, and the priced list ShipBob generates on
+  request. We read the first as the evidence a claim needs and the second as where prices and the
+  "is this product on the invoice?" check come from. Nobody has confirmed that, and it decides
+  what every payout is calculated from.
+- **What should happen to a product the invoice prices at nothing?** CASE-1005's order contains a
+  free promotional insert. We send it to a person, because paying nothing and refusing outright
+  are both defensible and neither is written down.
+- **Should a merchant be told when we pay for fewer items than they claimed?** Claiming five of a
+  product the invoice shows two of is currently reimbursed at two, silently.

@@ -230,3 +230,6 @@ layer0-http-transcript.txt
 # The UI's dependencies and build output. The lock file next to them is committed.
 node_modules/
 web/dist/
+
+# Downloaded claim attachments, cached so the same image is never fetched twice.
+.attachment-cache/

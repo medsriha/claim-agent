@@ -50,6 +50,8 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
         "min_assessment_confidence",
         "max_agent_steps",
         "max_tool_retries",
+        "max_image_analyses_per_run",
+        "cap_applies_to_whole_claim",
     }
     assert body["matches_startup"] is True
     assert body["changed_at"] is None

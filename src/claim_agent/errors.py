@@ -49,6 +49,49 @@ class UpstreamError(ClaimAgentError):
     code = "upstream_unavailable"
 
 
+class ConfigurationError(ClaimAgentError):
+    """Something this service needs in order to work was never configured.
+
+    Kept apart from `UpstreamError` for the same reason `StorageError` is: the two
+    send whoever is reading the message looking in different places. "The model
+    provider could not be reached" starts an investigation into somebody else's
+    system; "no API key was set" is answered by looking at our own configuration.
+    Reporting the second as the first would waste the first hour of working out
+    what went wrong.
+
+    Raised when the thing is asked for, never while this module is being imported.
+    The service has to start without credentials — that is how it is demonstrated
+    with no model access at all — so a missing key stops the one request that
+    needed it rather than the whole process (NFR-6).
+    """
+
+    status_code = 503
+    code = "configuration_error"
+
+
+class InvoiceUnavailableError(ClaimAgentError):
+    """ShipBob will not price this shipment, and asking again will not change that.
+
+    A settled answer rather than a fault, which is why it is deliberately **not** a
+    kind of `UpstreamError`: the retry rule in the ShipBob clients asks again on any
+    `UpstreamError`, and this is the one upstream reply where asking again only
+    wastes a claim's time.
+
+    It matters that a caller can tell this apart from ShipBob being unreachable. A
+    shipment ShipBob will not price cannot have a reimbursement worked out for it,
+    so the claim goes to a person with that reason to give them; a shipment we
+    could not ask about is a fault that may well pass (FR-1.18, NFR-4).
+
+    The status is the one a caller would get if this ever travelled out of the API,
+    which it should not: an investigation turns it into an escalation long before
+    then. `502` rather than ShipBob's own `422`, because `422` is what FastAPI
+    itself returns for a malformed request and the two would be confused.
+    """
+
+    status_code = 502
+    code = "invoice_unavailable"
+
+
 class StorageError(ClaimAgentError):
     """Our own store could not be read or written.
 
