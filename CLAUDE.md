@@ -105,7 +105,62 @@ These follow from the requirements and are not negotiable without changing them:
   escalation, never in a silent approval or a dropped case (NFR-4).
 - **Business logic goes in `domain/`**, testable without a network, a model, or a database.
 
+## Working on a feature
+
+REQUIREMENTS.md holds 83 numbered requirements and they interlock, so **keep a todo list and
+build it from the requirements themselves.** A list is what stops a half-finished layer from
+looking finished.
+
+1. **Read the requirements in scope, then create one todo item per requirement id** — `FR-0.2`,
+   `FR-0.3`, each its own item. Never collapse them into a single "implement Layer 0"; the point
+   is to see which specific requirements are still outstanding. Add items for the tests and the
+   DESIGN.md section too.
+2. **Write the DESIGN.md section before the code.** Explaining it in plain words is how you find
+   the holes while they are still cheap.
+3. **Work one item at a time.** Mark it in progress when you start and done the moment it is
+   finished — never in a batch at the end. Exactly one item in progress at a time.
+4. **A requirement is done only when** the behaviour is implemented, a test names the requirement
+   id, and DESIGN.md explains it. If it is partly satisfied, keep the item open and say what is
+   missing. Never mark done anything you have not actually run.
+5. **Turn discovered work into new items** rather than dropping it silently. If a requirement is
+   blocked, ambiguous, or larger than it looked, say so and ask — do not guess.
+6. **Finish with `make check`**, then commit the code, its tests, and the DESIGN.md update
+   together.
+
+Carry the requirement id into docstrings, test names, and commit messages, so any behaviour can
+be traced back to the requirement that motivated it.
+
 ## Engineering standards
+
+**Correctness.**
+
+- Understand before you write. Read the requirement and the code around it, and follow the
+  pattern already there instead of introducing a second way to do the same thing.
+- Handle every failure path explicitly. No bare `except`, no swallowed exception, no empty error
+  branch. If a call can fail, decide what happens when it does.
+- Test the unhappy paths, not just the happy one — missing evidence, empty lists, upstream
+  timeouts, malformed model output. Most of these requirements are about what happens when
+  things are *not* clean.
+- Verify rather than assume: run the code and the tests before calling something done, and report
+  failures plainly instead of describing what you intended.
+- Leave nothing behind — no dead code, no commented-out blocks, no debug prints, no unused
+  imports or arguments.
+
+**Readability.** Someone else reads this next; write for them.
+
+- Names say what the thing is: `days_since_delivery`, not `d` or `tmp`. No abbreviations a
+  newcomer would have to decode.
+- Small functions that do one thing and are named for that thing. Prefer an early return to a
+  nested `if`.
+- Keep the main path a straight line down the page and push edge cases to the edges.
+- Comment *why*, never *what*. If a line needs a comment to say what it does, rename or simplify
+  it instead.
+- Build the simplest thing that satisfies the requirement. No configuration, indirection, or
+  extension points for needs nobody has yet — an abstraction with one implementation is a
+  liability, not foresight.
+- Keep modules focused. When a file starts covering two subjects, split it.
+
+**Project conventions.**
 
 - Type-hint everything; mypy runs strict over `src` and `tests`.
 - Raise the errors in `errors.py` rather than returning error dicts or leaking upstream
