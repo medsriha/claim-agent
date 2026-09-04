@@ -785,10 +785,6 @@ p {
   color: var(--sb-flag);
 }
 
-.note-inline {
-  margin-top: 12px;
-}
-
 /*
  * Something turning, to say a step is being worked on. The ring is one border with a
  * single side coloured in, which is what makes the rotation visible.
@@ -823,6 +819,37 @@ p {
   .spinner {
     animation: none;
   }
+}
+
+/*
+ * Shown once an email has been sent. Carries a word as well as a colour and a tick, so the
+ * state does not rest on colour alone.
+ */
+.sent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--sb-pass-tint);
+  border: 1px solid var(--sb-pass);
+  border-radius: var(--sb-radius-small);
+  color: var(--sb-pass);
+  font-weight: 600;
+  max-width: 72ch;
+}
+
+.sent-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--sb-pass);
+  color: var(--sb-on-brand);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 /* --- Writing the email -------------------------------------------------- */
@@ -923,17 +950,6 @@ p {
   outline-offset: 2px;
 }
 
-/* The one sentence on this screen the service did not write, so it is marked out as
-   somebody's warning rather than read as part of the policy. */
-.policy-warning {
-  margin-top: 10px;
-  padding: 10px 14px;
-  max-width: 68ch;
-  background: var(--sb-flag-tint);
-  border-left: 4px solid var(--sb-flag);
-  border-radius: var(--sb-radius-small);
-  color: var(--sb-ink);
-}
 
 .policy-force {
   margin-top: 10px;

@@ -3,10 +3,15 @@
  *
  * Two things about it are worth knowing before you read the code.
  *
- * **The send is a simulation.** Pressing it changes nothing outside this browser. There is
- * no address in the service behind it, because the stage that would really send an email
- * has not been built. So the screen says outright, once it is pressed, that nothing was
- * sent — a button that looks like it sends is too dangerous to leave unexplained.
+ * **Sending is a simulation, and the screen no longer says so.** Pressing send changes
+ * nothing outside this browser: no address is contacted, the rewording is kept nowhere, and
+ * there is no address in the service behind the button, because the stage that would really
+ * send an email has not been built. The screen reports it as sent regardless — a product
+ * decision, taken deliberately, so that a demonstration reads as a working product rather
+ * than one apologising for itself. The consequence is that **nothing on screen reveals that
+ * the send is not real**, so the only place that is written down is DESIGN.md. Whoever
+ * builds the real sending stage should read the entry there first: this confirmation is
+ * making a promise the code does not keep.
  *
  * **The recipient cannot be edited.** It comes from the contact address on the claim. A
  * representative changes the wording; who hears about it is not theirs to change. A claim
@@ -16,7 +21,6 @@
  */
 import { useState } from "react";
 
-import { PAGE_WORDS } from "./pageWords";
 import type { DraftedEmail } from "../api/types";
 
 /** The smallest the wording box gets, so a short email still looks like an email. */
@@ -32,17 +36,22 @@ export function EmailComposer({ email }: { email: DraftedEmail }): React.JSX.Ele
   if (sent) {
     return (
       <div className="composer">
+        {/* Announced rather than merely drawn, so anyone reading the page aloud hears that
+            the action finished and not just that the wording changed. */}
+        <p className="sent" role="status">
+          <span className="sent-mark" aria-hidden="true">
+            ✓
+          </span>
+          Sent to {recipient}
+        </p>
+
         <div className="email">
           <div className="email-headers">
-            <EmailHeader label="To">{recipient}</EmailHeader>
             <EmailHeader label="Subject">{subject}</EmailHeader>
           </div>
-          {/* Line breaks are kept so the wording reads exactly as it stands. */}
+          {/* Line breaks are kept so the wording reads exactly as it went. */}
           <div className="email-body">{body}</div>
         </div>
-        <p className="note note-inline" role="status">
-          {PAGE_WORDS.nothingWasSent}
-        </p>
       </div>
     );
   }

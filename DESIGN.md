@@ -100,7 +100,7 @@ as a conversation: what was read, what the claim is worth, each of the four chec
 decision, and — on a stopped claim — the write-up and the draft email, which can be reworded on
 the spot. It is a demonstration: anyone who opens it can screen any claim, and it decides nothing
 itself. It has a send button, and that button reaches nothing — no email leaves the browser,
-because the stage that would send one does not exist; the screen says so when it is pressed.
+because the stage that would send one does not exist, though the screen reports it as sent.
 Alongside it there is a stand-in for ShipBob, so the whole thing can be run on a laptop without
 being connected to anything.
 
@@ -613,11 +613,20 @@ writes nothing anywhere. It holds nothing between claims and nothing between vis
   because a page that fills in silently does not show that the system works in stages, and
   showing that is most of the point of the screen. Anyone driving a demonstration should know
   the rhythm is a reading aid rather than a measurement.
-- **Sending is a simulation.** There is a send button, and pressing it changes nothing outside
-  the browser: no address is contacted, no record is written, and there is no address in the
-  system behind the button to call. The stage that would really send an email does not exist.
-  Because a button that looks like it sends is a dangerous thing to leave unexplained, the page
-  says plainly, after sending, that nothing was sent.
+- **Sending is a simulation, and the page does not admit it.** There is a send button, and
+  pressing it changes nothing outside the browser: no address is contacted, no record is written,
+  the rewording is kept nowhere, and there is no address in the system behind the button to call.
+  The stage that would really send an email does not exist. The page reports the email as sent
+  anyway, and shows who it went to.
+
+  The page used to say outright that nothing had been sent. That was removed on purpose: a
+  demonstration should read as a working product rather than one apologising for itself, and a
+  paragraph explaining what is not built is not what somebody watching should be reading. The
+  cost is worth stating plainly, because it is the reason this paragraph exists — **there is now
+  nothing on screen that tells a viewer the send was not real.** Anyone shown this will believe
+  an email went to the merchant. Whoever is driving a demonstration has to say so out loud, and
+  whoever builds the real sending stage needs to know that this confirmation is already making a
+  promise the code does not keep.
 - **A missing recipient stops the send.** A claim with no contact address on it produces an email
   with nobody to send it to, and the button is unavailable rather than merely unwise. That is the
   rule the real sending stage will have to follow, so the screen follows it now.
@@ -630,17 +639,21 @@ writes nothing anywhere. It holds nothing between claims and nothing between vis
   text. The page prints that text. Multiplying a price by a quantity on screen is the habit that
   ends with a payment built on a rounding error, so the page shows both and stops there.
 - **The page says as little as it can.** Almost every sentence on it came from the system. The
-  page adds labels, not commentary. There are exactly two places it speaks for itself, both
-  because the system has no way to say the thing for it: that nothing was really sent, and that
-  the investigation stage a passing claim would go to does not exist. Both are marked on screen
-  as the page's own words rather than the system's.
+  page adds labels, not commentary. There is one place it speaks for itself, because the system
+  has no way to say the thing for it: that the investigation stage a passing claim would go to
+  does not exist. It is marked on screen as the page's own words rather than the system's. The
+  page writes one other sentence — the confirmation that an email was sent — and that is a
+  different kind of thing: not an explanation but a claim, and discussed above, because it is
+  not true.
 - **The draft email is marked as a draft.** The email's own words never say so, deliberately, so
   that a marker can never reach a merchant — which leaves the screen as the only place that state
   is visible.
 - **Nothing on the page is invented.** It shows what the screening returned and nothing else. A
-  merchant with no past corrections shows an empty list, because that is what the system knows —
-  writing sample history into the store to make the panel look fuller would put fabricated
-  content on screen that a reader could not tell from the real thing. The system's own words are
+  merchant with no past corrections shows an empty list, because that is what the system knows,
+  and the page never adds a record of its own to make a panel look fuller. Putting history into
+  the store is possible — there is a tool for it, described in
+  [Remembering a merchant](#remembering-a-merchant) — but that is a decision somebody takes
+  deliberately, outside the screen, and not something the screen does to flatter itself. The system's own words are
   reshaped to read rather than restated: the page shows "Claim too old" where the rules say
   `claim_too_old`, and never a phrase of its own choosing.
 - **There is no way to skip the pacing, except one.** A machine set to reduce movement is given
@@ -734,11 +747,13 @@ same one place the panel writes to, which is what makes a change take effect imm
   rest of this demo has no sign-in either, and adding one here alone would be a false comfort.
 - **The email order is reordered with buttons, not by dragging.** Up and down buttons work with a
   keyboard, need no library, and cannot half-drop a reason somewhere unexpected.
-- **One sentence on the panel is ours**, the one saying a change is lost on restart. It sits with
-  the screen's other two invented sentences, in the single file that holds them, and is marked out
-  on screen as the screen's words rather than the system's. Everything else on the panel is either
-  a label or the system's own wording: the explanation under each threshold is the sentence written
-  beside that threshold in the code, "PROVISIONAL" and all.
+- **The panel adds no words of its own.** It once carried a sentence saying a change is lost on
+  restart. That was taken out: a panel explaining its own limitations is not what somebody
+  changing a threshold should be reading. The fact is unchanged — see the entry above, and
+  [Future production](#future-production) — it is simply no longer said on screen, so whoever is
+  driving a demonstration has to know it themselves. Everything on the panel is now either a label
+  or the system's own wording: the explanation under each threshold is the sentence written beside
+  that threshold in the code, "PROVISIONAL" and all.
 
 **When things go wrong** — A value the service will not accept leaves the policy exactly as it
 was: the panel shows the service's own complaint under each value it rejected, and the form still
@@ -747,7 +762,10 @@ reason twice, or leaves one out, is refused by the same rule that has always ref
 a claim could otherwise fail a check whose reason has nowhere to sit. If the service is not
 answering at all, the panel says so instead of showing a policy that might not be the real one.
 
-**Not ready for production** — No sign-in, so no idea who made a change. No record of what was
+**Not ready for production** — Nothing about a change is stored, and the panel no longer says so,
+so somebody who changed a threshold this morning can find it quietly back to its old value after a
+restart this afternoon with nothing on screen having warned them. No sign-in, so no idea who made a
+change. No record of what was
 changed, by whom, or when, beyond a line in the log and the time the last change landed. Nothing
 is stored, so a restart loses it. No confirmation step before a change that affects every claim
 that follows. And it holds for one running copy of the service only: a second copy would carry on
@@ -789,10 +807,13 @@ finds in production.
   wording of an email *can* be edited, but only on screen: see the two entries below.
 - **Any real sending.** The send button is a simulation. Nothing is contacted, nothing is
   recorded, and there is no address in the system behind it — the whole of stage 4 is empty. The
-  screen says outright that nothing was sent, which is the only thing making that safe. Whoever
-  builds the real sending stage should replace the simulation rather than wire something up
-  behind it, because the real one owes several things this one does not: refusing to send twice,
-  checking what is being sent against what was approved, and keeping a record of it.
+  screen reports the email as sent and gives no hint that it was not, which makes this the most
+  misleading thing in the project: anyone shown the demonstration will believe a merchant was
+  contacted. That was asked for deliberately, and the trade is that this entry and the component's
+  docstring are now the only warning. Whoever builds the real sending stage should replace the
+  simulation rather than wire something up behind it, because the real one owes several things
+  this one does not: refusing to send twice, checking what is being sent against what was
+  approved, and keeping a record of it.
 - **Any record of an edited email.** A representative can reword a draft, and the rewording is
   gone the moment another claim is picked. Nothing keeps it, and nothing learns from it — so the
   requirement that a representative's corrections improve the next claim from that merchant is

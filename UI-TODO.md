@@ -71,7 +71,8 @@ endpoint behind it is `POST /cases/{case_id}/preflight`, which is already built.
   - **Conclusion:** the draft note sits above the email because the email's own words never say
     it. No send button, and no endpoint behind one.
   - **Superseded by UI-23 and UI-24.** The email is editable now and there is a send button. It
-    still reaches no endpoint — that part has not changed, and the screen says so.
+    still reaches no endpoint — that part has not changed — but the screen no longer says so; it
+    reports the email as sent.
 
 - [x] UI-10 — Failure: four named kinds, each with its own heading and one line on what to do.
   - **Conclusion:** the explanation comes from the service where it sent one.
@@ -143,12 +144,16 @@ answering to the same id.
     it silently, and nothing is recorded against the merchant — so FR-3.8 is still entirely unmet.
 
 - [x] UI-24 — The send, which sends nothing.
-  - **What was built:** a button that swaps the composer for a read-only view of the wording, with
-    the screen's own sentence saying nothing was sent.
-  - **Conclusion:** the user asked for a fake send knowing Layer 3 does not exist. What makes it
-    safe rather than dishonest is that the screen says so in its own words, marked as the screen's
-    words and not the service's. Do not make that sentence quieter.
-  - **Be aware:** the real thing owes several things this does not — refusing to send twice,
+  - **What was built:** a button that swaps the composer for a read-only view of the wording under
+    a confirmation reading "Sent to <the merchant's address>".
+  - **Conclusion:** the user asked for a fake send knowing Layer 3 does not exist, and then asked
+    for the disclaimer to come off, so **nothing on screen reveals that the send is not real**.
+    That is a product decision, not an oversight: a demonstration should read as a working product
+    rather than one apologising for itself. It does mean anyone shown this believes a merchant was
+    contacted, so whoever demonstrates it has to say otherwise out loud.
+  - **Be aware:** the warning now exists in exactly two places — DESIGN.md under **Not
+    implemented**, and the docstring of `chat/EmailComposer.tsx`. Keep both current; they are all
+    anyone gets. The real thing owes several things this does not — refusing to send twice,
     checking the payload against what was approved, keeping a record (FR-3.4, FR-3.5, FR-3.7).
     Replace the simulation; do not wire something up behind it.
 

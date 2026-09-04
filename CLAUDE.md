@@ -236,13 +236,15 @@ demo choices, written up in DESIGN.md under "Future production".
 - **Fail toward the human** (NFR-4). Every failure renders something a rep can act on. The error
   shape is `{"error": {"code", "message", "details"}}`; from Layer 0 the codes are `not_found`
   (404) and `upstream_unavailable` (502). A blank screen is a bug.
-- **The send is a simulation, and the screen says so.** `drafted_email.is_draft` is always true
-  and the UI is what makes that visible — the email's own words never say "draft". There *is* a
-  send button, and it reaches nothing: no address is contacted, nothing is stored, and there is
-  still no endpoint behind it, because Layer 3 does not exist. A control that looks like it sends
-  is too dangerous to leave unexplained, so pressing it puts the screen's own sentence on screen
-  saying nothing was sent. Never make that sentence quieter, and never let the button imply more
-  than it does. A missing `drafted_email.to` disables the send outright.
+- **The send is a simulation, and the screen does *not* say so.** `drafted_email.is_draft` is
+  always true and the UI marks the draft as a draft before sending — the email's own words never
+  say "draft". But the send button reaches nothing: no address is contacted, nothing is stored,
+  and there is no endpoint behind it, because Layer 3 does not exist. Pressing it reports the
+  email as sent anyway. **That was a deliberate product decision** — a demonstration should read
+  as a working product rather than one apologising for itself — and the cost is that nothing a
+  viewer can see reveals the send is not real. So the record lives in DESIGN.md instead, under
+  **Not implemented**, and in the docstring of `chat/EmailComposer.tsx`. Keep both current: they
+  are now the only warning anyone gets. A missing `drafted_email.to` still disables the send.
 - **Show all four checks, always.** The service returns all four so a rep sees what passed rather
   than inferring it from silence. Each one is its own message, in the order the service evaluated
   them — never sorted, and never summarised into "3 of 4 passed".
@@ -262,10 +264,11 @@ demo choices, written up in DESIGN.md under "Future production".
   entry in the same commit; an undocumented fake is the thing to avoid, not the fake itself.
 - **Say as little as possible on screen.** Almost every sentence a rep reads should have come
   from the service. The UI adds labels, not commentary — it is a window onto the rules, and prose
-  explaining itself is noise in front of them. The handful of sentences the UI does own live in
-  `web/src/chat/pageWords.ts` and nowhere else, each marked on screen as the screen's own words
-  rather than the service's, so the whole list is checkable in one place. Add to it only when the
-  service genuinely cannot say the thing instead.
+  explaining itself is noise in front of them. The sentences the UI does own live in
+  `web/src/chat/pageWords.ts` and nowhere else, marked on screen as the screen's own words rather
+  than the service's, so the whole list is checkable in one place — it is down to one. Add to it
+  only when the service genuinely cannot say the thing instead, and never to describe the demo
+  itself: the screen is not the place to explain what has and has not been built.
 - **Never invent data.** The screen shows what the endpoint returned and nothing else. An empty
   list is shown as empty. Never add a record from the UI, and never fake one in a component to
   make a panel look fuller — fabricated content on screen is indistinguishable from real history,
@@ -460,8 +463,9 @@ Decided:
   deliberate call to keep the change to the UI. The honest version — the service emitting each
   stage as it completes — is written up under **Would improve** in DESIGN.md.
 - **The send is faked too**, for the same reason: Layer 3 is unbuilt, and building it was out of
-  scope for a UI change. The screen states plainly that nothing was sent. Whoever builds Layer 3
-  replaces the simulation rather than adding to it.
+  scope for a UI change. The screen reports it as sent regardless, which was asked for; the
+  warning therefore lives only in DESIGN.md and in the component's docstring. Whoever builds
+  Layer 3 replaces the simulation rather than adding to it.
 - **The policy panel has no sign-in and keeps nothing.** Anyone who can reach the service can
   change what every later claim is judged by, and a restart loses the change. Chosen knowingly for
   a demo that is shown once, over a shared admin token and a SQLite table, both of which were
