@@ -1,0 +1,867 @@
+# Damaged-in-Transit Claims Agent — Backend Requirements
+
+## Background
+
+ShipBob is a third-party logistics company. Merchants send their inventory to ShipBob's
+warehouses; ShipBob picks, packs, and ships orders to those merchants' end customers.
+
+Sometimes a package arrives crushed, a product arrives broken, or contents are missing.
+When that happens the merchant opens a support case with ShipBob, and a ShipBob support
+representative decides whether to reimburse the merchant for the damaged goods. This is
+called a **damaged-in-transit claim**.
+
+Today a rep does all of it by hand: opens the case, reads the merchant's description,
+looks at the photos the merchant attached, checks whether the claim qualifies, works out
+how much to pay, writes an email, and sends it. It is slow, it does not scale, and — the
+part that matters most — it is **inconsistent**. The same situation can get two different
+answers from two different reps, or from the same rep on two different days.
+
+This system automates that work. It investigates a claim, establishes the facts, and hands
+the rep a finished report and a drafted merchant email.
+
+**The system does not decide claims. The rep does.** The agent's job is to do the
+gathering, reading, checking and drafting — the slow, repetitive part — and to present
+what it found so that a decision takes seconds instead of many minutes. The judgement of
+whether to pay, refuse, or ask for more remains a person's, and nothing reaches the
+merchant until that person says so.
+
+This split is what delivers both goals at once. **Consistency** comes from the agent
+performing the same investigation the same way on every claim, so two identical claims
+arrive at the rep looking identical. **Ease** comes from the rep receiving a complete,
+legible report rather than a case to work from scratch.
+
+**Scope of this document:** the backend only — the deterministic checks, the AI agent, its
+tools, the report it produces, and what happens after approval. The reviewer-facing UI is
+specified separately.
+
+---
+
+## Key terms
+
+| Term | Meaning |
+|---|---|
+| **Case** | A merchant's claim, already created in ShipBob's system. This system reads cases; it does not create them. |
+| **Merchant** | ShipBob's customer — the brand whose goods were damaged. The only party the system communicates with. |
+| **End customer** | The person who received the package. ShipBob never contacts them directly. |
+| **Rep** | The ShipBob support representative who reviews and approves the system's work. The only human user. |
+| **Attachment** | An image the merchant uploaded to the case — photos, screenshots of emails, pictures of invoices. |
+| **Agent** | The AI component that investigates a case by choosing and calling tools. |
+| **Claim line** | One claimed product within a case. A claim for two damaged items is two claim lines. The unit of investigation, reporting, approval, and payment. |
+| **Report** | The structured output the agent produces for the rep to act on — one per claim line. |
+
+## Available data
+
+The system reads from a mock ShipBob API offering: a list of cases, case details, case
+attachments, shipment details, order details, and invoice generation. It can also send an
+email on a case and submit a reimbursement.
+
+There is **no endpoint for merchant history** and **no endpoint for reading merchant
+replies**. Anything the system needs to remember, it stores itself.
+
+The full endpoint surface, with example payloads, is in `shipbob-mock-api.md`. Summarised:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /cases` | List all cases (id, number, status, subject, created date) |
+| `GET /cases/:case_id` | Full case record |
+| `GET /cases/:case_id/attachments` | The merchant's uploaded images |
+| `GET /shipments/:shipment_id` | Carrier, tracking, delivery date, insurance flag |
+| `GET /orders/:order_id` | Order line items with prices |
+| `POST /invoices/generate` | Priced invoice for a shipment |
+| `POST /reimbursements` | Submit a payout — one product per call |
+| `POST /cases/:case_id/email` | Send an email on the case |
+
+Five test cases exist: `CASE-1001` through `CASE-1005`. Each represents a different
+scenario, and they are referenced throughout this document as concrete examples.
+
+---
+
+## The four layers
+
+```
+Layer 0   Pre-flight       deterministic  →  screens out claims that cannot be processed
+Layer 1a  Triage           AI agent       →  identifies which products are being claimed for
+Layer 1b  Investigation    AI agent       →  one run per claimed product
+Layer 2   Report           structured     →  one report per product; the rep decides each
+   ├── rep gives feedback →  Layer R  same agent, re-run  →  revised report, back to Layer 2
+   └── rep approves       →  Layer 3
+Layer 3   Execution        deterministic  →  one email and one reimbursement per product
+```
+
+A claim can cover more than one damaged product. Everything from Layer 1b onward operates
+on a **claim line** — one claimed product — not on the claim as a whole.
+
+Layer 2 is a loop, not a step. The rep reviews, and either sends the report back with
+feedback — which a second agent acts on, producing a revised report for another review —
+or approves it, which is the only way out of the loop and into execution.
+
+The principle behind the split: **rules where there is a right answer, the agent where
+there is ambiguity, the human where there is a decision to make.**
+
+Note the distinction between a recommendation and a decision. The agent produces a
+recommended outcome because the rep needs a starting point and the email cannot be drafted
+without one — the assignment asks for exactly this. But a recommendation is a proposal,
+not an act. No outcome takes effect until a rep approves it.
+
+---
+
+# Layer 0 — Deterministic pre-flight
+
+Runs before the agent. Uses no AI. Its job is to answer one question cheaply: *can this
+claim be processed at all?*
+
+Some claims are dead on arrival regardless of how good the evidence is. Checking those
+first means an unprocessable case costs a few API reads instead of a full AI
+investigation.
+
+**FR-0.1 — Gather the case record.**
+Retrieve the case, its shipment, its order, and any stored history for that merchant.
+These are inexpensive data reads. Do not download or analyse attachments at this stage.
+
+> **Reference — `GET /cases/CASE-1001`**
+> ```json
+> {
+>   "case_id": "CASE-1001",
+>   "status": "New",
+>   "sub_category": "Claim | Damaged in Transit",
+>   "description": "Shipment ID: 342578703. Customer received order and product arrived damaged. Both product and shipping box damaged. Damage due to poor/bad packaging. 1 order affected.",
+>   "order_id": "334291211",
+>   "user_id": "334430",
+>   "shipment_id": "342578703",
+>   "delivered_date": "2026-02-11T11:36:14.000+0000",
+>   "contact_email": "sakukreja@shipbob.com",
+>   "account_name": "Best Paw Nutrition",
+>   "created_date": "2026-02-19T14:20:16.000+0000"
+> }
+> ```
+> The case gives the ids needed for every subsequent read. `description` is free text and
+> is the merchant's own account of what happened.
+
+**FR-0.2 — Check the claim is eligible.**
+Four conditions, all of which must hold:
+
+1. **The shipment is not too old.** ShipBob cannot reimburse past a certain age.
+2. **The claim is the right type.** Only damaged-in-transit claims are handled here.
+3. **Key information is present.** Missing the shipment, the order, or a description means
+   there is nothing to investigate.
+4. **The shipment is not insured.** Insured shipments follow a completely different
+   process and must be routed out, never processed here.
+
+> **Reference — where each gate reads from**
+>
+> | Gate | Field | Source |
+> |---|---|---|
+> | Age | `delivered_date` vs `created_date` | case, or `GET /shipments/:id` |
+> | Claim type | `sub_category` | case |
+> | Key info | `shipment_id`, `order_id`, `description` | case |
+> | Insurance | `is_insured` | `GET /shipments/:id` |
+>
+> **`GET /shipments/342578703`**
+> ```json
+> {
+>   "shipment_id": "342578703",
+>   "order_id": "334291211",
+>   "carrier": "Royal Mail Tracked 48",
+>   "tracking_number": "XQ607930599GB",
+>   "status": "Delivered",
+>   "delivered_date": "2026-02-11T11:36:14.000+0000",
+>   "is_insured": false
+> }
+> ```
+> All five test shipments are `is_insured: false`, so the insurance gate cannot be
+> demonstrated on real data — a constructed case is needed to show it firing.
+>
+> Every test case has `sub_category: "Claim | Damaged in Transit"`, so the claim-type
+> gate likewise never fires on the sample set.
+
+**FR-0.3 — Emit a verdict.**
+Either `PROCEED`, meaning the agent runs, or `TERMINAL` with a reason, meaning it does not.
+
+**FR-0.4 — A terminal case still produces a report.**
+An ineligible claim gets closed *with an explanation to the merchant*. That explanation is
+an email, and every email needs rep approval. So a terminal case skips the agent but still
+produces a report (Layer 2) containing the reason and a drafted merchant email.
+
+> **Reference — `CASE-1004`, the age-gate example**
+> ```json
+> {
+>   "case_id": "CASE-1004",
+>   "status": "Closed",
+>   "account_name": "Catalyze-X",
+>   "delivered_date": "2025-12-26T12:13:36.000+0000",
+>   "created_date": "2026-03-09T18:51:42.000+0000"
+> }
+> ```
+> Delivered 26 Dec, filed 9 Mar — **73 days**. Every other test case was filed within 8
+> days of delivery. This case has four attachments, and the correct behaviour is to never
+> look at any of them.
+
+**FR-0.5 — Compute the facts the agent should not have to work out.**
+Order value, whether this counts as a high-value shipment, days elapsed since delivery, and
+any corrections the rep has previously made on this merchant's claims. Pass these to the
+agent as starting context so it does not spend reasoning steps rediscovering them.
+
+> **Reference — `GET /orders/334291211`**
+> ```json
+> {
+>   "order_id": "334291211",
+>   "user_id": "334430",
+>   "line_items": [
+>     { "product_id": "1374243085", "name": "Additional Collagen Ampoule Duo", "sku": "AMP1", "quantity": 1, "unit_price": 38.00 },
+>     { "product_id": "1309112104", "name": "Liposomal Tripeptide Collagen", "sku": "COLLAGEN1", "quantity": 1, "unit_price": 52.00 }
+>   ],
+>   "created_date": "2026-02-07T07:42:48.000+0000"
+> }
+> ```
+> Order value is derived from `unit_price × quantity` across line items. There is no
+> subtotal, tax, shipping, or discount field anywhere in the schema.
+
+**FR-0.6 — Be fully deterministic.**
+The same case must always produce the same verdict. No AI is involved in this layer. These
+are rules with correct answers; a model can only introduce variance.
+
+**FR-0.7 — Keep policy values in one named place.**
+The age limit, the high-value threshold, the reimbursement cap, and confidence thresholds
+belong in a single readable configuration, not scattered through the code. Several of these
+values are not specified by ShipBob and represent judgement calls, so they must be visible
+and changeable rather than buried.
+
+---
+
+# Layer 1a — Triage: splitting the claim into lines
+
+A merchant opens **one case** for a shipment, but that case may cover several damaged
+products. The reimbursement API accepts one product per call, and a rep may well want to
+pay for one item while asking for more evidence on another. So the claim is split before it
+is investigated.
+
+The split cannot be made deterministically. The case description does not name products —
+it says things like "1 order affected" or "Number of affected orders: 2" — so working out
+which products are being claimed for requires reading the description and looking at the
+photos. This is a single agent pass over the whole claim.
+
+**FR-1a.1 — Identify the claimed products.**
+From the case description, the attachments, and the order's line items, determine which
+products the merchant is claiming for. The output is a set of claim lines, each naming one
+product from the order.
+
+**FR-1a.2 — Match each claim line to an order line item.**
+A claim line must correspond to a real product on the order, carrying its name, SKU, and
+unit price. A claimed product that does not appear on the order cannot be reimbursed, and
+that is itself a finding.
+
+**FR-1a.3 — Classify the shared evidence once.**
+The invoice, the outer packaging photo, and the customer confirmation apply to the whole
+shipment, not to any one product. Classify them once at this stage and make the result
+available to every claim line. Only the damaged-product photos are product-specific.
+
+This is both a cost control — the invoice is not re-read once per line — and a consistency
+guarantee: every line in a claim sees the same verdict on the shared evidence.
+
+**FR-1a.4 — Escalate the claim when the split is ambiguous.**
+If it cannot be established which products are being claimed for, no meaningful per-product
+investigation is possible. Recommend `escalate` at the claim level, stating what is
+ambiguous, and do not guess a split. A rep who is told "the photos show a damaged 24oz
+bottle, but the order contains two different 24oz bottles at different prices" can resolve
+it in seconds; a wrong split is silent and expensive.
+
+**FR-1a.5 — Treat a single-product claim as one claim line.**
+There is no special case for single-product claims. One damaged product is one claim line
+and goes through exactly the same machinery.
+
+---
+
+# Layer 1b — Investigation, per claim line
+
+One agent run per claim line. Each run receives the context from FR-0.5, the shared
+evidence findings from FR-1a.3, and the claim line it is responsible for. It investigates
+that one product and produces a recommendation for the rep.
+
+The agent's authority ends at recommending. It establishes what the evidence shows, what
+the policy implies, and what it would suggest — and stops there.
+
+**FR-1b.1 — Investigate one product per run.**
+Each run assesses, recommends, and drafts for its own claim line only. It does not decide
+anything about the other lines.
+
+**FR-1b.2 — See the whole claim regardless.**
+The run receives the full case: the merchant's complete description, every attachment, all
+order line items, and the other claim lines in the claim. It needs this context to read the
+evidence correctly — a photo showing two damaged items is relevant to both lines, and a
+description covering the whole shipment is the only account of what happened.
+
+The distinction is scope of responsibility, not scope of knowledge. The agent knows about
+the whole claim and answers for one line of it.
+
+**FR-1b.3 — Reach outcomes independently.**
+One line may be recommended for approval while another is recommended for a request for
+information. A weak line must not drag down a well-evidenced one, and a strong line must
+not carry a poorly evidenced one.
+
+**FR-1b.4 — Produce the same result for a line regardless of its siblings.**
+A product with a given set of evidence must reach the same recommendation whether it was
+claimed alone or alongside five others. This is what per-line isolation buys, and it is a
+direct contribution to NFR-1.
+
+---
+
+# Layer 1 — Shared agent requirements
+
+These apply to both the triage pass and every per-line run.
+
+## How it operates
+
+**FR-1.1 — Work as a tool-use loop, not a fixed sequence.**
+The agent chooses what to look at next based on what it has found so far, and stops when it
+can justify a recommendation. A case with no attachments should not require the same steps
+as a case with six. This autonomy is over *how it investigates*, not over what happens to
+the claim.
+
+**FR-1.2 — Operate with read and reasoning tools only.**
+The agent's available tools are: list a case's attachments, inspect an image and answer a
+question about it, generate an invoice for a shipment, and compute a reimbursement amount.
+
+**The agent has no ability to send email or submit a reimbursement.** Those tools are not
+in its surface at all. This is a structural guarantee rather than an instruction the model
+is asked to follow — the agent cannot take an irreversible action because no such action is
+available to it.
+
+> **Reference — endpoint access by layer**
+>
+> | Endpoint | Layer 0 | Agent | Layer 3 |
+> |---|:---:|:---:|:---:|
+> | `GET /cases/:id` | ✅ | | |
+> | `GET /shipments/:id` | ✅ | | |
+> | `GET /orders/:id` | ✅ | | |
+> | `GET /cases/:id/attachments` | | ✅ | |
+> | `POST /invoices/generate` | | ✅ | |
+> | `POST /cases/:id/email` | | ❌ | ✅ |
+> | `POST /reimbursements` | | ❌ | ✅ |
+
+**FR-1.3 — Guarantee termination.**
+The agent runs within a bounded number of steps with bounded retries. It always terminates.
+Budgets apply per run, so a claim with four lines has four budgets rather than one shared
+between them.
+
+## Evidence gathering
+
+Before any reimbursement decision, four pieces of evidence must be present:
+
+1. **Proof of what was ordered and at what price** — an invoice
+2. **Confirmation from the end customer that the damage happened** — supplied by the
+   merchant, since ShipBob does not contact end customers
+3. **Photos of the damaged product** — specific to a claim line
+4. **Photos of the outer packaging the order arrived in**
+
+Items 1, 2 and 4 describe the shipment and are assessed once for the whole claim
+(FR-1a.3). Item 3 is assessed per claim line: a claim covering two products needs photos
+showing damage to each of them.
+
+**FR-1.4 — Identify what each attachment actually is.**
+Attachments arrive as images with unhelpful names. An invoice may be a photograph of a
+paper invoice or a screenshot of a billing page; customer confirmation is typically a
+screenshot of an email. The system must determine each attachment's content by looking at
+it. Filenames and file types are not reliable indicators.
+
+> **Reference — `GET /cases/CASE-1003/attachments`**
+> ```json
+> {
+>   "attachments": [
+>     { "attachment_id": "ATT-CASE-1003-01", "file_name": "Inv.png", "content_type": "image/png", "url": "https://...blob.core.windows.net/shipbob-fde-mock/case-1003/01_Inv.png?se=2036-07-26T20:59:50Z&..." },
+>     { "attachment_id": "ATT-CASE-1003-02", "file_name": "Screenshot_at_Feb_26_20-45-24.png", "content_type": "image/png", "url": "https://..." },
+>     { "attachment_id": "ATT-CASE-1003-03", "file_name": "Screenshot_at_Feb_26_20-45-11.png", "content_type": "image/png", "url": "https://..." }
+>   ]
+> }
+> ```
+> Every attachment in every test case is an image. `content_type` is always `image/png` or
+> `image/jpeg` and therefore carries no signal about content. Two files here share a
+> near-identical name but are different kinds of evidence. Names across the set include
+> `kgray1.png`, `IMG_9726.jpeg`, and `329233.png` — none of which indicate content.
+>
+> Attachment URLs are Azure blob links with signatures valid until 2036, so they can be
+> cached locally for offline development.
+
+**FR-1.5 — Treat unusable evidence as missing.**
+An attachment that is present but too blurry, too dark, or too cropped to support a
+conclusion does not satisfy its requirement. Record *why* it was unusable, so the merchant
+can be asked for something specific.
+
+**FR-1.6 — Never guess at missing evidence.**
+If any of the four items is absent or unusable, the outcome is a request for information.
+The system does not infer, assume, or approve partially. It asks and waits.
+
+> **Reference — `GET /cases/CASE-1005/attachments`**
+> ```json
+> { "attachments": [] }
+> ```
+> `CASE-1005` has no attachments at all, and its case status is already
+> `"Waiting on Client"`. All four evidence items are missing; the only valid outcome is a
+> request for information. An empty attachment list must not cause an error.
+
+**FR-1.7 — Ask for exactly what is missing.**
+A request must name the specific gaps — "a photo of the outer shipping box" rather than
+"more information." A merchant who receives a vague request sends the wrong thing, and the
+claim takes another round trip.
+
+## Judgment
+
+Once all four evidence items are present and usable, four questions must be answered. These
+are assessments the agent reports, each with its reasoning, not verdicts that settle the
+claim:
+
+**FR-1.8 — Is the damage actually visible in the photos?**
+
+**FR-1.9 — Can the damaged product be identified?**
+
+**FR-1.10 — Does that product appear on the invoice?**
+A claim for something that was not in the order cannot be reimbursed.
+
+**FR-1.11 — Is the outer packaging documented?**
+It needs to be *photographed*, not damaged. Intact packaging with a damaged product inside
+is a legitimate claim.
+
+**FR-1.12 — A failed assessment produces a recommendation to go back to the merchant**,
+naming the specific reason. Whether that happens is the rep's call.
+
+**FR-1.13 — Ask rather than pick when the damaged item is ambiguous.**
+Orders can contain several similar products at different prices. If photos do not
+distinguish which one was damaged, the amount cannot be determined, and the system must
+ask instead of choosing the most likely candidate. At triage this means recommending
+`escalate` for the claim (FR-1a.4); within a line it means recommending `request_info`
+naming what would resolve it.
+
+> **Reference — `GET /orders/336431771` (CASE-1002, CleanBoss)**
+> ```json
+> {
+>   "line_items": [
+>     { "name": "CleanBoss Botanical Disinfectant & Cleaner 24oz 2 Pack", "sku": "A00360", "quantity": 1, "unit_price": 24.99 },
+>     { "name": "CleanBoss Multi Surface Cleaner 24oz", "sku": "A00300", "quantity": 2, "unit_price": 12.99 },
+>     { "name": "CleanBoss Foaming Cleaning Wipes 70 pack", "sku": "A00299", "quantity": 1, "unit_price": 14.99 }
+>   ]
+> }
+> ```
+> Three similarly branded cleaning products at three different prices, two of them 24oz
+> bottles. A photo of a damaged bottle does not by itself determine whether the payout is
+> $24.99 or $12.99. The case description says "1 order affected" without naming the item.
+
+## Recommending
+
+**FR-1.14 — Recommend one of four outcomes.**
+`approve` (with an amount), `request_info`, `deny`, or `escalate`. Nothing else. Each is a
+proposal to the rep, and none takes effect on its own.
+
+**FR-1.15 — Never recommend approval under uncertainty.**
+Where confidence is low or evidence is weak, the recommendation must be `escalate`, with
+the uncertainty stated. The agent may recommend paying only when it can show why. It errs
+toward asking a human, never toward paying.
+
+**FR-1.16 — Recommend `escalate` when the step budget is exhausted**, carrying forward
+whatever was established, so the rep is not handed an empty result.
+
+**FR-1.17 — Never present a recommendation as settled.**
+The report states what the agent recommends and why. It does not report an outcome as
+though it were already reached, and its drafted email is a draft — unsent, and marked as
+such — regardless of how confident the recommendation is.
+
+## Reimbursement amount
+
+**FR-1.18 — Base the recommended amount on the invoice** — the price at time of
+fulfilment, after discounts.
+
+> **Reference — `POST /invoices/generate`**
+> ```json
+> // request
+> { "shipment_id": "342578703", "user_id": "334430" }
+>
+> // response
+> {
+>   "invoice_id": "INV-342578703",
+>   "shipment_id": "342578703",
+>   "line_items": [
+>     { "name": "Additional Collagen Ampoule Duo", "sku": "AMP1", "quantity": 1, "unit_price": 38.00 },
+>     { "name": "Liposomal Tripeptide Collagen", "sku": "COLLAGEN1", "quantity": 1, "unit_price": 52.00 }
+>   ],
+>   "generated_at": "2026-03-21T10:00:00.000+0000"
+> }
+> ```
+> **Two discrepancies to be aware of.** The returned line items are identical to
+> `GET /orders/334291211` — this endpoint applies no discount and has no discount field.
+> And `generated_at` is the same fixed timestamp on every invoice in the set, postdating
+> every delivery date, so it is a claim-time snapshot rather than a record frozen at
+> fulfilment. Neither "after discounts" nor "at time of fulfilment" is literally satisfied
+> by this endpoint. See open question 3.
+>
+> It can also return `422 invoice_unavailable`, which must be handled.
+
+**FR-1.19 — Cover only the damaged items.** Not the whole order. A crushed bottle in a
+six-item order reimburses one bottle.
+
+**FR-1.20 — Cap the amount at $100.**
+
+Per-line processing makes the cap's meaning unavoidable rather than theoretical: three
+lines at $50 each are either three payments of $50 or a claim capped at $100. Whichever
+reading is chosen, it must be applied at the claim level as well as the line level —
+otherwise the cap can be exceeded simply by splitting a claim into more lines. See open
+question 2.
+
+> **Reference — `GET /orders/337761802` (CASE-1003, Huge Supplements)**
+> ```json
+> {
+>   "line_items": [
+>     { "name": "Bomb Popsicle Wrecked Pre-Workout", "sku": "0041", "quantity": 1, "unit_price": 49.99 },
+>     { "name": "Blue Razz Liquid Carnitine", "sku": "0199", "quantity": 1, "unit_price": 34.99 },
+>     { "name": "Red/Black HUGE Shaker", "sku": "0157", "quantity": 1, "unit_price": 12.99 },
+>     { "name": "2.5LBS White Chocolate Raspberry Huge Whey", "sku": "0159", "quantity": 1, "unit_price": 59.99 },
+>     { "name": "Green Apple Wrecked Core Sample", "sku": "0180", "quantity": 1, "unit_price": 9.99 },
+>     { "name": "Unflavored Liquid Glycerol", "sku": "0179", "quantity": 1, "unit_price": 27.99 }
+>   ]
+> }
+> ```
+> The largest single line item across all five test cases is $59.99, so **no single-item
+> claim can reach the cap**. This case is the only one that can: its description says
+> "Number of affected orders: 2," and the two most expensive items together are $109.98.
+> Demonstrating the cap otherwise requires a constructed case.
+
+**FR-1.21 — The agent identifies which items were damaged; code computes the amount.**
+The model determines *what* the claim covers. A deterministic function determines *how
+much*. No monetary figure is ever produced by, or parsed out of, model output. This is what
+makes the same claim yield the same figure every time — and it means the number in front of
+the rep is arithmetic she can check, not a model's estimate.
+
+---
+
+# Layer 2 — The report
+
+The agent's single output and the entire handoff to the rep. **This is where the decision
+is actually made**, so the report must contain everything needed to make it — the rep
+should never have to go hunting through raw data, and should never have to take a
+conclusion on trust.
+
+**There is one report per claim line.** A claim covering two damaged products produces two
+reports, each approved or sent back independently.
+
+**FR-2.1 — State the recommended outcome and amount.**
+Which of the four outcomes is recommended, and if approval, how much. Worded as a
+recommendation the rep is deciding on, not as a result.
+
+**FR-2.2 — Show each evidence item and where it was found.**
+All four items, marked present or missing, each linked to the specific attachment it came
+from and what was observed in it. The rep must be able to look at the same photo the system
+looked at.
+
+> **Reference — attachment identity**
+> Each attachment carries a stable `attachment_id` (e.g. `ATT-CASE-1001-02`) and a `url`.
+> Findings should reference the `attachment_id`, and the UI renders the image from `url`,
+> so a finding is always traceable to the exact image that produced it.
+
+**FR-2.3 — Show each assessment and its reasoning.**
+All four assessments, each with what the agent concluded and why — enough for the rep to
+disagree with any single one without discarding the rest.
+
+**FR-2.4 — Show how the amount was derived.**
+Which items, at which prices, from which document, and how the cap was applied. "$52.00"
+alone is not reviewable. "$52.00 — one Liposomal Tripeptide Collagen, invoice price,
+under cap" is.
+
+**FR-2.5 — State concerns explicitly.**
+Ambiguities, weak evidence, low-confidence assessments, anything that conflicts. A rep who
+cannot tell why the system is unsure will either rubber-stamp or redo the work — and both
+defeat the purpose. Silence here is a defect, not a clean result.
+
+**FR-2.5a — Make the report decidable at a glance, and checkable in depth.**
+The recommendation, the amount, and the concerns must be readable immediately. The evidence
+behind them must be one step away. A rep who agrees should be able to approve quickly; a
+rep who doubts should be able to verify without leaving the report.
+
+**FR-2.6 — Surface context the rep should know before approving.**
+Whether this is a high-value shipment, relevant history for this merchant, and — if a past
+correction from the rep influenced this recommendation — which one and how.
+
+**FR-2.7 — Include the drafted merchant email**, in the exact wording that would be sent.
+
+**FR-2.8 — Support the rep's review actions.**
+A report is presented to the rep, who may:
+
+1. **Approve it.** The report and its email are accepted as they stand. This releases the
+   case to Layer 3, which sends the email and submits any reimbursement.
+2. **Send it back with feedback.** The rep describes what is wrong or missing in their own
+   words. The agent re-runs with that feedback (Layer R), reworks the report and the email
+   accordingly, and returns it for another review.
+3. **Edit the email directly.** The rep changes the wording themselves before approving.
+   Direct edits are for wording; feedback is for substance.
+
+**FR-2.9 — Approval is the only exit.**
+A report leaves the review loop in exactly one way: a rep approves it. There is no
+timeout, no confidence threshold, and no volume of revisions that results in automatic
+approval. A case may cycle through revision any number of times and still requires a human
+to release it.
+
+**FR-2.9a — Show the claim context on every report.**
+Each report states which claim it belongs to, which product it covers, and what the other
+lines in the same claim are recommending. A rep approving one line should be able to see
+that the second line is waiting on evidence, without opening it.
+
+**FR-2.9b — Provide a claim-level view over the line reports.**
+The rep works from a case, not from a list of disconnected products. The claim view shows
+every line, its recommendation, its amount, and its review state, and allows each to be
+approved or sent back individually. It is a view over the line reports, not a separate
+decision surface — approval always happens per line.
+
+**FR-2.10 — Be structured data, not prose.**
+The report is rendered by a UI and read by a person under time pressure. A block of
+narrative text does not meet this requirement.
+
+---
+
+# Layer R — Revision
+
+Not a separate agent. **The same agent from Layer 1**, re-invoked with additional context:
+the report it produced, the rep's feedback, and the findings behind it.
+
+Feedback is how the rep exercises judgement without doing the work by hand. She says what
+is wrong; the agent reworks the report and the email around it. The decision still waits
+for her.
+
+**Why one agent rather than two.** Revision is the same task as investigation — read the
+evidence, apply the policy, recommend, draft — with one more input. The tools are the same,
+the report schema is the same, and the rules are the same. A second agent would need its
+own copy of every policy, and any drift between the two would surface as a rep's correction
+silently changing how a rule is applied. One agent, one interpretation.
+
+**The tradeoff, stated plainly.** An agent shown its own prior conclusion may anchor on it
+and defend what the rep just rejected. FR-R.3 and FR-R.10 exist to counter that: prior
+findings enter as observations of record rather than as the agent's own verdicts, and the
+agent must state what it changed, which makes an unchanged conclusion visible rather than
+quietly persistent. This is a real weakness worth naming rather than hiding.
+
+**FR-R.1 — Run only on rep feedback.**
+Revision is triggered by a rep sending a report back, never automatically and never on any
+other signal.
+
+**FR-R.1a — Revise one claim line at a time.**
+Feedback applies to the report it was given on. Revising one line leaves the other lines in
+the claim untouched, unless the feedback concerns shared evidence (FR-1a.3) — in which case
+the change propagates to every line that relied on it, and each affected report returns to
+the rep for review. Correcting the packaging photo once should not require correcting it
+per line.
+
+**FR-R.2 — Start from the existing work, not from zero.**
+The agent receives the current report in full, the rep's feedback, the findings and
+reasoning behind the report, and the case data already gathered. It does not re-run the
+whole investigation.
+
+**FR-R.3 — Interpret what the feedback means.**
+Feedback arrives as a rep's own words — "the packaging photo is the box, not the product,"
+"this merchant had the same issue last month," "the amount looks wrong." The agent must
+work out which findings, assessments, or amounts that implies changing. This is the
+reasoning the layer exists for.
+
+Prior findings are supplied as observations of record — what was seen in which attachment —
+rather than as the agent's own conclusions to defend. The rep's feedback is authoritative
+about what is wrong; the agent's task is to work out what follows from it, not to argue
+with it.
+
+**FR-R.4 — Re-examine evidence when the feedback calls for it.**
+It may look again at a specific attachment, or reconsider a specific judgment, where the
+feedback points there. Targeted re-examination, not a fresh investigation.
+
+**FR-R.5 — Change only what the feedback bears on.**
+Findings and assessments the rep did not dispute carry forward unchanged. A rep correcting
+one thing must not have to re-check everything else.
+
+**FR-R.6 — Use the same tool surface, with no write tools.**
+Revision adds no capabilities. The agent still cannot send email or submit a reimbursement
+in either mode; those remain in Layer 3, behind approval.
+
+**FR-R.7 — Never compute the amount itself.**
+If the recommendation or the damaged items change, the amount is recomputed by the same
+deterministic function used on the first pass. A revision cannot introduce a figure the
+code did not produce.
+
+**FR-R.8 — Not override deterministic rules.**
+Feedback cannot make an ineligible claim eligible, exceed the cap, or bypass a required
+evidence item. Where feedback asks for something the rules forbid, the agent must say so
+plainly in the revised report rather than silently complying or silently ignoring it. That
+disagreement goes back to the rep, who remains free to escalate outside the system.
+
+This is the one place the agent does not defer. The rep decides the claim; she does not
+decide the policy, and the agent will not quietly write a payout that the rules do not
+support.
+
+**FR-R.9 — Produce a complete revised report.**
+The output is a full report in the same structure as the first one — same schema, same
+requirements — not a diff or a patch. It is reviewed exactly as the original was.
+
+**FR-R.10 — Show what changed and why.**
+The revised report states which findings, judgments, amounts, or wording changed in
+response to the feedback, and which were left alone. A rep must be able to confirm their
+feedback was understood without re-reading the whole report.
+
+**FR-R.11 — Regenerate the email to match.**
+The merchant email is rewritten to reflect the revised report. A revised recommendation
+with a stale email is an inconsistent state.
+
+**FR-R.12 — Support repeated revision.**
+A report may go around the loop more than once. Each cycle carries the full feedback
+history, so the agent does not undo an earlier correction while addressing a later one.
+Because the same agent handles every cycle, that history is the only thing distinguishing
+one pass from the next.
+
+**FR-R.13 — Retain every version.**
+All report versions, the feedback that prompted each revision, and what changed are kept.
+This is the record of how a decision was reached and where a human intervened.
+
+**FR-R.14 — Feed corrections into merchant memory.**
+Feedback is not only applied to the current case. It is persisted against the merchant
+(FR-3.8) so it informs the agent's first pass on that merchant's next case — the system
+should be better on the next claim, not just this one. Since it is the same agent in both
+places, a correction learned during revision applies directly to future investigation.
+
+---
+
+# Layer 3 — Execution after approval
+
+Deterministic. Runs only once a human has approved.
+
+**FR-3.1 — Execute nothing without explicit rep approval.**
+No email, no reimbursement, under any circumstance, at any confidence level. This is a hard
+invariant. Execution is triggered by a rep approving a report (FR-2.8, action 1) and by
+nothing else.
+
+**FR-3.1a — Execute per claim line.**
+Approval is per line, and so is execution: each approved line produces its own
+reimbursement submission and its own merchant email. Lines still under review are
+unaffected by a sibling's approval.
+
+**FR-3.2 — Send the approved email to the merchant.**
+
+> **Reference — `POST /cases/CASE-1001/email`**
+> ```json
+> // request
+> { "to": "sakukreja@shipbob.com", "subject": "Hello", "body": "Hello Case1001" }
+>
+> // response
+> { "success": true, "message": "Email queued", "case_id": "CASE-xxxx" }
+> ```
+> The recipient comes from the case's `contact_email`. The response confirms queueing
+> only — it echoes a placeholder `case_id` and returns no message identifier, so it cannot
+> be used to detect a duplicate send. Deduplication is the caller's responsibility
+> (FR-3.5). There is no endpoint for reading replies.
+
+**FR-3.3 — Submit one reimbursement per claim line.**
+The reimbursement endpoint accepts a single product per call, which is exactly the claim
+line boundary. Each approved line is one call, tracked against that line. There is no
+multi-item payload to sequence or partially fail — the API's shape and the system's unit of
+work are the same.
+
+> **Reference — `POST /reimbursements`**
+> ```json
+> // request — note the singular product_name
+> {
+>   "case_id": "CASE-1001",
+>   "order_id": "334291211",
+>   "user_id": "334430",
+>   "shipment_id": "342578703",
+>   "product_name": "Liposomal Tripeptide Collagen",
+>   "amount": 52.00
+> }
+>
+> // response
+> { "reimbursement_id": "RMB-00101", "status": "approved", "created_at": "2026-03-21T10:00:00.000+0000" }
+> ```
+> The product is identified by `product_name`, a free-text string, not by `product_id` or
+> `sku` — so the name must be carried through exactly as it appears on the order.
+> Missing fields return `400 invalid_request`.
+
+**FR-3.4 — Verify what is sent against what was approved.**
+The reimbursement API confirms success for any well-formed request, including claims the
+system decided to deny. Its response is therefore not evidence of correctness. The payload
+must be checked against the approved report before being sent, so that an edited draft
+cannot result in a different amount than the rep signed off on.
+
+> **Reference — the mock approves everything**
+> The collection stores a `201 {"status": "approved"}` example for **all five test cases**,
+> including `CASE-1004` (73 days old, closed) and `CASE-1005` (no evidence at all). The
+> endpoint performs no validation of eligibility, evidence, or amount. A successful
+> response means the request was well-formed and nothing more.
+
+**FR-3.5 — Be safe to retry.**
+A double-click, a page refresh, or a retry after a network error must not send a second
+email or issue a second reimbursement.
+
+**FR-3.6 — Leave partial failures visible and recoverable.**
+If a line's email sends and its reimbursement fails, that line must end in a state showing
+exactly what happened, resumable without re-sending the email. A failure on one line leaves
+the other lines in the claim unaffected, and the claim view must show a mixed state
+honestly rather than reporting the claim as complete.
+
+**FR-3.7 — Record what was actually sent**, including exact payloads and timestamps.
+
+**FR-3.8 — Persist rep corrections against the merchant.**
+When a rep edits or overrides a recommendation, store what changed and why, keyed to the
+merchant's stable identifier. That correction must be available to the agent the next time
+that merchant files a claim — the system should improve on the next case, not just this one.
+
+> **Reference — which field identifies a merchant**
+> Key on `user_id` (e.g. `"334430"`), which is stable and appears on both the case and the
+> order. Do not key on `account_name` (`"Best Paw Nutrition"`), which is display text.
+>
+> All five test cases belong to five different `user_id`s — `334430`, `283959`, `373103`,
+> `374167`, `398045` — so no repeat merchant exists in the sample data. Demonstrating
+> carry-forward requires a constructed second case sharing a `user_id` with an existing one.
+
+---
+
+# Non-functional requirements
+
+**NFR-1 — Consistency.**
+The same claim, investigated twice, must produce the same report: the same findings, the
+same recommendation, the same figure.
+
+Inconsistency between reps is the problem this system exists to solve, and the mechanism is
+this: reps go on deciding, but every claim now reaches them examined the same way, against
+the same rules, presented in the same form. Two identical claims look identical on arrival,
+so they are far more likely to be decided alike. Consistency is therefore a property of the
+report, not a constraint on the rep. Anything introducing run-to-run variance in a report
+needs a specific justification.
+
+Per-line isolation extends this: the same product with the same evidence reaches the same
+recommendation regardless of what else was claimed alongside it (FR-1b.4).
+
+**NFR-2 — Constrained model output.**
+Every AI response conforms to a defined schema — classifications, judgments, structured
+findings. The model never returns a free-form verdict, and no monetary amount is ever
+extracted from generated text.
+
+**NFR-3 — Explainability.**
+Every conclusion traces to the observation that produced it. It must be possible to answer
+"why this amount?" and "why was this escalated?" from the report itself, without reading
+logs or re-running anything. The rep is being asked to decide, so she must be able to
+audit any part of what she is deciding on.
+
+**NFR-4 — Fail toward the human.**
+Any failure — model error, API timeout, malformed response, exhausted budget — results in
+escalation to a rep. No failure path leads to an unreviewed approval or a silently dropped
+case.
+
+**NFR-5 — Auditability.**
+Each case retains an ordered record of what each agent did, what it observed, what it
+concluded, every rep action including feedback and revisions, and what was ultimately sent.
+
+**NFR-5a — Convergent revision.**
+Each revision must address the feedback it was given without regressing earlier
+corrections. A rep should not find that fixing one thing has broken another they already
+approved.
+
+**NFR-6 — Resilience.**
+Unavailable APIs, missing credentials, and unreachable images are handled states with clear
+messages, not crashes. The system must be demonstrable without live API access.
+
+**NFR-7 — Configurability.**
+Policy values are changeable without touching logic, because several of them are judgement
+calls rather than stated policy and may need to change once real guidance exists.
+
+**NFR-8 — Cost discipline.**
+Ineligible cases must not incur AI costs. Image analysis, the most expensive operation,
+runs only on attachments that need it and is not repeated for the same attachment within a
+case.
