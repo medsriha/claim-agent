@@ -38,21 +38,6 @@ make ui-install   # once: install the UI's dependencies
 make ui-dev       # the screen, on :5173, forwarding claim requests to :8000
 ```
 
-Try `CASE-1001` for a claim that carries on, `CASE-1004` for one stopped as too old, and
-`CASE-9001` for one stopped as insured. Stop `make mock` and screen anything to see what a
-rep sees when ShipBob cannot be read.
-
-The **Policy** tab in the header lists every threshold a claim is judged by and can change one
-while the service runs. Set the age limit to 5, screen `CASE-1001` — filed eight days after
-delivery — and it is turned away as too old, with the new limit quoted in the merchant's email.
-"Put back the startup values" undoes it, and so does restarting the service: a change is held in
-memory and nothing is stored.
-
-The UI is a demonstration: no sign-in, nothing stored, and nothing it shows can be sent or
-approved. It displays what the endpoint returns and nothing else — no sample data is seeded
-anywhere, so a merchant with no past corrections shows an empty list. The policy panel has no
-sign-in either, so anyone who can reach it can change what every later claim is judged by.
-
 ## Development
 
 ```bash
