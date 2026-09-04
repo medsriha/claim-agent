@@ -38,6 +38,14 @@ logger = get_logger(__name__)
 # tables to hold them would buy nothing: nothing queries inside them, because the
 # careful comparison happens in Python on a handful of candidates.
 #
+# `rep_decisions` follows `precedent_lines`: the whole record as JSON in one
+# column, with only the one field a query needs beside it. Everything that reads
+# this table reads a stretch of time and then works in Python, so `decided_at` is
+# the only thing worth breaking out, and it is indexed because that read is the
+# only read there is. It is text in UTC for the same reason `recorded_at` is —
+# sorting the text sorts the moments, and somebody opening the file by hand can
+# see what it says.
+#
 # `precedent_search` is SQLite's own full-text index, and it is there purely to
 # narrow the store cheaply: it finds records sharing any meaningful word with the
 # claim in hand, and the scoring then runs over that handful rather than over
@@ -73,6 +81,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS precedent_search USING fts5 (
     precedent_id UNINDEXED,
     words
 );
+
+CREATE TABLE IF NOT EXISTS rep_decisions (
+    decision_id TEXT PRIMARY KEY,
+    decided_at TEXT NOT NULL,
+    record TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS rep_decisions_by_time ON rep_decisions (decided_at);
 """
 
 

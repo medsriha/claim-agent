@@ -51,7 +51,6 @@ def test_every_policy_value_is_on_the_panel_exactly_once() -> None:
         "reimbursement_cap_usd",
         "max_claim_age_days",
         "age_limit_inclusive",
-        "uninsured_refund_percentage",
         "high_value_order_usd",
         "high_value_inclusive",
         "damaged_in_transit_sub_category",

@@ -1,34 +1,38 @@
-"""How much to recommend paying, and the working that shows how it was reached.
+"""Reviewing the amount an investigation recommends, and holding it to the cap.
 
-This file exists because of one rule that the rest of the system is arranged
-around: **the agent identifies what was damaged, and code works out how much**
-(FR-1.21). No monetary figure is ever produced by a model, or read out of
-something a model wrote. That is what makes the same claim yield the same figure
-every time, and it means the number in front of a rep is arithmetic they can
-check rather than an estimate they have to trust.
+The investigation decides what to pay. It judges the damage against the photographs and
+against how comparable claims were actually settled, and proposes a figure — because how
+badly a thing is broken is a judgement, and a rule that always paid a fixed share of the
+price could not tell a scuffed box from a smashed bottle.
 
-Three rules decide the figure:
+**This file is the limit on that judgement, not the source of it.** It takes the figure
+the investigation proposed and holds it to the reimbursement cap, which is the one
+monetary limit ShipBob actually stated (FR-1.20). Over the cap, the recommendation becomes
+the cap and says so.
 
-- it is priced from the invoice — the price at the time the order was fulfilled
-  (FR-1.18);
-- it covers only the damaged items, not the whole order, so a crushed bottle in a
-  six-item order reimburses one bottle (FR-1.19);
-- it is capped (FR-1.20). The cap is the one policy value ShipBob actually stated.
+So the guarantee here is narrower than it once was, and it is worth being exact about what
+survives:
 
-A bare figure is not reviewable, so nothing here returns one. Every result carries
-its own working: which items, at which prices, from which document, and whether
-the cap changed the answer. "$52.00" alone tells a rep nothing; "$52.00 — one
-Liposomal Tripeptide Collagen at the invoice price, under the cap" can be checked
-(FR-2.4, NFR-3).
+- **No claim is ever recommended for more than the cap.** That is arithmetic, and no
+  investigation can talk its way past it.
+- **A figure is money from the first moment it is read.** It arrives as text and is parsed
+  into an exact decimal, so it never passes through a floating point number where cents
+  could drift.
+- **Every result carries its working**: what the investigation proposed, what the items
+  cost on the invoice, whether the cap changed the answer, and what is recommended. A bare
+  figure is not reviewable; "$40.00 — the investigation proposed $40.00 against items worth
+  $52.00, under the cap" is (FR-2.4, NFR-3).
 
-Money is held as an exact decimal throughout and never as a floating point number,
-so cents cannot drift.
+What no longer survives is repeatability. The figure is a judgement, so the same claim can
+come back with a different one, and the number in front of a representative is an estimate
+to weigh rather than arithmetic to check. That is a deliberate trade — see DESIGN.md.
 
 Nothing here reaches out to anything and nothing here reads a clock.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -42,18 +46,26 @@ CENTS = Decimal("0.01")
 """How precise money is: two decimal places, because that is what a cent is."""
 
 NOTHING = Decimal("0.00")
+
+_MONEY = re.compile(r"\d+(?:\.\d{1,2})?")
+"""What a figure written as money is allowed to look like.
+
+Digits, optionally a decimal point and one or two more. Deliberately narrow: a symbol, a
+thousands separator, a minus sign or a third decimal place are all things somebody would
+have to interpret, and a payout nobody can read exactly is worse than none.
+"""
 """No money at all, written to the cent so every figure in a result reads alike."""
 
 
 class AmountComponent(BaseModel):
-    """One damaged item's contribution to a recommended amount.
+    """One damaged item, and what it cost on the invoice.
 
-    Held separately rather than summed away so that a rep can see the arithmetic
-    line by line and disagree with one item without recomputing the rest (FR-2.4).
+    This is context for the figure rather than the figure itself: the investigation
+    decides what to pay, and a representative reading its recommendation wants to know
+    what the thing was worth in the first place (FR-2.4).
 
-    `unit_price` is the price on the document the amount was priced from, not the
-    price on the order — the two are the same in ShipBob's sample data and are not
-    the same thing.
+    `unit_price` is the price on the document the items were read from, not the price on
+    the order — the two are the same in ShipBob's sample data and are not the same thing.
     """
 
     model_config = ConfigDict(frozen=True, extra="ignore")
@@ -61,164 +73,164 @@ class AmountComponent(BaseModel):
     product_name: str
     quantity: int
     unit_price: Decimal
-    refunded_usd: Decimal
     sku: str | None = None
 
     @property
     def line_total(self) -> Decimal:
         """What this item was worth altogether: the price of one, times how many broke.
 
-        What it *cost*, not what is being refunded for it — the two differ by the refund
-        percentage. Both are kept so a rep can see the step between them (FR-2.4).
+        What it *cost*. What is being paid for it is the investigation's judgement and is
+        not a share of this — a scuffed box and a smashed bottle can cost the same and be
+        worth very different amounts to put right.
         """
         return self.unit_price * self.quantity
 
 
 class AmountDerivation(BaseModel):
-    """A recommended amount together with everything needed to check it (FR-2.4).
+    """A recommended amount together with everything needed to weigh it (FR-2.4).
 
-    `components` are the damaged items that were priced. `subtotal_usd` is what
-    they come to before the cap, and `amount_usd` is what is actually recommended;
-    the two differ exactly when `cap_applied` is true, which is the case a rep most
-    needs to see stated rather than inferred.
+    Read the three figures together, because the story is in the gaps between them.
+    `proposed_usd` is what the investigation judged the damage to be worth.
+    `items_total_usd` is what those items cost on the invoice, which is context and not a
+    limit — a badly broken thing can be worth less to put right than it cost, and a claim
+    can reasonably come to less than the goods did. `amount_usd` is what is actually
+    recommended, which is the proposal unless the cap brought it down.
 
-    `priced_from` names the document the prices were taken from — an invoice id —
-    so the report can say where the figure came from. It is `None` only when there
-    is nothing to price, which is also the one case where an amount of zero is a
-    real answer rather than a suspicious one.
+    `cap_applied` says whether it did, and is the thing a representative most needs stated
+    rather than inferred: it is the difference between "the investigation judged this to be
+    worth a hundred dollars" and "the investigation judged this to be worth more than we
+    are allowed to pay".
 
-    An empty `components` gives an `amount_usd` of zero. That means "nothing was
-    established as damaged", which is never a reason to pay and never a reason to
-    recommend approval.
+    `reasoning` is the investigation's own account of why that figure. It is the whole
+    justification for the number now, so it is not optional in spirit even where it is
+    empty in type — an amount nobody explained is an amount nobody can review (NFR-3).
+
+    `priced_from` names the document the item prices were read from. `components` are the
+    damaged items themselves, and an empty tuple means nothing could be tied to the
+    invoice at all — which is never a reason to pay.
     """
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     components: tuple[AmountComponent, ...]
     items_total_usd: Decimal
-    refund_percentage: int
-    subtotal_usd: Decimal
+    proposed_usd: Decimal
     amount_usd: Decimal
     cap_usd: Decimal
     cap_applied: bool
+    reasoning: str = ""
     priced_from: str | None = None
 
     @property
     def is_payable(self) -> bool:
         """True when there is actually something to pay.
 
-        An amount of zero is not payable however it arose — nothing damaged, or
-        every damaged item priced at nothing. Recommending a payment of nothing
-        would put an empty email in front of a merchant.
+        An amount of zero is not payable however it arose — nothing established as
+        damaged, or an investigation that judged the damage to be worth nothing.
+        Recommending a payment of nothing would put an empty email in front of a
+        merchant.
         """
         return self.amount_usd > 0
 
 
-def compute_reimbursement(
-    damaged: Sequence[ClaimedProduct],
+def review_recommended_amount(
+    proposed: str,
     *,
+    reasoning: str,
+    damaged: Sequence[ClaimedProduct],
     invoice: Invoice | None,
     policy: Policy,
 ) -> AmountDerivation:
-    """Work out how much to recommend paying for the damaged items, and show the working.
+    """Hold the amount an investigation recommends to the cap, and show the working.
 
-    This is the deterministic half of the split the whole system is built around: an
-    investigation says *what* was damaged, and this says *how much* (FR-1.21). It reads
-    only its arguments — no clock, no network, no model — so the same damaged items
-    priced against the same invoice always come to the same figure (NFR-1).
+    The investigation decides what the damage is worth, weighing the photographs against
+    how comparable claims were actually settled. This does two things to that figure and
+    nothing else: it reads it as exact money, and it refuses to let it exceed the
+    reimbursement cap (FR-1.20). The cap is the one monetary limit ShipBob stated, and it
+    is the only thing standing between an investigation's judgement and a payout.
 
-    How a figure is reached:
+    **The figure arrives as text and is parsed here.** That is deliberate: a number read
+    out of a reply would pass through a floating point number on the way, where `0.10`
+    cannot be held exactly and cents drift. Text into an exact decimal keeps the figure as
+    it was written.
 
-    1. Each damaged item is looked up on the invoice. Its product code is tried first,
-       because a code is exact, and its name second, ignoring capitals and extra spaces
-       (FR-1.18).
-    2. Only the items found are priced, at the invoice's own prices, and only for the
-       quantity claimed — never for the whole order (FR-1.19).
-    3. The items are added up, and the total is limited to the cap in the claim policy
-       (FR-1.20).
-
-    **Anything that cannot be priced prices nothing at all.** If there is no invoice, if
-    an item is not on it, if an item could be either of two invoice lines, or if two
-    damaged items point at the same invoice line, the result carries no items and comes
-    to nothing. It never falls back to the price on the order and never picks between
-    two candidates: both would invent a payout (FR-1.13, FR-1.18). Partial pricing is
-    ruled out too, because a result showing $52.00 of priced items and an amount of
-    $0.00 would read as a mistake rather than as a refusal to guess.
-
-    A result that comes to nothing is not payable, and the caller must not recommend
-    paying it. Why it came to nothing can be read off the result: no invoice at all
-    leaves `priced_from` empty, an item that could not be found leaves `components`
-    empty, and an item the invoice genuinely prices at nothing leaves a component with
-    a price of nothing. That last case is real — one sample order carries a free
-    promotional insert card — and nothing in the requirements says what a free item
-    does to a claim, so it is left visible rather than decided here.
-
-    A quantity higher than the invoice shows is reduced to the invoiced quantity, and a
-    quantity below nothing is reduced to nothing. Both only ever lower the figure. The
-    reduction is not announced anywhere in the result, because the shape has no field
-    for it; a caller that needs to know compares the quantity on the component with the
-    quantity that was claimed.
+    The items are still read off the invoice, but only as context — what the goods cost is
+    worth putting in front of a representative beside what is being recommended for them.
+    It is deliberately **not** a limit: a claim may reasonably come to less than the goods
+    cost, and nothing in the requirements says it may never come to more, so nothing here
+    decides that. Whether it should is a question for whoever owns the requirements, and
+    it is written down in DESIGN.md rather than answered here.
 
     Args:
-        damaged: The products the investigation established as damaged, with how many of
-            each. An empty sequence means nothing was established as damaged, which
-            prices nothing.
+        proposed: What the investigation recommends paying, written as money — digits with
+            at most two decimal places, no currency symbol. Anything else is refused
+            rather than interpreted.
+        reasoning: The investigation's own account of why that figure. Carried through to
+            the result, because it is the whole justification for the number (NFR-3).
+        damaged: The products established as damaged, with how many of each. Read for
+            context only; an empty sequence prices no items but does not by itself change
+            the recommendation.
         invoice: ShipBob's priced record of what the shipment contained. `None` when it
-            could not be generated or read, which prices nothing rather than falling
-            back to the order.
-        policy: Read for the reimbursement cap, so the limit is a configured value
-            rather than a number buried in this function (FR-0.7, NFR-7).
+            could not be generated or read, in which case no item context is available.
+        policy: Read for the reimbursement cap, so the limit is a configured value rather
+            than a number buried in this function (FR-0.7, NFR-7).
 
     Returns:
-        The recommended amount together with everything needed to check it: the items
-        priced, the total before the cap, the total after it, the cap itself, and
-        whether the cap changed the answer (FR-2.4).
+        What was proposed, what the items cost, what is recommended, and whether the cap
+        changed the answer (FR-2.4).
+
+    Raises:
+        ValueError: `proposed` is not money — not a number, or carrying more than two
+            decimal places. Refused rather than rounded or reinterpreted: a figure we had
+            to guess at is a figure nobody can review, and the caller turns this into an
+            escalation instead (NFR-4).
     """
     cap = _to_cents(policy.reimbursement_cap_usd)
-    # Named even when nothing could be priced from it, so a rep asking "why nothing?"
-    # can see which document was read as well as that the answer was nothing.
+    # Named even when nothing could be read from it, so a rep asking "against what?" can
+    # see which document was read as well as what it yielded.
     priced_from = invoice.invoice_id if invoice is not None else None
 
-    percentage = policy.uninsured_refund_percentage
-    components = _price_every_item(damaged, invoice, percentage)
-    if components is None:
-        return AmountDerivation(
-            components=(),
-            items_total_usd=NOTHING,
-            refund_percentage=percentage,
-            subtotal_usd=NOTHING,
-            amount_usd=NOTHING,
-            cap_usd=cap,
-            cap_applied=False,
-            priced_from=priced_from,
-        )
-
+    wanted = _as_money(proposed)
+    components = _price_every_item(damaged, invoice) or ()
     items_total = _to_cents(
         sum((component.line_total for component in components), start=Decimal("0"))
     )
-    # Each item's share is rounded to cents before they are added up, so the lines a rep
-    # reads add up to the total beside them. Rounding the total instead would leave the
-    # working looking like it did not.
-    subtotal = _to_cents(
-        sum((component.refunded_usd for component in components), start=Decimal("0"))
-    )
-    # A subtotal landing exactly on the cap is paid in full: the cap has changed nothing,
+
+    # A proposal landing exactly on the cap is paid in full: the cap has changed nothing,
     # and saying it applied would tell a rep the figure had been trimmed when it had not.
-    cap_applied = subtotal > cap
+    cap_applied = wanted > cap
     return AmountDerivation(
         components=components,
         items_total_usd=items_total,
-        refund_percentage=percentage,
-        subtotal_usd=subtotal,
-        amount_usd=cap if cap_applied else subtotal,
+        proposed_usd=wanted,
+        amount_usd=cap if cap_applied else wanted,
         cap_usd=cap,
         cap_applied=cap_applied,
+        reasoning=reasoning,
         priced_from=priced_from,
     )
 
 
+def _as_money(written: str) -> Decimal:
+    """Read a figure written as text into exact money, or refuse it.
+
+    Accepts digits with at most two decimal places and nothing else — no currency symbol,
+    no thousands separator, no exponent, nothing negative. Every one of those is a figure
+    somebody would have to interpret, and interpreting a payout is exactly what must not
+    happen quietly.
+
+    Raises:
+        ValueError: it is not money.
+    """
+    if _MONEY.fullmatch(written.strip()) is None:
+        raise ValueError(
+            f"A recommended amount has to be written as money, such as 31.20; got {written!r}."
+        )
+    return _to_cents(Decimal(written.strip()))
+
+
 def _price_every_item(
-    damaged: Sequence[ClaimedProduct], invoice: Invoice | None, percentage: int
+    damaged: Sequence[ClaimedProduct], invoice: Invoice | None
 ) -> tuple[AmountComponent, ...] | None:
     """Price all the damaged items, or refuse to price any of them.
 
@@ -241,7 +253,7 @@ def _price_every_item(
         if position is None or position in already_claimed:
             return None
         already_claimed.add(position)
-        components.append(_component_for(item, invoice.line_items[position], percentage))
+        components.append(_component_for(item, invoice.line_items[position]))
     return tuple(components)
 
 
@@ -270,7 +282,7 @@ def _position_on_invoice(item: ClaimedProduct, lines: Sequence[OrderLineItem]) -
     return matches[0]
 
 
-def _component_for(item: ClaimedProduct, line: OrderLineItem, percentage: int) -> AmountComponent:
+def _component_for(item: ClaimedProduct, line: OrderLineItem) -> AmountComponent:
     """Price one damaged item against the invoice line it was matched to.
 
     The name, code and price all come from the invoice rather than from the claim. The
@@ -282,18 +294,14 @@ def _component_for(item: ClaimedProduct, line: OrderLineItem, percentage: int) -
     mistake; a quantity below nothing would subtract from the other items' totals, which
     would be worse still.
 
-    What is refunded is a percentage of what the item cost, not the whole of it: ShipBob
-    reimburses part of the price on an uninsured shipment, and the share is a policy
-    value (FR-1.19). It is worked out in exact decimals and rounded to cents half up, the
-    way money is normally rounded, so the same item always comes to the same figure.
+    Nothing here works out what to pay for the item. What it cost is a fact from the
+    invoice; what the damage is worth is the investigation's judgement, and the two are
+    deliberately kept apart so a representative can see both.
     """
-    quantity = max(0, min(item.quantity, line.quantity))
-    cost = line.unit_price * quantity
     return AmountComponent(
         product_name=line.name,
-        quantity=quantity,
+        quantity=max(0, min(item.quantity, line.quantity)),
         unit_price=line.unit_price,
-        refunded_usd=_to_cents(cost * Decimal(percentage) / Decimal(100)),
         sku=line.sku,
     )
 

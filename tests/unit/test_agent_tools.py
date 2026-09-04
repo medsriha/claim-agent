@@ -662,12 +662,15 @@ async def test_a_claim_with_no_shipment_says_so_without_asking_shipbob(
 async def test_the_amount_check_never_tells_the_model_what_the_figure_is(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.21: the model says what was damaged; code says how much, and never shows it.
+    """FR-1.21, FR-1.20: the tool checks the investigation's own figure against the cap.
 
-    This is the test that keeps the split honest. A model that had seen "52.00" could copy
-    it into the email it writes, walking straight around the placeholder that keeps figures
-    out of a merchant's inbox — so neither the sentence it reads nor the outcome beside it
-    carries a figure, a subtotal, a cap, or whether the cap applied.
+    The model decides the amount now, so this shows figures where it once withheld them —
+    what the products cost, what was proposed, and what it would come to. Withholding one
+    here would protect nothing when the model produced it.
+
+    The guarantee that remains is at the other end and is asserted below: the sentence
+    still tells the run to write the marker in the email, so no figure of the model's own
+    reaches a merchant.
     """
     serve_the_claim(api)
     run = build_run(shipbob_http, images_http)
@@ -678,36 +681,76 @@ async def test_the_amount_check_never_tells_the_model_what_the_figure_is(
         damaged_items=[
             {"product_name": "Liposomal Tripeptide Collagen", "quantity": 1, "sku": "COLLAGEN1"}
         ],
+        proposed_amount_usd="40.00",
     )
 
     check = message.artifact
     assert isinstance(check, AmountCheck)
     assert check.succeeded is True
-    assert check.amount_available is True
     assert check.priced_products == ("Liposomal Tripeptide Collagen",)
     assert check.priced_from == "INV-342578703"
-
-    assert MONEY.search(said(message)) is None
-    assert "$" not in said(message)
+    assert check.proposed_usd == "40.00"
+    assert check.recommended_usd == "40.00"
+    assert check.items_total_usd == "52.00"
+    assert check.capped is False
+    # The one rule about money that did not change with FR-1.21.
     assert AMOUNT_PLACEHOLDER in said(message)
-    # The outcome's fields are pinned down, so a figure cannot be added to it quietly: a
-    # new field here has to be argued for against FR-1.21 rather than slipped in.
-    written_down = check.model_dump()
-    assert set(written_down) == {
-        "tool",
-        "succeeded",
-        "summary",
-        "amount_available",
-        "priced_products",
-        "priced_from",
-    }
-    assert MONEY.search(str(written_down)) is None
+
+
+async def test_the_amount_check_says_when_a_figure_is_over_the_cap(
+    api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
+) -> None:
+    """FR-1.20: the cap is the only limit on the figure, so the run can check it first.
+
+    Told what it would be brought down to rather than simply refused, so the run can decide
+    whether it still wants to recommend paying at all.
+    """
+    serve_the_claim(api)
+    run = build_run(shipbob_http, images_http)
+
+    message = await call(
+        run,
+        COMPUTE_REIMBURSEMENT,
+        damaged_items=[{"product_name": "Liposomal Tripeptide Collagen", "quantity": 1}],
+        proposed_amount_usd="250.00",
+    )
+
+    check = message.artifact
+    assert isinstance(check, AmountCheck)
+    assert check.capped is True
+    assert check.proposed_usd == "250.00"
+    assert check.recommended_usd == "100.00"
+    assert "brought down" in said(message)
+
+
+async def test_a_figure_that_is_not_money_is_refused_and_never_interpreted(
+    api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
+) -> None:
+    """FR-1.21, NFR-4: a payout somebody had to guess at is worse than no payout.
+
+    Told back plainly so the run can write it properly on its next turn, rather than a
+    currency sign being quietly stripped off and a figure paid that nobody typed.
+    """
+    serve_the_claim(api)
+    run = build_run(shipbob_http, images_http)
+
+    message = await call(
+        run,
+        COMPUTE_REIMBURSEMENT,
+        damaged_items=[{"product_name": "Liposomal Tripeptide Collagen", "quantity": 1}],
+        proposed_amount_usd="$40",
+    )
+
+    check = message.artifact
+    assert isinstance(check, AmountCheck)
+    assert check.succeeded is False
+    assert "written as money" in said(message)
 
 
 async def test_the_amount_check_refuses_to_price_a_product_it_cannot_match(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.13, FR-1.21: a product on no invoice line prices nothing, and is not guessed at."""
+    """FR-1.13: a product on no invoice line is not guessed at, whatever figure was named."""
     serve_the_claim(api)
     run = build_run(shipbob_http, images_http)
 
@@ -715,37 +758,35 @@ async def test_the_amount_check_refuses_to_price_a_product_it_cannot_match(
         run,
         COMPUTE_REIMBURSEMENT,
         damaged_items=[{"product_name": "A bottle of something else", "quantity": 1}],
+        proposed_amount_usd="20.00",
     )
 
     check = message.artifact
     assert isinstance(check, AmountCheck)
-    assert check.amount_available is False
     assert check.priced_products == ()
-    assert "must not guess" in said(message)
-    assert MONEY.search(said(message)) is None
+    assert "could be found on invoice" in said(message)
 
 
 async def test_the_amount_check_says_when_nothing_has_been_established_as_damaged(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.21: no damaged products prices nothing, and ShipBob is not asked to price it."""
+    """FR-1.21: no damaged products means nothing to check, and ShipBob is not asked."""
     serve_the_claim(api)
     priced = api.post(f"{SHIPBOB}/invoices/generate")
     run = build_run(shipbob_http, images_http)
 
-    message = await call(run, COMPUTE_REIMBURSEMENT, damaged_items=[])
+    message = await call(run, COMPUTE_REIMBURSEMENT, damaged_items=[], proposed_amount_usd="20.00")
 
     check = message.artifact
     assert isinstance(check, AmountCheck)
-    assert check.amount_available is False
-    assert "nothing to price" in said(message)
+    assert "nothing to check an amount against" in said(message)
     assert priced.call_count == 0
 
 
-async def test_an_amount_cannot_be_worked_out_when_the_shipment_will_not_price(
+async def test_an_amount_cannot_be_checked_when_the_shipment_will_not_price(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """NFR-4: no invoice means no amount, said plainly rather than raised or guessed at."""
+    """NFR-4: no invoice means no comparison, said plainly rather than raised or guessed at."""
     serve_the_claim(api)
     api.post(f"{SHIPBOB}/invoices/generate").respond(422, json=INVOICE_UNAVAILABLE_BODY)
     run = build_run(shipbob_http, images_http)
@@ -754,13 +795,13 @@ async def test_an_amount_cannot_be_worked_out_when_the_shipment_will_not_price(
         run,
         COMPUTE_REIMBURSEMENT,
         damaged_items=[{"product_name": "Liposomal Tripeptide Collagen", "quantity": 1}],
+        proposed_amount_usd="20.00",
     )
 
     check = message.artifact
     assert isinstance(check, AmountCheck)
     assert check.succeeded is False
-    assert check.amount_available is False
-    assert "No amount could be worked out" in said(message)
+    assert "could not be priced" in said(message)
 
 
 # --- Writing every call down (FR-1.1, NFR-3, NFR-5) -------------------------

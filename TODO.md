@@ -100,22 +100,17 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
     values in force are held in `live_policy.py` and replaced whole; a claim already being
     screened finishes on the ones it started with, so FR-0.6 still holds. The panel is generated
     from `policy.py`, so a threshold added there needs no other change to be editable.
-  - **The refund percentage is editable from the panel**, deliberately, because it is the
-    value most likely to need changing and its effect is immediately visible in the next
-    claim's figures. It needed no UI change at all: the panel is generated from the policy
-    file, and a whole number already had a control.
   - **Not every value is on the panel.** Marking one `NOT_ON_PANEL` in `policy.py` keeps it a
     policy value — read as always, still set from the environment — while the panel neither shows
     it nor accepts a change to it. Four are marked: the minimum description length, and the three
     the unbuilt AI investigation would read, where a control would change nothing observable.
   - **Be aware:** only the $100 cap is a real ShipBob figure. The age limit and whether it is
     inclusive, the high-value threshold, the claim-type wording, the minimum description length,
-    the email reason order, the confidence threshold, the step budgets and the refund
-    percentage are placeholders we
+    the email reason order, the confidence threshold and the step budgets are placeholders we
     invented
-    so the code runs — they need sign-off before production. The refund percentage is the
-    one with money directly behind it: at 60% a $52.00 item pays $31.20, and changing that
-    number changes every payout after it.
+    so the code runs — they need sign-off before production. The cap is now the only limit on
+    a payout at all, which makes it the one number here with money directly behind it: raise
+    it and every claim above it is paid more.
   - **Be aware:** a change made through the panel is held in memory only and there is no sign-in
     on it. A restart silently puts every value back to what the environment says, and nothing
     records who changed what. Both were chosen knowingly for a demo — see DESIGN.md, "Future
@@ -132,8 +127,8 @@ screen turns away never reaches the agent and costs no AI at all.
 The demo screen shows all of it: the quick checks, the similar past claims, then the
 investigation reporting each step as it happens, then a report per damaged product with the
 working behind its figure and a draft email. Proven end to end against the real model on
-ShipBob's own photographs — it picked out the damaged collagen from four images, priced it at
-$52.00, took 60% and recommended $31.20.
+ShipBob's own photographs — it picked out the damaged collagen from four images and judged
+what the damage was worth.
 
 One caveat the ticks do not cover: **nothing is stored**, so a stream cannot be replayed and
 a representative who reloads starts the investigation again. That is why NFR-3 and NFR-5 are
@@ -315,46 +310,46 @@ still unticked below.
     sample data, and silently swapping the source would put a figure in front of a rep
     that did not come from where the report says it came from.
 
-- [x] FR-1.19 — Only the damaged items are covered, not the whole order — and only a
-  share of what each one cost.
-  - **Conclusion:** ShipBob refunds a percentage of a damaged item's price on an
-    uninsured shipment, not the whole of it, and that percentage is a policy value
-    because it is a commercial judgement rather than arithmetic. Both figures are kept
-    on every result — what the item cost and what is refunded for it — so a rep sees the
-    step between them rather than one unexplained number (FR-2.4).
-  - **Be aware:** each item's share is rounded to cents *before* the items are added up,
-    so the lines a rep reads add up to the total beside them. 60% of $49.99 is $29.994
-    and becomes $29.99, in exact decimals throughout.
-  - **Be aware:** the percentage says "if not insured", and nothing checks insurance here
-    because nothing needs to: an insured shipment is routed out by the pre-flight screen
-    and never reaches pricing (FR-0.2). If insured claims are ever priced here, this needs
-    a second value and an explicit check.
+- [x] FR-1.19 — Only the damaged items are covered, not the whole order.
+  - **Conclusion:** the items a claim covers are read off the invoice for context — what
+    the goods cost, shown beside what is being recommended for them. Nothing is worked out
+    from the whole order.
+  - **Be aware:** what an item cost is deliberately **not** a limit on what is recommended
+    for it. A claim may reasonably come to less than the goods did, and nothing in the
+    requirements says it may never come to more — so nothing clamps it. Whether it should is
+    in DESIGN.md's questions rather than decided quietly.
 
 - [x] FR-1.20 — The amount is capped, per product **and** across the claim.
-  - **Conclusion:** the claim-level check is the point. Three products at $50 are each
-    fine and together are not, so a cap that only ever saw one product could be got round
-    by splitting a claim into more of them. Over the cap, nothing is trimmed and nothing
-    is chosen between: every product recommended for payment goes to a person.
-  - **Be aware of the order of operations.** The refund share is taken first and the cap
-    is checked against the result, because the cap limits what is *paid*. Goods worth more
-    than $100 therefore need not breach it — $179.97 of whey refunds $107.98 at 60% and
-    is capped, while the same goods at 40% refund $71.99 and are not capped at all.
-    Checking the cap against the price instead would trim figures that were never over
-    the limit.
+  - **Conclusion:** the cap is now the *only* limit on a payout, which makes it the single
+    most load-bearing number in the system. The claim-level check is still the point: three
+    products at $50 are each fine and together are not, so a cap that only ever saw one
+    product could be got round by splitting a claim into more of them. Over the cap nothing
+    is trimmed and nothing is chosen between — every product recommended for payment goes to
+    a person.
   - **Be aware:** whether the cap means per product or per claim is REQUIREMENTS open
-    question 2, so which applies is a setting. This is the single place a product's
-    outcome depends on what else was claimed beside it, which is why it sits apart from
-    everything FR-1b.4 guarantees.
+    question 2, so which applies is a setting. This is the single place a product's outcome
+    depends on what else was claimed beside it, which is why it sits apart from everything
+    FR-1b.4 guarantees.
 
-- [x] FR-1.21 — The agent says *what* was damaged; code works out *how much*.
-  - **Conclusion:** structural three times over. No form the model fills in has anywhere
-    to put an amount; the tool that computes one tells the model only *whether* a figure
-    could be worked out, never the figure; and the email carries `{{amount}}` for code to
-    substitute. The real product costs $52.00 and nothing money-shaped reaches the model.
-  - **Be aware:** a validator refuses any other money-shaped text the model writes, and a
-    refused email escalates the product. It deliberately allows quantities, dates, order
-    numbers and SKUs — both directions are tested, and where the line was drawn is in
-    DESIGN.md.
+- [x] FR-1.21 — The agent decides the amount; code holds it to the cap.
+  - **Conclusion:** the agent judges what the damage is worth from the photographs and from
+    how comparable claims were settled, names a figure, and a pure function caps it. How
+    badly a thing is broken is a judgement, and the fixed share this replaced could not tell
+    a scuffed box from a smashed bottle.
+  - **This reverses what the requirement used to say, and the cost is real.** No figure could
+    come from model output at all before, and the number in front of a rep was arithmetic she
+    could check. It is now an estimate to weigh: two investigations of one claim may propose
+    different figures, and the cap is the only thing bounding either. REQUIREMENTS.md and
+    CLAUDE.md were amended to match rather than left describing a system that no longer
+    exists.
+  - **Two guarantees survived, and they are the ones to defend.** Money is read as text into
+    an exact decimal and never through a float — anything not exactly money is refused rather
+    than interpreted, and the claim goes to a person. And **no figure the model wrote reaches
+    a merchant**: the email carries a marker that code replaces with the amount *after* the
+    cap, so a proposal of $180 on a $100 cap sends $100 and never $180.
+  - **Be aware:** past claims' settled amounts are now shown to the agent, having been
+    deliberately withheld before. That was the whole basis of "judge it against similar
+    claims", and withholding them left the instruction with nothing behind it.
 
 ## Layer 2 — The report
 

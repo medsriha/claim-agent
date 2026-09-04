@@ -482,7 +482,7 @@ such — regardless of how confident the recommendation is.
 
 ## Reimbursement amount
 
-**FR-1.18 — Base the recommended amount on the invoice** — the price at time of
+**FR-1.18 — Read the invoice for what the items cost** — the price at time of
 fulfilment, after discounts.
 
 > **Reference — `POST /invoices/generate`**
@@ -539,11 +539,26 @@ question 2.
 > "Number of affected orders: 2," and the two most expensive items together are $109.98.
 > Demonstrating the cap otherwise requires a constructed case.
 
-**FR-1.21 — The agent identifies which items were damaged; code computes the amount.**
-The model determines *what* the claim covers. A deterministic function determines *how
-much*. No monetary figure is ever produced by, or parsed out of, model output. This is what
-makes the same claim yield the same figure every time — and it means the number in front of
-the rep is arithmetic she can check, not a model's estimate.
+**FR-1.21 — The agent decides the amount; code holds it to the cap.**
+The agent determines both *what* the claim covers and *how much* it is worth, judging the
+damage against the photographs and against how comparable claims were actually settled. How
+badly a thing is broken is a judgement, and a rule that paid a fixed share of the price
+could not tell a scuffed box from a smashed bottle.
+
+A deterministic function then holds that figure to the cap of FR-1.20, which is the only
+limit on it. The figure is read as exact money — text into an exact decimal, never through a
+floating point number — and every recommendation carries what was proposed, what the items
+cost on the invoice, whether the cap changed the answer, and the agent's own reasoning for
+the number.
+
+**This is a deliberate reversal of an earlier requirement, and the cost is stated here so
+nobody has to rediscover it.** Until this revision, no monetary figure could come from model
+output at all: a deterministic function priced the damaged items and the number in front of
+the rep was arithmetic she could check. That made the same claim yield the same figure every
+time. It no longer does. The amount is now an estimate to weigh rather than a sum to verify,
+two investigations of one claim may propose different figures, and the cap is the only thing
+that bounds either. What is bought for that is judgement about damage the arithmetic could
+not express.
 
 ---
 
@@ -915,7 +930,7 @@ all count the same.
 **FR-S.8 — Never let precedent stand in for evidence, or override a rule.**
 A claim with no photographs does not become approvable because a comparable claim that had
 photographs was approved. Precedent cannot raise the $100 cap, satisfy a missing evidence item,
-reverse a Layer 0 terminal verdict, or change the figure FR-1.21's arithmetic produces. Where
+reverse a Layer 0 terminal verdict, or push a figure past the cap FR-1.21 applies. Where
 precedent and the evidence in front of the agent point different ways, the evidence governs and
 the disagreement is reported (FR-S.10).
 
@@ -1186,8 +1201,14 @@ prevents that, by pinning the records a run was given to that run.
 
 **NFR-2 — Constrained model output.**
 Every AI response conforms to a defined schema — classifications, judgments, structured
-findings. The model never returns a free-form verdict, and no monetary amount is ever
-extracted from generated text.
+findings. The model never returns a free-form verdict.
+
+A monetary amount **is** now taken from model output, which FR-1.21 explains and which this
+requirement previously forbade. It is constrained rather than free: the figure is a schema
+field written as money, refused outright if it is not, read into an exact decimal, and
+capped. Merchant-facing wording still carries no figure the model wrote — a marker is
+substituted after the cap has been applied, so what reaches a merchant is the figure that
+survived it and not the one that was proposed.
 
 **NFR-3 — Explainability.**
 Every conclusion traces to the observation that produced it. It must be possible to answer

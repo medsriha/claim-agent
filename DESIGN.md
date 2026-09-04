@@ -75,8 +75,9 @@ happened, photos of the damaged product, and photos of the outer box. If any of 
 rather than assume. If everything is there, we check that the damage is visible, that we can
 tell which product it is, and that the product was really on the order. Then we suggest one of
 four things: pay, ask for more information, refuse, or hand it to a person. Any amount of money
-is worked out by fixed arithmetic, never by the AI, so the same claim always produces the same
-figure and a rep can check the sum.
+is judged by the AI from how bad the damage looks and from how comparable claims were settled,
+and then held to a fixed limit that no claim may exceed. The figure is an estimate to weigh
+rather than a sum to check — see the note on that under stage 3's own section.
 
 **4. A person decides, then we act.** The rep reads the report. They can approve it, edit the
 email wording, or send it back with feedback in their own words — in which case we rework the
@@ -127,8 +128,9 @@ quiet and answering at the end.
 then the similar past claims, then the investigation reporting each thing it does as it does
 it, and finally a report per damaged product with the working behind its figure and a draft
 email. Two things are worth being clear about: the AI recommends and never decides, and the
-money is arithmetic rather than anything the AI produced — it is not shown a figure and has
-nowhere to write one.
+the money is the AI's judgement of what the damage is worth, held to a limit no claim may
+exceed. That last part changed recently and deliberately; the figure used to be arithmetic
+nobody could argue with, and now it is an estimate somebody has to weigh.
 
 **Stage 4 is untouched**, and nothing has ever been sent to a merchant or paid out. The parts of
 the system that could do those things do not exist.
@@ -970,9 +972,10 @@ One run per product, and the runs happen at the same time as each other. Each ru
    inside is a perfectly good claim.
 5. It then recommends one of four things and says why: pay, ask the merchant for something, refuse,
    or hand it to a person (FR-1.14).
-6. If it recommends paying, the amount is worked out by arithmetic, not by the AI. The AI says
-   which items were damaged; a fixed calculation takes those items' prices from the invoice, adds
-   them up, and applies the cap (FR-1.21).
+6. If it recommends paying, the AI says how much — judging it from how badly the thing is
+   damaged and from what comparable claims were actually settled for. What the item cost is
+   shown beside it as context rather than being the answer. A fixed rule then holds that
+   figure to the limit a claim may be reimbursed, and says so if it had to (FR-1.21).
 7. A draft email to the merchant is written to match, with the amount filled in afterwards by the
    same calculation.
 
@@ -989,13 +992,29 @@ arrived at, and the draft email. Nothing is sent and nothing is stored.
   approval is not available — a piece of evidence is missing, it is not sure enough, or it ran out
   of steps — the recommendation is moved to asking the merchant or handing it to a person, and what
   the AI originally said is recorded next to it. Nothing can move a recommendation *towards* paying.
-- **No amount of money ever comes out of the AI.** Not as a figure it calculates, and not as words
-  a figure is read out of. The forms it fills in have no box for an amount at all, so it is not
-  that it is asked not to give one — there is nowhere to put it. The number in front of a
-  representative is arithmetic they can check (FR-1.21).
+- **The AI decides what the damage is worth, and one limit holds it.** This was the other way
+  round until recently, and the change is worth understanding. A fixed rule used to work the
+  figure out — a share of what the item cost — and the number a representative saw was arithmetic
+  she could check. But a rule like that cannot tell a scuffed box from a smashed bottle: the two
+  can cost the same and be worth very different amounts to put right. So the AI judges it now,
+  weighing the photographs and what comparable claims were actually settled for.
+
+  **What that cost is real and is not hidden here.** The figure is an estimate to weigh rather
+  than a sum to redo. Two investigations of one claim may propose different amounts. There is no
+  arithmetic for a representative to check, which is why the AI's own account of *why* that figure
+  is carried beside it — that account is the only thing left to disagree with.
+
+  **The limit is what makes it safe enough.** No claim may be recommended for more than a set
+  maximum, and a figure above it is brought down to it and says so. That limit is a fixed rule the
+  AI cannot argue with, and it is now the only thing standing between a judgement and a payout.
+  The figure is also read as exact money — refused outright if it is not written as money at all,
+  rather than being guessed at (FR-1.21, FR-1.20).
 - **The email is written by the AI, with a gap where the money goes.** The wording is the AI's, so
-  it can speak to the actual claim, but every figure is put in afterwards by the calculation. Any
-  amount of money found anywhere else in what it wrote is rejected.
+  it can speak to the actual claim, but the figure is put in afterwards — and it is the figure
+  that got past the limit, which may not be the one the AI proposed. An AI recommending two
+  hundred dollars on a claim that may only be reimbursed a hundred would otherwise promise the
+  merchant the larger number. Any amount of money found anywhere else in what it wrote is
+  rejected, and the claim goes to a person.
 - **How sure it is, is part of the answer.** Each of the four questions carries its own confidence,
   and so does the identification of which product was damaged, because that is the judgement the
   money rests on. Below a set level, paying is not available and the claim goes to a person with
@@ -1026,12 +1045,20 @@ instead — the two happen to be identical in the sample data, and quietly swapp
 other would put a number in front of a representative that did not come from where the report says
 it came from.
 
-**Not ready for production** — The confidence figure is the AI's own opinion of itself. We use it
-to withhold payments, because there is nothing better to use, but nobody has ever checked it
-against what actually turned out to be true. The same is true of the level we set it at. Nothing
-is stored, so there is no lasting record of an investigation. And "the invoice" means two different
-things in the requirements — the picture the merchant uploaded, and the one ShipBob generates on
-request — and which of them each rule means is our reading rather than ShipBob's.
+**Not ready for production** — **The amount is now an AI's judgement, and only one limit checks
+it.** Nothing measures whether the figures it proposes are reasonable, nothing compares them
+against what representatives actually approve, and the same claim may come back with a different
+number twice. The set maximum stops a runaway payout; nothing stops a figure that is merely
+wrong, and there is no arithmetic for anybody to redo. What an item cost is shown beside the
+figure but does not limit it — nothing in the requirements says a claim may never exceed the price
+of the goods, so nothing here decides that, and it is worth asking.
+
+The confidence figure has the same shape of problem: it is the AI's own opinion of itself, we use
+it to withhold payments because there is nothing better to use, and nobody has checked it against
+what actually turned out to be true. The same goes for the level we set it at. Nothing is stored,
+so there is no lasting record of an investigation. And "the invoice" means two different things in
+the requirements — the picture the merchant uploaded, and the one ShipBob generates on request —
+and which of them each rule means is our reading rather than ShipBob's.
 
 **Where the code is** — `src/claim_agent/agent/investigate.py` for one product,
 `src/claim_agent/agent/run.py` for the claim as a whole, the rules with no AI in them in
@@ -1326,6 +1353,203 @@ investigation: it runs to the end and its findings are discarded.
 
 ---
 
+### Reading the investigation's own words
+
+**What it does** — Passes on everything the investigation writes about itself, whole, and lays
+it out on screen the way it was written. A list of things it is weighing up appears as a list,
+an emphasised word appears emphasised, and a sentence that runs long is not cut off part-way.
+
+**Why we need it** — The most useful thing a representative sees while an investigation runs is
+the model's own remark alongside its tool calls: "the second photograph is too dark to read, so
+I will look at the third". Two things spoiled it. The remark was cut at three hundred
+characters, mid-word, and a remark that is cut loses exactly the end of it — the part saying
+what the run decided to do next. And it arrived on screen as one unbroken line, so a remark
+written as three bullet points read as one paragraph with stray dashes in it, and the line
+breaks the model had put in were thrown away.
+
+**How it works**
+
+1. The run finishes a turn and the model has written something alongside its tool calls.
+2. That remark goes onto the stream exactly as written. Nothing is trimmed, shortened or
+   reflowed on the way.
+3. Every message on the stream is sent as data rather than as loose text, so line breaks inside
+   a remark survive the journey to the browser intact.
+4. The screen reads the remark as **markdown** — the plain-text conventions people already
+   write in: `#` for a heading, `-` for a bullet, `1.` for a numbered point, `**` around
+   something emphasised, backticks around a piece of code. It splits the text into blocks and
+   turns each one into the thing it describes.
+5. Anything the screen does not recognise is shown exactly as it was written, character for
+   character. A remark with no markdown in it at all reads as an ordinary sentence, which is
+   what most of them are.
+6. **A step that says a lot is folded.** Most are one short line and are shown as one. A
+   step that runs past a few lines is put in a quieter, greyed box that scrolls instead of
+   growing, so it takes the same room whether it says four lines or forty. It starts open,
+   and a representative can shut it and open it again. Shut, it shows its first line, so
+   they can tell what they are opening.
+
+**What it connects to** — It applies to the running commentary the investigation sends while it
+works, and to nothing else. The finished report's fields — a product's explanation, its
+concerns, what a photograph showed — are single sentences laid out in a table on screen, and are
+still shown as plain text.
+
+**Choices we made**
+
+- **Nothing the run says is cut.** The length of a remark is already bounded by how much the
+  model is allowed to write in one reply, so there was never an unbounded amount of text to
+  defend against — only a limit that fired on the longer remarks and lost their endings.
+- **The step-by-step record keeps its own short entries.** The record of what a run did still
+  trims each entry to a sentence or two. It is a different thing with a different job: the
+  record is a summary kept for review, and the commentary is the run talking while it works.
+  They looked alike, which is how they came to share a limit they should never have shared.
+- **We read the markdown ourselves rather than adding a library.** The screen has no
+  dependencies beyond React, and a small reader covering the things a model actually writes —
+  headings, bullet and numbered lists, code blocks, bold, italics, inline code — is a page of
+  code. A library for it would be the largest thing on the screen.
+- **Nothing the model writes becomes markup.** Each piece of the text is turned into an element
+  directly; the text is never handed to the browser as HTML. So a model that writes something
+  that looks like markup puts those characters on screen and cannot change the page.
+- **Links are not supported.** A link written as markdown shows as the characters that were
+  typed. Nothing in an investigation writes links today, and accepting them means deciding what
+  is safe to let a model send somebody to — a decision worth making deliberately rather than in
+  passing.
+- **A long step is folded, not shortened.** Cutting it is what we just stopped doing. Folding
+  it keeps every word and costs the screen nothing: the box scrolls, so a step that reasons at
+  length takes no more room than one that says a sentence.
+- **It starts open.** Watching the work happen is the reason any of this is on screen, and a
+  step that arrived already shut would put the stream back to being something a representative
+  has to go looking through. Shutting it is theirs to do.
+- **Whether to fold is judged on how much there is to read**, not on what sort of step it is:
+  more than three lines, or more than about two hundred and forty characters. So the reasoning
+  and a tool that answered at length are both folded without the screen having to know which
+  kinds of step tend to be long — and a kind nobody has seen before is treated on the same
+  terms as the rest.
+
+**When things go wrong** — Anything malformed falls back to being shown as written: a code
+fence nobody closed, a list that starts mid-sentence, emphasis with no end to it. There is no
+failure case in which text disappears, which is the property that matters — a representative
+seeing odd punctuation can still read the sentence, while one seeing nothing has lost it.
+
+**Not ready for production** — Nobody has measured how long the longest remark actually is.
+The screen no longer grows with it — the box scrolls — but nothing at either end puts a limit
+on the words themselves, so an unusually talkative model makes for a larger stream rather than
+a longer page. There are no tests over the markdown reader or over the folding, as there are
+no tests over any of the screen: both were checked by rendering them and reading the result.
+
+**Where the code is** — `src/claim_agent/agent/loop.py` is what the run says and how much of it
+is passed on, `web/src/components/Markdown.tsx` reads it, and
+`web/src/components/InvestigationStep.tsx` is the step it is drawn inside.
+
+---
+
+### How the agent is doing, for the business
+
+**What it does** — A third screen, beside the one a representative works on and the one an
+administrator changes the rules on. It answers a different question from either: not "what
+should happen to this claim", but "how well has this been going, over months, and is it getting
+better". It shows how often a representative took the recommendation exactly as it stood, how
+often and how far they changed it, how long claims took, what that is worth in time and money,
+and — the part the whole screen is really for — whether the system's own statement of how sure
+it is turns out to predict whether a representative agreed with it.
+
+**Why we need it** — The intention behind this project is to run the system with a
+representative checking every claim, learn from what they do, and use that to decide when some
+claims could safely go through with less checking. Nothing in the system measured any of that.
+This section of the design has no requirement id behind it, because the requirements never
+mention measurement, reporting or automation; two nearby requirements do apply, and are named
+below.
+
+It is worth being blunt about the limit. **The requirements forbid automatic approval outright.**
+FR-2.9 says a report leaves review in exactly one way — a person approves it — and that there is
+no confidence level and no number of revisions that changes this. FR-3.1 calls the same thing a
+hard invariant. So this screen cannot switch anything on, and does not pretend to. It is the
+evidence somebody would need in order to argue that those requirements should change, and it
+says so where a reader will see it.
+
+**How it works**
+
+1. When a representative decides something about a claim, that decision is written down: which
+   claim it was, what the system recommended, what the person actually chose, whether they
+   changed the wording, anything they said in their own words, and when. The requirements
+   already describe this record in detail (FR-C.1), so it is that record rather than one we
+   invented.
+2. The screen asks the service for a period — the last month, three months, a year.
+3. The service reads every decision in that period and works out the figures: the share taken as
+   recommended, the share changed, how far they were changed, how long they took, and what that
+   adds up to in hours and money. All of it is worked out in the service. Nothing is worked out
+   in the browser.
+4. It groups those decisions by how sure the system said it was, and compares that against how
+   often a person agreed. That comparison is the point of the screen.
+5. It also scores a handful of candidate rules — claims under a certain value, where the system
+   was more than a certain amount sure — and reports, for each, how much of the work it would
+   cover and how often people agreed with it. It scores them. It does not choose one, and there
+   is no button next to any of them.
+6. The screen draws all of that, and adds nothing.
+
+**What it connects to** — It reads the record of decisions, which is kept in the same single
+database file as the merchant corrections and the past claims. It depends on nothing else: no
+ShipBob call, no AI, no images. It is the cheapest thing in the system to run.
+
+**Choices we made**
+
+- **The service sends numbers ready to be drawn, and the finished words beside them.** Every
+  point on every chart carries both the number that becomes its position and the sentence a
+  person reads. The browser turns a number into a position on the screen and does nothing else
+  — it never works out a percentage, a total, a difference or a boundary. This is the same rule
+  that keeps money out of the browser (FR-1.21), applied to every figure rather than only to
+  money. No chart on the screen draws money at all.
+- **Two kinds of decision are counted separately.** A claim stopped by the quick checks never
+  reaches the AI, has no products in it, and costs nothing to decide. A claim that was
+  investigated is a different thing entirely. The requirements already say the record has to
+  cover both (FR-C.1). Adding them together would make the system look better than it is,
+  because the cheap deterministic decisions are the ones people agree with most.
+- **We say "agreement", never "accuracy".** Nothing here knows what the right answer was. It
+  knows what a person chose. Calling that accuracy would be claiming the person is always right,
+  which nobody has established.
+- **The rules disagreeing with the AI is kept apart from a person disagreeing with either.** The
+  system already overrules its own AI in a few defined situations. That is a different event from
+  a representative changing something, and the two are never added together.
+- **The assumptions behind the money are shown on the screen**, marked as provisional, in the
+  service's own words — the same way the rules screen shows that a threshold is not yet agreed.
+  A saving in pounds and pence rests on an hourly rate for a person's time and a cost per claim
+  for the AI, and neither figure came from ShipBob. Showing them beside the total is the
+  difference between a figure someone can argue with and one they have to take on trust.
+- **The charts are drawn by hand.** No charting library was added; the screen still depends on
+  nothing but the two libraries it already used. The colours were checked rather than chosen by
+  eye — the four shades that show how far a decision was changed are one blue getting darker,
+  because "how far" is an order and a reader should see the order in the colour. The existing
+  green, amber and red are deliberately not used as chart colours: amber and red are almost
+  indistinguishable to a reader with the commonest form of colour blindness, which does not
+  matter when each one sits beside a word, and would matter a great deal in a chart.
+- **Two requirements this does touch.** The data that fills it is invented, and FR-C.8 says what
+  invented demonstration data has to do: say in its own words that it is invented, go in through
+  the same store a real decision would, and be removable again. The tool that writes it does all
+  three. And FR-C.7 asks an open question — whether an expensive claim should be held to a
+  stricter standard — which is exactly the shape of the rules this screen scores. So the screen
+  produces the evidence for a question the requirements have left open.
+
+**When things go wrong** — If the store cannot be read at all, the screen says so and offers to
+try again; it never shows zero claims, because "nobody decided anything" and "we could not look"
+are different answers and telling somebody the first when the truth is the second is the one
+badly wrong outcome here. A period with genuinely nothing in it says that instead, in the
+service's words. A week with no claims in it leaves a gap in the line rather than a dip to zero.
+If a request fails while the screen already has figures on it, the old figures stay, dimmed,
+still labelled with the period they cover, rather than being thrown away.
+
+**Not ready for production** — Every decision behind every figure is invented, because nothing
+in the system records a real one yet: the stage where a person decides is not built. The record
+store is therefore half a feature — the half that reads. The hourly rate and the AI cost are
+numbers we chose. The confidence comparison is only as good as the invented data behind it, and
+on real data it might show something quite different. See
+[Future production](#future-production).
+
+**Where the code is** — `src/claim_agent/domain/decision.py` is the record,
+`src/claim_agent/storage/decision_store.py` keeps it, `src/claim_agent/analysis/` works the
+figures out, `src/claim_agent/api/routes/analysis.py` is the way in,
+`tools/seed_analysis_history.py` writes the invented history, and `web/src/screens/
+AnalysisScreen.tsx` with `web/src/charts/` draws it.
+
+---
+
 ## Future production
 
 This project is an interview exercise. It is not complete and it is not production-hardened,
@@ -1437,6 +1661,11 @@ finds in production.
 - **The record of a run is not kept.** It exists for as long as the reply takes and is then gone.
   The requirement asking for an ordered record of what was done to each case is unmet, and the
   record has ordering but no times, because nothing fills them in.
+- **The screen reads only part of markdown.** Headings, bullet and numbered lists, code
+  blocks, bold, italics and inline code are drawn as what they are; links, tables, block
+  quotes and lists inside lists are shown as the characters that were typed. Nothing writes
+  those today. A model that starts to would produce something readable but untidy rather
+  than something broken.
 
 ### Could break
 
@@ -1575,6 +1804,12 @@ finds in production.
   handling that stops money losing its cents were copied rather than shared, because the second
   client was written without touching the first. They agree today. A fix applied to one will
   silently miss the other.
+- **Nothing bounds how much the investigation says about itself.** Its remarks used to be
+  cut at three hundred characters, which lost the end of the longer ones, so now they are
+  passed on whole — and nobody has measured how long they get. The screen keeps a long one
+  from taking over the page, by folding it into a box that scrolls, so what is left is a
+  question about the stream rather than the layout: a talkative model on a claim with several
+  products makes a larger reply, and nothing anywhere says how large is too large.
 
 ### Would improve
 
@@ -1620,6 +1855,12 @@ finds in production.
 
 ### Questions for whoever owns the requirements
 
+- **May a claim be recommended for more than the goods cost?** Nothing decides this. The AI judges
+  what the damage is worth and only the maximum limits it, so a badly damaged $12 item could in
+  principle be recommended at $40. Clamping it to the item's price would be easy and might be
+  wrong — a claim can reasonably cost more to put right than the goods did. Nobody has said.
+- **Is the maximum per damaged product or per whole claim?** Still open question 2, and it matters
+  more now that the maximum is the only limit there is.
 - **The requirements refer to "open question 2" and "open question 3" but contain no list of open
   questions.** Neither affects the quick checks, but both are cited as unresolved and nobody can
   look them up.

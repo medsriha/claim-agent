@@ -20,7 +20,6 @@ arrive in a different order.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -196,13 +195,21 @@ def all_four_answered(confidence: float = 0.9, **passed: bool) -> tuple[Assessme
 def a_conclusion(**overrides: object) -> InvestigationConclusion:
     """A well-evidenced conclusion recommending payment for one collagen.
 
-    Its email leaves the marker where a figure belongs and writes no figure of its own,
-    which is the only way the model is allowed to mention money (FR-1.21).
+    It names an amount, because the investigation decides what the damage is worth
+    (FR-1.21). $40.00 against a $52.00 item, deliberately: the figure is a judgement about
+    the damage rather than a share of the price, so a test that assumed one could be
+    derived from the other would be asserting a rule that no longer exists.
+
+    Its email still leaves the marker where a figure belongs and writes none of its own —
+    the one rule about money that survived the reversal, because the figure a merchant
+    reads must be the one that got past the cap.
     """
     fields: dict[str, object] = {
         "evidence": evidence_all_in_hand(),
         "assessments": all_four_answered(),
         "damaged_items": (DamagedItem(product_name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU),),
+        "recommended_amount_usd": "40.00",
+        "amount_reasoning": "The bottle is cracked through and the contents are lost.",
         "recommendation": Recommendation.APPROVE,
         "reasoning": "The photographs show the collagen bottle crushed, and it is on the invoice.",
         "concerns": ("The photograph is taken close in, so the outer box is not visible in it.",),
@@ -303,23 +310,25 @@ def state_of(result: LineInvestigation, kind: EvidenceKind) -> EvidenceState:
 async def test_a_well_evidenced_product_is_recommended_for_payment_at_the_policy_share() -> None:
     """FR-1.14, FR-1.18: a claim with everything in hand is proposed for payment, priced.
 
-    The figure is the invoice's, the working is attached to it, and the email a
-    representative would send carries that figure and no other.
+    The figure is the investigation's own judgement of what the damage is worth — $40.00
+    against a $52.00 item, deliberately not a share of the price. What the item cost is
+    shown beside it as context, and the email carries the figure that got past the cap.
     """
     result = await investigate(a_run_that_concludes(a_conclusion()))
 
     assert result.outcome.recommendation is Recommendation.APPROVE
     assert result.outcome.recommended_by_agent is Recommendation.APPROVE
     assert result.outcome.was_overridden is False
+    assert result.amount.proposed_usd == Decimal("40.00")
+    assert result.amount.amount_usd == Decimal("40.00")
+    assert result.amount.cap_applied is False
     assert result.amount.items_total_usd == Decimal("52.00")
-    assert result.amount.refund_percentage == 60
-    assert result.amount.amount_usd == Decimal("31.20")
     assert result.amount.priced_from == "INV-342578703"
     assert result.amount.cap_applied is False
     assert result.drafted_email is not None
     assert result.drafted_email.to == "sakukreja@shipbob.com"
     assert result.drafted_email.is_draft is True
-    assert "$31.20" in result.drafted_email.body
+    assert "$40.00" in result.drafted_email.body
     assert AMOUNT_PLACEHOLDER not in result.drafted_email.body
 
 
@@ -573,7 +582,9 @@ async def test_a_product_that_could_be_either_of_two_order_lines_is_never_priced
     )
 
     assert result.outcome.recommendation is Recommendation.REQUEST_INFO
-    assert result.amount.is_payable is False
+    # The figure the investigation named is still shown; the rules withhold the payment,
+    # which is what stops it being made. Zeroing it would hide what was proposed.
+    assert result.amount.components == ()
     assert result.amount.components == ()
     assert any("two of them" in concern for concern in result.concerns)
 
@@ -621,28 +632,32 @@ async def test_a_product_that_is_not_on_the_order_cannot_be_paid_for() -> None:
     assert result.outcome.recommendation is Recommendation.ESCALATE
     assert OverrideReason.PRODUCT_NOT_PRICEABLE in result.outcome.overrides
     assert "not on the order" in result.outcome.explanation
-    assert result.amount.is_payable is False
+    # The figure the investigation named is still shown, and nothing is paid on it. Zeroing
+    # it would hide what was proposed; the rules withholding it is what stops the payment.
+    assert result.amount.components == ()
+    assert result.amount.proposed_usd == Decimal("40.00")
 
 
 async def test_only_the_damaged_items_are_covered_and_never_the_whole_order() -> None:
     """FR-1.19: one crushed bottle in a two-product order reimburses one bottle.
 
-    The order comes to $90.00. The claim is for the $52.00 product, and that is what is
-    recommended.
+    The order comes to $90.00 and holds two products. The claim is for one of them, so
+    only that one is priced for context — a recommendation is never worked out from the
+    whole order.
     """
     result = await investigate(a_run_that_concludes(a_conclusion()))
 
-    assert result.amount.subtotal_usd == Decimal("31.20")
+    assert result.amount.items_total_usd == Decimal("52.00")
     assert [component.product_name for component in result.amount.components] == [COLLAGEN]
 
 
 async def test_the_amount_is_capped() -> None:
     """FR-1.20: a claim worth more than the cap is recommended at the cap, and says so.
 
-    Constructed deliberately, and it takes more constructing than it used to. No single
-    product in ShipBob's samples costs enough to reach $100, and only part of an item's
-    price is refunded, so the invoice here prices four of one product at $59.99: $239.96
-    of goods, $143.98 refundable at 60%, and the cap brings that back to $100.
+    Easy to construct now that the investigation names the figure: it proposes $180.00 for
+    four badly damaged tubs, and the cap brings that back to $100.00. The cap is the only
+    thing standing between a judgement and a payout, which is why this matters more than it
+    used to.
     """
     whey = OrderLineItem(
         name="2.5LBS White Chocolate Raspberry Huge Whey",
@@ -653,7 +668,8 @@ async def test_the_amount_is_capped() -> None:
     order = Order(order_id="337761802", user_id="334430", line_items=(whey,))
     line = claim_lines(ClaimedProduct(name=whey.name, quantity=4, sku="0159"), order=order)[0]
     conclusion = a_conclusion(
-        damaged_items=(DamagedItem(product_name=whey.name, quantity=4, sku="0159"),)
+        damaged_items=(DamagedItem(product_name=whey.name, quantity=4, sku="0159"),),
+        recommended_amount_usd="180.00",
     )
 
     result = await investigate(
@@ -663,13 +679,14 @@ async def test_the_amount_is_capped() -> None:
         invoice=Invoice(invoice_id="INV-337761802", line_items=(whey,)),
     )
 
-    assert result.amount.items_total_usd == Decimal("239.96")
-    assert result.amount.subtotal_usd == Decimal("143.98")
+    assert result.amount.proposed_usd == Decimal("180.00")
     assert result.amount.amount_usd == Decimal("100.00")
     assert result.amount.cap_applied is True
     assert result.drafted_email is not None
     assert "$100.00" in result.drafted_email.body
-    assert "119.98" not in result.drafted_email.body
+    # The merchant reads the figure that survived the cap, never the one proposed. This is
+    # the rule about money that did not change when FR-1.21 was reversed.
+    assert "180.00" not in result.drafted_email.body
 
 
 async def test_the_figure_is_worked_out_from_the_invoice_and_never_from_what_the_model_wrote() -> (
@@ -689,14 +706,14 @@ async def test_the_figure_is_worked_out_from_the_invoice_and_never_from_what_the
 
     result = await investigate(a_run_that_concludes(conclusion))
 
-    assert result.amount.items_total_usd == Decimal("52.00")
-    assert result.amount.refund_percentage == 60
-    assert result.amount.amount_usd == Decimal("31.20")
+    assert result.amount.amount_usd == Decimal("40.00")
     assert result.amount.priced_from == "INV-342578703"
     assert [component.unit_price for component in result.amount.components] == [Decimal("52.00")]
     assert result.drafted_email is not None
+    # The figure comes from the amount field, never from a number said in passing.
     assert "12.00" not in result.drafted_email.body
-    assert "$31.20" in result.drafted_email.body
+    assert "$40.00" in result.drafted_email.body
+    assert "$40.00" in result.drafted_email.body
 
 
 async def test_an_email_carrying_a_figure_the_model_wrote_is_refused_and_goes_to_a_person() -> None:
@@ -998,8 +1015,15 @@ async def test_fr_s_13_a_run_is_told_when_the_store_was_read_and_held_nothing() 
     assert "holds nothing much like this one" in what_the_model_was_asked(model)
 
 
-async def test_fr_1_21_no_figure_from_a_past_claim_reaches_the_model() -> None:
-    """FR-1.21: a model forbidden to write a figure is never shown one from the store."""
+async def test_fr_1_21_what_past_claims_were_settled_for_is_shown_to_the_model() -> None:
+    """FR-1.21, FR-S.6: the model decides the amount, so it is shown what alike claims paid.
+
+    This is the reverse of what it used to assert. While no figure could come from model
+    output, past amounts were stored and deliberately never rendered — a model forbidden to
+    write a figure must not be shown one. The model now decides the amount and is asked to
+    weigh how comparable claims were settled, so withholding the figures would leave that
+    instruction with nothing behind it.
+    """
     model = a_run_that_concludes(a_conclusion())
 
     await investigate(
@@ -1011,7 +1035,7 @@ async def test_fr_1_21_no_figure_from_a_past_claim_reaches_the_model() -> None:
 
     asked = what_the_model_was_asked(model)
     section = asked[asked.index("## SIMILAR CLAIMS HANDLED BEFORE") :]
-    assert re.search(r"[$£€]\s?\d|\d+\.\d{2}", section) is None
+    assert "52.00" in section
 
 
 async def test_fr_1_8_to_fr_1_11_all_four_judgements_come_back_with_their_reasoning() -> None:

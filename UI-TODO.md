@@ -315,8 +315,8 @@ time and starts at UI-20.
   - **Proven against the real model, on ShipBob's own photographs.** It chose to look at all
     four images on CASE-1001, identified them as the customer's email, the invoice, the
     damaged product and the outer mailer, picked out the Liposomal Tripeptide Collagen,
-    priced it at $52.00, took 60% and recommended $31.20 — with the four questions answered
-    between 80% and 95% confidence and an email drafted.
+    and judged what the damage was worth — with the four questions answered between 80% and
+    95% confidence and an email drafted.
   - **Two real faults were found by running it**, neither visible to any unit test: the model
     was being built before the route body ran, so a missing key refused even a claim that
     screening would stop; and `temperature` is rejected outright by `claude-opus-5`, so every
@@ -333,6 +333,65 @@ time and starts at UI-20.
   - **Not done.** The flow was exercised against the live service — both verdicts, the exact
     request the screen makes, a seeded precedent coming back with its score and reasons — and the
     project builds, typechecks and lints clean. Nobody has watched it render.
+
+## v6 — the investigation's own words
+
+- [x] UI-30 — What the investigation says, passed on whole and drawn in the shape it was
+  written in.
+  - **What was built:** two changes, one on each side. In the service, `agent/loop.py` no
+    longer cuts the model's remark before putting it on the stream — it used to trim at three
+    hundred characters, mid-word. On the screen, `components/Markdown.tsx` reads the part of
+    markdown a model actually writes — headings, bullet and numbered lists, code blocks,
+    bold, italics, inline code — and `components/InvestigationStep.tsx` draws a step's
+    sentence through it.
+  - **Conclusion:** the cut was losing the most useful part of a remark. The end of "the
+    second photograph is too dark, so I will look at the third" is the half saying what the
+    run decided to do next, and that is the half a length limit takes.
+  - **Be aware: the step-by-step record still trims its own entries** to three hundred
+    characters. That is deliberate and they are different things — the record is a summary
+    kept for review, the commentary is the run talking while it works. They shared a limit
+    because they looked alike.
+  - **Be aware: only the steps are read as markdown.** The report's own fields — a product's
+    explanation, its concerns, what a photograph showed — are single sentences laid out in a
+    table, and are still drawn as plain text.
+  - **Be aware: links are not read**, and show as the characters that were typed. Nothing
+    writes them today, and deciding where it is safe to send somebody is worth doing on
+    purpose rather than in passing.
+  - **Nothing becomes markup.** Every piece of the text is turned into an element directly
+    and none of it is handed to the browser as HTML, so a model that writes something looking
+    like markup puts those characters on screen and can do nothing else.
+  - **Checked by rendering it, since the screen has no tests.** Fourteen samples were
+    rendered to fixed HTML and read. Two real faults turned up that way and are fixed:
+    `claim_line_id` and `list_attachments` were being italicised on their underscores, and
+    `5 * 3 * 2` was being read as emphasis. Both now behave the way markdown itself does —
+    a mark has to sit against its text, and an underscore inside a word is part of the word.
+
+- [x] UI-32 — A step that says a lot, folded into a quiet box that scrolls.
+  - **What was built:** `components/InvestigationStep.tsx` now draws a step one of two ways.
+    A short one reads as before, a line of narration. A long one — more than three lines, or
+    more than about 240 characters — goes inside the page's own fold, greyed down and capped
+    at about six lines of height with the rest scrolling. Shut, it shows its first line so a
+    representative can tell what they are opening.
+  - **Conclusion:** the fold is what makes passing the whole remark through affordable. The
+    text is never shortened, and a step that reasons at length now takes the same room on
+    screen as one that says a sentence.
+  - **Be aware: it starts open**, because watching the work happen is the reason the stream
+    exists. Shutting it is the representative's to do, and `<details>` remembers it — no
+    state, no library, and the message keys are stable so nothing reopens on its own.
+  - **Be aware: the rule is about length, not kind.** Nothing here knows that `thinking` and
+    `tool_called` are the long ones. A kind this screen has never seen is judged on the same
+    terms, and a short remark is never boxed up for nothing.
+  - **Checked by rendering it:** a short step, a three-line step and a long one, read as
+    fixed HTML. The short shape is byte-for-byte what it was before.
+
+- [ ] UI-31 — Tried in a browser.
+  - **Not done.** The screen builds, typechecks and lints clean, and both the reading and the
+    folding were checked by rendering them to HTML. Nobody has watched a real investigation
+    draw a list on screen. Two things are most likely to look wrong. The first line of a short
+    step: the kind mark and the first paragraph share a line on purpose, and a step whose
+    first block is a list or a code block starts that block underneath instead. And the
+    scrolling box: nobody has seen how a scroll region inside a conversation that also scrolls
+    behaves under a wheel or on a phone.
 
 ## Reference — what the endpoint returns
 

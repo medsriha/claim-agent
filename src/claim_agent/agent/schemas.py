@@ -5,21 +5,22 @@ does not fit is rejected rather than patched up (NFR-2). This file is the whole
 list of those shapes, kept in one place so that what the model is allowed to say
 can be reviewed at a glance.
 
-**Read this before adding a field: nothing here may carry an amount of money.**
-Not a total, not a price, not a subtotal, not a percentage of one. The model says
-*what* was damaged; a deterministic function in `claim_agent.domain.reimbursement`
-says *how much* (FR-1.21). That is enforced by there being nowhere to put a figure
-rather than by asking the model not to give one — a schema with no money field
-cannot leak money, whatever the model does. A test fails if a field of type
-`Decimal`, or a field whose name reads like an amount, is added here.
+**There is exactly one money field, and it is deliberate.** The agent decides what the
+damage is worth — `recommended_amount_usd` on the investigation's conclusion — because how
+badly a thing is broken is a judgement and no rule could express it (FR-1.21). Everything
+else about money stays out: no totals, no subtotals, no per-item prices, no shares.
 
-The one number these forms do carry is confidence, which is a fraction between
-zero and one and is not money.
+That one field is **written as text**, not as a number, and that is not a stylistic
+choice. A JSON number becomes a floating point value on the way in, where `0.10` cannot be
+held exactly and cents drift. Text goes into an exact decimal untouched. Anything that is
+not money — a symbol, a third decimal place, a word — is refused rather than interpreted,
+and the claim goes to a person instead.
 
-The email fields are the other place to be careful. The model writes the wording,
-because it can speak to the actual claim, but it writes `{{amount}}` where a figure
-belongs and code substitutes the real one afterwards. Any other money-shaped text
-anywhere in what it wrote is rejected (FR-1.21).
+**No figure the model writes ever reaches a merchant.** The email fields carry `{{amount}}`
+where a figure belongs, and code substitutes the amount *after* the cap has been applied —
+so what is sent is the figure that survived the cap and not the one that was proposed. Any
+other money-shaped text in the wording is rejected. This is the guarantee that did not
+change when FR-1.21 was reversed, and it is the one worth defending.
 
 These shapes are deliberately separate from the ones in `claim_agent.domain`, even
 where they look similar. What the model is permitted to assert is a narrower thing
@@ -220,6 +221,12 @@ class InvestigationConclusion(BaseModel):
     towards paying; what was recommended here is kept either way, so a rep can see
     where the rules disagreed.
 
+    `recommended_amount_usd` is the figure that goes with an `approve`, and
+    `amount_reasoning` is why it is that figure. Both belong to the model now: the damage
+    is what decides what putting it right is worth, and a fixed share of the price could
+    not tell a scuffed box from a smashed bottle (FR-1.21). The cap is applied afterwards
+    and is the only limit — a figure above it becomes the cap, and the report says so.
+
     `concerns` is where anything that does not fit goes: an ambiguity, a weak piece
     of evidence, a judgement that was close. Silence here is treated as a defect
     rather than a clean result, because a rep who cannot tell why the system is
@@ -262,6 +269,23 @@ class InvestigationConclusion(BaseModel):
     )
     recommendation: Recommendation = Field(description="What you recommend doing about this line.")
     reasoning: str = Field(description="Why you recommend it.")
+    recommended_amount_usd: str | None = Field(
+        default=None,
+        description=(
+            "What ShipBob should pay for this product, in dollars, written as digits with "
+            "at most two decimal places and no currency symbol — for example 31.20. Judge "
+            "it from how badly the product is damaged and from how comparable past claims "
+            "were settled; what the item cost is context, not the answer. Null unless you "
+            "are recommending approve."
+        ),
+    )
+    amount_reasoning: str | None = Field(
+        default=None,
+        description=(
+            "Why that figure and not another. This is the whole justification for the "
+            "amount, so a representative can disagree with it. Null unless you name one."
+        ),
+    )
     concerns: tuple[str, ...] = Field(
         default=(),
         description="Anything weak, conflicting or uncertain a reviewer should know.",

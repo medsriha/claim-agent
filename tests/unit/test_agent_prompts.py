@@ -410,21 +410,29 @@ def test_the_placeholder_the_prompts_teach_is_the_one_the_code_substitutes() -> 
     assert AMOUNT_PLACEHOLDER in INVESTIGATION_PROMPT
 
 
-def test_no_prompt_writes_a_figure_of_its_own() -> None:
-    """FR-1.21: the wording cannot teach by example something it forbids.
+def test_the_prompts_teach_how_to_write_an_amount_and_never_a_currency_symbol() -> None:
+    """FR-1.21: the model writes the figure now, so the wording has to show it the shape.
 
-    A worked example carrying a price would be the one money-shaped string in front
-    of a model told never to write one.
+    It must be digits with at most two decimal places — `31.20`, not `$31.20`. A prompt
+    carrying a currency symbol beside digits would teach the wrong shape by example, and a
+    figure that cannot be read as money sends the claim to a person instead of being paid.
     """
-    money = re.compile(r"[$£€]\s?\d|\d+\.\d{2}")
+    symbol_and_digits = re.compile(r"[$£€]\s?\d[\d.,]*")
     for prompt in ALL_PROMPTS:
-        assert money.search(prompt) is None
+        found = symbol_and_digits.findall(prompt)
+        # The one allowed use is the counter-example that teaches the rule.
+        assert all(example == "$31.20" for example in found), found
 
 
-def test_the_model_is_told_twice_that_prices_are_only_for_telling_products_apart() -> None:
-    """FR-1.13, FR-1.21: it needs to see prices to spot an ambiguity, and must not repeat one."""
-    assert "Never repeat one back." in SYSTEM_PROMPT
-    assert "Never write one back." in triage_text()
+def test_the_model_is_told_that_what_an_item_cost_is_context_and_not_the_answer() -> None:
+    """FR-1.21: the amount is a judgement about the damage, not a share of the price.
+
+    This is the idea the whole reversal turns on. Left unsaid, the obvious thing for a model
+    to do is hand back the price of the item, which is the rule that was just removed for
+    being unable to tell a scuffed box from a smashed bottle.
+    """
+    assert "context, not the answer" in SYSTEM_PROMPT
+    assert "how bad the damage actually looks" in SYSTEM_PROMPT
 
 
 def test_the_order_carries_its_prices_so_two_similar_products_can_be_told_apart() -> None:
@@ -750,6 +758,38 @@ def test_the_model_is_told_precedent_cannot_stand_in_for_evidence() -> None:
     assert "evidence wins" in SYSTEM_PROMPT
 
 
+def test_a_past_claim_is_never_a_fact_about_the_claim_being_investigated() -> None:
+    """FR-S.8: precedent is there to make an answer consistent, and for nothing else.
+
+    A run on CASE-1001 read a past CleanBoss claim as the explanation for a brand it did
+    not expect on this claim's outer packaging photograph, and told the representative that
+    images may have been crossed between the two cases. That is a past claim used as
+    evidence about the parcel in hand, which is exactly what FR-S.8 forbids.
+    """
+    assert "It is never a fact about the parcel in front of you." in SYSTEM_PROMPT
+    assert "none of it may be carried across" in SYSTEM_PROMPT
+
+
+def test_the_model_is_told_not_to_guess_at_how_shipbobs_records_were_put_together() -> None:
+    """FR-S.8, NFR-4: a suspicion about a claim nobody in the room can open helps no one.
+
+    Saying what an image does not show about this order is a finding. Explaining it by an
+    accusation about ShipBob's filing is a guess the model cannot check and a representative
+    cannot act on, so the wording asks for the first and forbids the second.
+    """
+    assert "YOU ARE LOOKING AT ONE CLAIM" in SYSTEM_PROMPT
+    assert "whether an image was attached to the wrong claim" in SYSTEM_PROMPT
+    assert "is a finding, and a good one" in SYSTEM_PROMPT
+
+
+def test_the_past_claims_carry_the_reminder_that_they_are_not_evidence() -> None:
+    """FR-S.8: the rule is repeated where another merchant's words actually arrive."""
+    said = investigation_question(precedent=a_precedent_set(a_precedent()))
+    section = said[said.index("SIMILAR CLAIMS HANDLED BEFORE") :]
+
+    assert "none of them is evidence about the claim in front of you" in section
+
+
 def test_the_model_is_told_to_flag_a_departure_from_how_alike_claims_were_handled() -> None:
     """FR-S.10: the moment an inconsistency can still be caught."""
     assert "recommend something different from how alike claims were handled" in SYSTEM_PROMPT
@@ -794,12 +834,13 @@ def test_what_a_rep_said_about_the_decision_is_shown() -> None:
     assert "shows a different parcel" in said
 
 
-def test_no_amount_from_a_past_claim_is_put_in_front_of_the_model() -> None:
-    """FR-1.21: the surest way to stop it repeating a figure is never to show it one.
+def test_what_a_past_claim_was_settled_for_is_put_in_front_of_the_model() -> None:
+    """FR-1.21, FR-S.6: the model is asked to weigh past settlements, so it is shown them.
 
-    Scoped to the precedent section on purpose. The order's own line items do carry
-    prices, deliberately, so that two similar products can be told apart — a search
-    over the whole question would find those and prove nothing about precedent.
+    The reverse of what this asserted before. While no figure could come from model output,
+    the amounts were stored and deliberately never rendered. The model decides the amount
+    now and is told to judge it against how comparable claims were handled — an instruction
+    with nothing behind it if the figures are withheld.
     """
     said = investigation_question(
         precedent=a_precedent_set(
@@ -808,7 +849,7 @@ def test_no_amount_from_a_past_claim_is_put_in_front_of_the_model() -> None:
     )
     section = said[said.index("SIMILAR CLAIMS HANDLED BEFORE") :]
 
-    assert re.search(r"[$£€]\s?\d|\d+\.\d{2}", section) is None
+    assert "52.00" in section
 
 
 def test_a_store_that_was_read_and_held_nothing_says_so() -> None:

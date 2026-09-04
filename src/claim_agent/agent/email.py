@@ -2,12 +2,20 @@
 
 The investigation writes the wording of the email a merchant would receive, because
 it is the only part of the system that knows what actually happened to this claim.
-It is not allowed to write a single figure. Where an amount belongs it writes a
-marker, `{{amount}}`, and this file puts the real figure there — the one the
-arithmetic in `claim_agent.domain.reimbursement` produced (FR-1.21, NFR-2).
+It is not allowed to write a single figure *here*. Where an amount belongs it writes a
+marker, `{{amount}}`, and this file puts the real figure there — the amount that came
+out of the cap in `claim_agent.domain.reimbursement` (FR-1.21).
 
-**That split is only worth anything if it is enforced.** A model asked not to write
-money will usually not write money, and "usually" is not a rule. So the wording is
+**Note what that protects, because it is not what it used to protect.** The
+investigation now decides what the damage is worth, so the point is no longer that a
+model may not know a figure. The point is that the figure a merchant reads must be the
+one that **survived the cap**, and those two can differ: an investigation may recommend
+two hundred dollars on a claim that may only be reimbursed a hundred. An email written
+with its own figure in it would promise the merchant the wrong number, and it would be
+the larger one.
+
+**That is only worth anything if it is enforced.** A model asked not to write money will
+usually not write money, and "usually" is not a rule. So the wording is
 searched for anything money-shaped before the figure goes in, and an email with
 money in it is refused outright rather than tidied up. Refusing sends the claim to a
 person (NFR-4); cleaning it up would leave a rep reading wording that neither the
@@ -319,9 +327,10 @@ def finish_email(
 def money_the_model_wrote(text: str) -> tuple[str, ...]:
     """Find every piece of text that reads as an amount of money, in order.
 
-    This is the check that makes "the model never writes a figure" a rule rather than an
-    instruction (FR-1.21). It is meant to be run on the model's own words, before any
-    real figure is substituted into them.
+    This is the check that makes "no figure of the model's own reaches a merchant" a rule
+    rather than an instruction (FR-1.21). It is meant to be run on the model's own words,
+    before the capped figure is substituted into them — the model may name an amount in
+    its answer, and may not name one here, because the two can differ by the cap.
 
     Args:
         text: A subject line or an email body, as the model wrote it.

@@ -136,15 +136,6 @@ class _PassState(TypedDict):
     outcome: LoopOutcome[Any] | None
 
 
-MAX_SPOKEN_CHARACTERS = 300
-"""How much of the model's own commentary is passed on to whoever is watching.
-
-Deliberately the same length as a ledger entry, and for the same reason: a
-sentence or two is a useful thing to put on a screen, and a run must never fail
-over the length of its own remark about itself. Anything longer is cut.
-"""
-
-
 @dataclass(frozen=True)
 class LoopOutcome(Generic[Answer]):
     """Everything one pass established, whether or not it reached a conclusion.
@@ -631,8 +622,16 @@ async def _pass_on_what_the_model_said(
     read, so I will look at the third" — is the most useful thing anyone watching
     can be shown. A turn with no words to it emits nothing rather than an empty
     message.
+
+    The remark is passed on whole, line breaks and all. It used to be cut at the
+    length of a ledger entry, which lost the end of the longer ones — and the end
+    is the part saying what the run decided to do next. There is no unbounded
+    amount of text to defend against here: how much the model may write in one
+    reply is already settled by the model itself. The ledger keeps its own short
+    entries, because a record kept for review is a different thing from a run
+    talking while it works.
     """
-    said = _shortened(reply.text.strip())
+    said = reply.text.strip()
     if said:
         await events.emit(EventKind.THINKING, said, claim_line_id=claim_line_id)
 
@@ -723,10 +722,3 @@ def _what_was_asked_for(name: str, args: dict[str, object]) -> str:
 def _readable(name: str) -> str:
     """Turn a tool's code name into something a person reads — `list_attachments`."""
     return name.replace("_", " ")
-
-
-def _shortened(text: str) -> str:
-    """Cut a remark down to the length an event carries, marking that it was cut."""
-    if len(text) <= MAX_SPOKEN_CHARACTERS:
-        return text
-    return text[: MAX_SPOKEN_CHARACTERS - 1] + "…"

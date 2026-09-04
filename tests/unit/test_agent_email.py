@@ -58,13 +58,11 @@ def an_amount(usd: str) -> AmountDerivation:
                 # This file is about substituting the figure, not about working it out,
                 # so the item refunds its whole price and the amount below is the figure
                 # under test.
-                refunded_usd=Decimal(usd),
                 sku="0180",
             ),
         ),
         items_total_usd=Decimal(usd),
-        refund_percentage=100,
-        subtotal_usd=Decimal(usd),
+        proposed_usd=Decimal(usd),
         amount_usd=Decimal(usd),
         cap_usd=Decimal("100.00"),
         cap_applied=False,
@@ -77,8 +75,7 @@ def nothing_payable() -> AmountDerivation:
     return AmountDerivation(
         components=(),
         items_total_usd=Decimal("0.00"),
-        refund_percentage=60,
-        subtotal_usd=Decimal("0.00"),
+        proposed_usd=Decimal("0.00"),
         amount_usd=Decimal("0.00"),
         cap_usd=Decimal("100.00"),
         cap_applied=False,

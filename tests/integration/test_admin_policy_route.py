@@ -41,7 +41,6 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
         "reimbursement_cap_usd",
         "max_claim_age_days",
         "age_limit_inclusive",
-        "uninsured_refund_percentage",
         "high_value_order_usd",
         "high_value_inclusive",
         "damaged_in_transit_sub_category",

@@ -200,8 +200,16 @@ These follow from the requirements and are not negotiable without changing them:
   `execution/` and must be unreachable from `agent/`. This is structural, not a prompt
   instruction (FR-1.2). Keep a test asserting the agent's tool registry contains no write
   tool.
-- **No money from model output.** The agent identifies *what* was damaged; a deterministic
-  function computes *how much* (FR-1.21, NFR-2). Never parse an amount out of generated text.
+- **The agent decides the amount; code caps it.** The agent judges what the damage is worth
+  from the photographs and from how comparable claims were settled, and a deterministic
+  function holds that figure to the $100 cap (FR-1.21, FR-1.20). The cap is the only limit on
+  it, so never remove or widen it without changing the requirement.
+  **This rule was the opposite until it was reversed on purpose** — no figure could come from
+  model output at all, and the amount was arithmetic a rep could check. It no longer is. Read
+  FR-1.21 for what that cost before you rely on a figure being repeatable.
+  Two things do survive: money is read as text into an exact decimal and never through a
+  float, and **no figure the model wrote reaches a merchant** — the email carries a marker
+  that code replaces after the cap, so what is sent is the figure that survived it.
 - **Deterministic layers use no AI.** Layers 0 and 3 must be pure rules (FR-0.6).
 - **Constrain every model response to a schema** — Pydantic models, never free text (NFR-2).
 - **Fail toward the human.** Timeouts, malformed responses, exhausted budgets all end in
@@ -237,10 +245,11 @@ production".
 - **No business logic in the UI.** It renders what the API returned. It never works out a
   verdict, decides whether a check passed, or re-orders the reasons — the service decides their
   order, and the first one names the merchant email's subject line.
-- **No money arithmetic in JavaScript.** The browser half of "no money from model output"
-  (FR-1.21, NFR-2). A line item carries `quantity` and a string `unit_price`; the totals behind
-  them are computed in Python and are **not** in the JSON. Show `context.order_value_usd`. Money
-  is a string (`"90.00"`) so it never becomes a float — keep it one.
+- **No money arithmetic in JavaScript.** Every figure arrives as a string and is shown as one:
+  `"90.00"` must never become a float, and nothing on screen adds two figures together. The
+  arithmetic — the cap, and the totals across a claim — happens in Python, and repeating it in
+  a browser would be a second calculation that could disagree with the first (FR-1.21, NFR-3).
+  The screen may show the steps; it may not perform them.
 - **Fail toward the human** (NFR-4). Every failure renders something a rep can act on. The error
   shape is `{"error": {"code", "message", "details"}}`; from Layer 0 the codes are `not_found`
   (404) and `upstream_unavailable` (502). A blank screen is a bug.

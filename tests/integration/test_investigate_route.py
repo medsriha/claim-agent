@@ -12,6 +12,7 @@ that simply stops is the failure this whole shape exists to prevent (NFR-4).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 
 import pytest
@@ -74,6 +75,42 @@ def a_scripted_investigation(app: FastAPI) -> Iterator[None]:
         """Both models, from a script, built only if the investigation asks for them."""
         return (
             scripted(AIMessage(content="I have read the claim.")),
+            StructuredModel(
+                scripted(
+                    ClaimSplit(
+                        is_ambiguous=True,
+                        ambiguity="The photographs do not say which of the two products broke.",
+                        reasoning="Two similar products, and nothing distinguishes them.",
+                        confidence=0.3,
+                    )
+                ),
+                max_attempts=1,
+            ),
+        )
+
+    app.dependency_overrides[get_models] = lambda: scripted_models
+    yield
+    app.dependency_overrides.clear()
+
+
+A_REMARK_IN_SEVERAL_LINES = (
+    "Here is what I am weighing up:\n"
+    "\n"
+    "- The **box** is crushed.\n"
+    "- The bottle inside looks intact.\n"
+    "\n"
+    "So I will look at the third photograph next."
+)
+"""A remark of the shape a model actually writes: a sentence, a list, a conclusion."""
+
+
+@pytest.fixture
+def an_investigation_that_writes_a_list(app: FastAPI) -> Iterator[None]:
+    """Answer from a script whose remark runs to several lines, blank ones included."""
+
+    def scripted_models() -> tuple[object, StructuredModel]:
+        return (
+            scripted(AIMessage(content=A_REMARK_IN_SEVERAL_LINES)),
             StructuredModel(
                 scripted(
                     ClaimSplit(
@@ -166,6 +203,32 @@ async def test_an_investigation_says_what_it_is_doing_before_it_says_what_it_fou
     # narration rather than a reply with extra steps.
     assert said.count("progress") > 1
     assert "passed the eligibility checks" in messages[0][1]
+
+
+async def test_what_the_investigation_says_arrives_whole_and_in_one_message(
+    client: AsyncClient, shipbob: respx.Router, an_investigation_that_writes_a_list: None
+) -> None:
+    """A remark reaches the browser as written, line breaks and all.
+
+    Two things could go wrong here and neither may. A stream ends a message with a
+    blank line, so a remark that contains one could be read as two half-messages; and
+    a remark trimmed to keep it short would lose its ending, which is the part saying
+    what the run decided to do next. Sending each message as data rather than as loose
+    text is what prevents the first, and nothing trims it any more.
+    """
+    shipbob.get("/cases/CASE-1001").respond(200, json=CASE_1001)
+    shipbob.get("/shipments/342578703").respond(200, json=SHIPMENT_1001)
+    shipbob.get("/orders/334291211").respond(200, json=ORDER_1001)
+    shipbob.get("/cases/CASE-1001/attachments").respond(200, json=ATTACHMENTS_1001)
+
+    response = await client.post("/cases/CASE-1001/investigate")
+
+    remarks = [
+        json.loads(data)
+        for name, data in read_stream(response.text)
+        if name == "progress" and json.loads(data)["kind"] == "thinking"
+    ]
+    assert [remark["summary"] for remark in remarks] == [A_REMARK_IN_SEVERAL_LINES]
 
 
 async def test_the_stream_carries_the_claim_split_and_says_what_was_unclear(

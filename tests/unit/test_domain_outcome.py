@@ -111,8 +111,7 @@ def amount_of_nothing(
     return AmountDerivation(
         components=components,
         items_total_usd=Decimal("0.00"),
-        refund_percentage=60,
-        subtotal_usd=Decimal("0.00"),
+        proposed_usd=Decimal("0.00"),
         amount_usd=Decimal("0.00"),
         cap_usd=Decimal("100.00"),
         cap_applied=False,
@@ -126,13 +125,11 @@ PAYABLE_AMOUNT = AmountDerivation(
             product_name=COLLAGEN,
             quantity=1,
             unit_price=Decimal("52.00"),
-            refunded_usd=Decimal("52.00"),
             sku="COLLAGEN1",
         ),
     ),
     items_total_usd=Decimal("52.00"),
-    refund_percentage=100,
-    subtotal_usd=Decimal("52.00"),
+    proposed_usd=Decimal("52.00"),
     amount_usd=Decimal("52.00"),
     cap_usd=Decimal("100.00"),
     cap_applied=False,
@@ -521,7 +518,6 @@ def test_fr_1_20_an_item_the_invoice_prices_at_nothing_goes_to_a_person() -> Non
         product_name="Insert Card",
         quantity=1,
         unit_price=Decimal("0.00"),
-        refunded_usd=Decimal("0.00"),
         sku="Insert",
     )
 

@@ -25,7 +25,7 @@ from claim_agent.agent.budget import BudgetLimit, RunBudget
 from claim_agent.agent.events import EventKind, EventStream, RunEvent
 from claim_agent.agent.ledger import RunLedger, StepKind
 from claim_agent.agent.llm import StructuredModel
-from claim_agent.agent.loop import MAX_SPOKEN_CHARACTERS, LoopOutcome, run_agent_pass
+from claim_agent.agent.loop import LoopOutcome, run_agent_pass
 from claim_agent.agent.schemas import ClaimSplit, InvestigationConclusion
 from claim_agent.domain.outcome import Recommendation
 from claim_agent.policy import Policy
@@ -479,16 +479,21 @@ async def test_a_tool_that_could_not_answer_is_narrated_as_such() -> None:
     assert called[0].detail["outcome"] == "failed"
 
 
-async def test_a_very_long_remark_is_cut_rather_than_sent_on_whole() -> None:
-    """A run must not put an unbounded wall of the model's words on somebody's screen."""
-    model = scripted(AIMessage(content="I am thinking. " * 100), a_split())
+async def test_a_long_remark_reaches_the_screen_whole() -> None:
+    """A remark is passed on as written, however long, and with its line breaks kept.
+
+    The end of a remark is the part saying what the run decided to do next, so cutting
+    one loses exactly what somebody watching wanted to read. The line breaks matter for
+    the same reason: a remark written as a list is meant to be read as a list.
+    """
+    remark = "Here is what I am weighing up:\n\n" + "- Another consideration.\n" * 100
+    model = scripted(AIMessage(content=remark), a_split())
     stream = EventStream()
 
     await run_triage(model, events=stream)
 
     said = events_of(stream, EventKind.THINKING)[0].summary
-    assert len(said) == MAX_SPOKEN_CHARACTERS
-    assert said.endswith("…")
+    assert said == remark.strip()
 
 
 # --- One budget per pass (FR-1.3) -------------------------------------------

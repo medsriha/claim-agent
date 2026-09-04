@@ -72,7 +72,7 @@ from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, DamagedItem, ImageObse
 from claim_agent.domain.claim_line import ClaimedProduct
 from claim_agent.domain.evidence import EvidenceState
 from claim_agent.domain.models import Attachment, Invoice, OrderLineItem
-from claim_agent.domain.reimbursement import compute_reimbursement
+from claim_agent.domain.reimbursement import review_recommended_amount
 from claim_agent.errors import ClaimAgentError
 from claim_agent.policy import Policy
 from claim_agent.shipbob.evidence_client import EvidenceClient
@@ -115,10 +115,10 @@ _GENERATE_INVOICE_DESCRIPTION: Final = (
 )
 
 _COMPUTE_REIMBURSEMENT_DESCRIPTION: Final = (
-    "Check whether the products you believe were damaged can be priced against the "
-    "shipment's invoice. It answers whether an amount could be worked out, never what the "
-    "amount is: ShipBob's own arithmetic holds the figure so that the number a "
-    "representative sees is one she can check."
+    "Check an amount you are thinking of recommending. Name the damaged products and the "
+    "figure, and it tells you what those products cost on the shipment's invoice and "
+    "whether your figure is within the amount a claim may be reimbursed — or what it "
+    "would be brought down to if it is not. Use it before you settle on a figure."
 )
 
 _ARGUMENTS_DID_NOT_FIT: Final = (
@@ -234,42 +234,35 @@ class ShipmentInvoice(ToolOutcome):
 
 
 class AmountCheck(ToolOutcome):
-    """Whether the damaged products could be priced — and deliberately not for how much.
+    """What a proposed amount comes to once the cap has been applied to it.
 
-    **Read this before adding a field: nothing here may carry an amount of money.**
-    Not the recommended amount, not the subtotal, not the cap, not a unit price, and
-    not whether the cap was reached — that last one is the trap, because the cap is a
-    single stated figure, so "the cap applied" is the amount, spelled differently.
+    The investigation decides what the damage is worth; this says whether that figure
+    survives the reimbursement cap, and what the products cost on the invoice for
+    comparison (FR-1.21, FR-1.20).
 
-    The reason is FR-1.21. The model establishes *what* was damaged and ShipBob's own
-    arithmetic establishes *how much*, so that the number in front of a representative
-    is one she can check rather than one a model estimated. A model that has seen the
-    figure can copy it into the email it writes, and the placeholder mechanism that
-    keeps figures out of that email would be walked straight around. So the figure is
-    never put where it could be copied from.
+    **It may show figures, and that is a change.** Until FR-1.21 was reversed, nothing
+    here could carry an amount at all — the arithmetic produced the figure and a model
+    that had seen one could copy it into a merchant email. The model now produces the
+    figure itself, so hiding it here would achieve nothing. The guarantee that remains is
+    at the other end: the email carries a marker, and code substitutes the *capped* amount
+    into it, so what reaches a merchant is the figure that survived the cap.
 
-    What the model is told instead is exactly this: whether an amount could be worked
-    out at all, which products were priced, and which document they were priced
-    against. That is everything it needs — it can see that its list of damaged
-    products was understood, and it can tell that nothing is payable — and none of it
-    is a figure.
+    `capped` says the proposal was above the limit and `recommended_usd` is what it became.
+    `items_total_usd` is what the products cost, which is context and not a limit — a claim
+    may reasonably come to less than the goods did.
 
-    The one thing here that touches on an amount is `amount_available` being false
-    when the priced products come to nothing at all. That says the amount is zero,
-    which is a figure of a kind. It is here anyway and knowingly: a run that cannot
-    tell there is nothing to pay would recommend approving a payment of nothing, and
-    an empty email to a merchant is a worse outcome than this narrow disclosure.
-
-    The recommended figure itself is not produced here and is not held anywhere in
-    this file. Whoever builds the run's report computes it from the conclusion the
-    investigation actually reached, using the same arithmetic in
-    `claim_agent.domain.reimbursement` that this tool asks.
+    Every figure is text, because that is how money is carried through this system without
+    passing through a floating point number.
     """
 
     tool: str = COMPUTE_REIMBURSEMENT
-    amount_available: bool = False
     priced_products: tuple[str, ...] = ()
     priced_from: str | None = None
+    proposed_usd: str | None = None
+    recommended_usd: str | None = None
+    items_total_usd: str | None = None
+    cap_usd: str | None = None
+    capped: bool = False
 
 
 # --- What the model may pass to a tool --------------------------------------
@@ -306,14 +299,19 @@ class InspectImageArguments(BaseModel):
 
 
 class ComputeReimbursementArguments(BaseModel):
-    """The products the investigation believes were damaged, and how many of each."""
+    """The damaged products, and the figure the investigation is considering for them."""
 
     model_config = ConfigDict(extra="forbid")
 
     damaged_items: tuple[DamagedItem, ...] = Field(
         description=(
-            "The damaged products, named exactly as the order and the invoice write them. "
-            "Never a price and never a total: you say what, ShipBob's arithmetic says how much."
+            "The damaged products, named exactly as the order and the invoice write them."
+        ),
+    )
+    proposed_amount_usd: str = Field(
+        description=(
+            "The amount you are considering, in dollars, written as digits with at most "
+            "two decimal places and no currency symbol — for example 31.20."
         ),
     )
 
@@ -647,26 +645,31 @@ async def _invoice(context: _ToolContext) -> tuple[str, ShipmentInvoice]:
 
 
 async def _amount_check(
-    context: _ToolContext, damaged_items: Sequence[DamagedItem]
+    context: _ToolContext,
+    damaged_items: Sequence[DamagedItem],
+    proposed_amount_usd: str,
 ) -> tuple[str, AmountCheck]:
-    """Say whether the damaged products can be priced — never for how much (FR-1.21).
+    """Check a figure the investigation is considering against the cap (FR-1.21, FR-1.20).
 
-    This is the arithmetic half of the split the whole system is built around, offered
-    to the model as a check it can run on itself: it names the products it believes
-    were damaged, and finds out whether ShipBob's records can actually price them. What
-    it does not find out is the figure. `AmountCheck` says at length why that line is
-    drawn exactly there.
+    The investigation decides what the damage is worth. This lets it check that figure
+    before committing to it: what the products cost on the invoice, and whether the amount
+    is within the cap or would be brought down to it.
 
-    Nothing is priced unless everything can be. An item that is on no invoice line, or
-    that could be either of two, prices nothing at all, because narrowing two
-    candidates to one is the judgement this system is not allowed to make (FR-1.13).
+    **It shows figures, unlike every earlier version of this tool.** That is the reversal
+    of FR-1.21 — the model produces the amount now, so withholding one here would protect
+    nothing. What still holds is that the email carries a marker and code substitutes the
+    capped figure into it, so no number the model wrote reaches a merchant.
+
+    An item that is on no invoice line, or that could be either of two, prices nothing at
+    all: narrowing two candidates to one is the judgement this system is not allowed to
+    make (FR-1.13). The figure is still checked against the cap in that case, so the run
+    learns both things at once.
 
     Returns:
-        The sentence the model reads with the products under it, and the check beside
-        it. No part of either is a monetary figure.
+        The sentence the model reads with the products under it, and the check beside it.
     """
     named = ", ".join(item.product_name for item in damaged_items) or "nothing"
-    asked = f"Can an amount be worked out for: {named}?"
+    asked = f"Is {proposed_amount_usd} a sound amount for: {named}?"
 
     if not damaged_items:
         return await _finish(
@@ -674,8 +677,8 @@ async def _amount_check(
             AmountCheck(
                 succeeded=True,
                 summary=(
-                    "You named no damaged products, so there is nothing to price. Establish "
-                    "what was damaged first."
+                    "You named no damaged products, so there is nothing to check an amount "
+                    "against. Establish what was damaged first."
                 ),
             ),
             asked=asked,
@@ -709,11 +712,23 @@ async def _amount_check(
             asked=asked,
         )
 
-    derivation = compute_reimbursement(
-        [_as_claimed_product(item) for item in damaged_items],
-        invoice=invoice,
-        policy=context.policy,
-    )
+    try:
+        derivation = review_recommended_amount(
+            proposed_amount_usd,
+            reasoning="",
+            damaged=[_as_claimed_product(item) for item in damaged_items],
+            invoice=invoice,
+            policy=context.policy,
+        )
+    except ValueError as refused:
+        # Not money. Told back plainly rather than rounded or guessed at, so the run can
+        # write it properly on its next turn instead of a payout being interpreted.
+        return await _finish(
+            context,
+            AmountCheck(succeeded=False, summary=str(refused)),
+            asked=asked,
+        )
+
     priced_products = tuple(component.product_name for component in derivation.components)
 
     if not derivation.components:
@@ -722,48 +737,44 @@ async def _amount_check(
             AmountCheck(
                 succeeded=True,
                 summary=(
-                    f"No amount could be worked out from invoice {invoice.invoice_id}. At "
-                    "least one of the products you named is on no line of it, or could be "
-                    "either of two lines. Nothing was priced, and you must not guess at a "
-                    "figure. Say what would settle which product it is."
+                    f"None of the products you named could be found on invoice "
+                    f"{invoice.invoice_id}. At least one is on no line of it, or could be "
+                    "either of two lines. Say what would settle which product it is rather "
+                    "than naming an amount for it."
                 ),
                 priced_from=invoice.invoice_id,
+                proposed_usd=str(derivation.proposed_usd),
+                cap_usd=str(derivation.cap_usd),
             ),
             asked=asked,
             reference=invoice.invoice_id,
         )
 
-    if not derivation.is_payable:
-        return await _finish(
-            context,
-            AmountCheck(
-                succeeded=True,
-                summary=(
-                    f"Every product you named was found on invoice {invoice.invoice_id}, and "
-                    "together they come to nothing payable. There is no payment to "
-                    "recommend here."
-                ),
-                priced_products=priced_products,
-                priced_from=invoice.invoice_id,
-            ),
-            asked=asked,
-            reference=invoice.invoice_id,
-            lines=[_render_priced_products(priced_products)],
+    summary = (
+        f"{derivation.proposed_usd} is over the {derivation.cap_usd} a claim may be "
+        f"reimbursed, so it would be brought down to {derivation.amount_usd}."
+        if derivation.cap_applied
+        else (
+            f"{derivation.proposed_usd} is within the {derivation.cap_usd} a claim may be "
+            f"reimbursed, so it stands."
         )
-
+    )
     return await _finish(
         context,
         AmountCheck(
             succeeded=True,
             summary=(
-                f"An amount was worked out for {len(priced_products)} product(s), priced "
-                f"from invoice {invoice.invoice_id}. ShipBob's own arithmetic holds the "
-                f"figure and you are deliberately not shown it, so write "
-                f"{AMOUNT_PLACEHOLDER} where an amount belongs and let it be filled in."
+                f"{summary} Those products cost {derivation.items_total_usd} on invoice "
+                f"{invoice.invoice_id}. Write {AMOUNT_PLACEHOLDER} where an amount belongs "
+                "in the email — the figure is put in after the cap has been applied."
             ),
-            amount_available=True,
             priced_products=priced_products,
             priced_from=invoice.invoice_id,
+            proposed_usd=str(derivation.proposed_usd),
+            recommended_usd=str(derivation.amount_usd),
+            items_total_usd=str(derivation.items_total_usd),
+            cap_usd=str(derivation.cap_usd),
+            capped=derivation.cap_applied,
         ),
         asked=asked,
         reference=invoice.invoice_id,

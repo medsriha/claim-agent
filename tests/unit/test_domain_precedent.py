@@ -153,8 +153,7 @@ def test_a_record_keeps_enough_for_a_person_to_judge_whether_two_claims_are_alik
     amount = AmountDerivation(
         components=(),
         items_total_usd=Decimal("0.00"),
-        refund_percentage=60,
-        subtotal_usd=Decimal("120.00"),
+        proposed_usd=Decimal("120.00"),
         amount_usd=Decimal("100.00"),
         cap_usd=Decimal("100.00"),
         cap_applied=True,

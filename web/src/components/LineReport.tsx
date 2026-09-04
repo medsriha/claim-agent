@@ -103,11 +103,14 @@ export function LineReport({ report, position, outOf }: LineReportProps): React.
 }
 
 /**
- * How the figure was arrived at, step by step (FR-2.4).
+ * How the figure was arrived at (FR-2.4).
  *
- * A bare amount is not reviewable. This shows what the items cost, the share of that which
- * is refunded, and whether the cap changed the answer — every one of them a figure the
- * service sent.
+ * A bare amount is not reviewable. This shows what the investigation judged the damage to
+ * be worth, what those items cost for comparison, whether the cap brought it down, and why
+ * it settled on that figure — every one of them sent by the service.
+ *
+ * The amount is a judgement now rather than a sum, so the reasoning is the part that makes
+ * it reviewable at all: there is no arithmetic for a representative to redo.
  *
  * Drawn even where nothing is payable, because "why nothing?" is exactly the question a
  * representative asks of a product that was not approved.
@@ -133,25 +136,28 @@ function AmountWorking({ amount }: { amount: LineInvestigation["amount"] }): Rea
                   {String(item.quantity)} × {item.product_name}
                 </span>
                 <span className="amount-item-price">{formatMoney(item.unit_price)} each</span>
-                <span className="amount-item-refund">{formatMoney(item.refunded_usd)}</span>
               </li>
             ))}
           </ul>
 
           <dl className="amount-steps">
             <div className="amount-step">
-              <dt>The items came to</dt>
-              <dd>{formatMoney(amount.items_total_usd)}</dd>
+              <dt>What the investigation judged it worth</dt>
+              <dd>{formatMoney(amount.proposed_usd)}</dd>
             </div>
             <div className="amount-step">
-              <dt>Refunded at {String(amount.refund_percentage)}%</dt>
-              <dd>{formatMoney(amount.subtotal_usd)}</dd>
+              <dt>What those items cost</dt>
+              <dd>{formatMoney(amount.items_total_usd)}</dd>
             </div>
             <div className="amount-step">
               <dt>{amount.cap_applied ? "Brought down to the cap" : "Under the cap of"}</dt>
               <dd>{formatMoney(amount.cap_applied ? amount.amount_usd : amount.cap_usd)}</dd>
             </div>
           </dl>
+
+          {/* The whole justification for the figure, now that it is a judgement rather
+              than a sum a representative could redo. */}
+          {amount.reasoning !== "" && <p className="amount-reasoning">{amount.reasoning}</p>}
 
           {amount.priced_from !== null && (
             <p className="amount-source">Priced from invoice {amount.priced_from}.</p>

@@ -155,8 +155,9 @@ def capture_closed_line(
         evidence: What was found for each of the four pieces of evidence.
         assessments: The four judgements, where they were made.
         outcome: What the claim line actually closed on — the decision, not a suggestion.
-        amount: What was paid, or `None` when the outcome paid nothing. Stored, never shown
-            to a model.
+        amount: What was paid, or `None` when the outcome paid nothing. Shown to the
+            investigation, which weighs how comparable claims were settled when it
+            decides what this one is worth (FR-1.21, FR-S.6).
         closed_at: When the claim was closed. Handed in rather than read from a clock, so
             two runs of the same claim can be compared (NFR-1).
         rep_note: What the representative said about the decision, where they said anything.
@@ -480,9 +481,9 @@ def _price_signal(query: PrecedentQuery, record: PrecedentRecord) -> _Signal:
     return _Signal(
         weight=0.15,
         score=max(0.0, closeness),
-        # The prices themselves are deliberately not named. A representative can see
-        # both by opening the claims, and this sentence is shown to a model that is
-        # forbidden to write a figure (FR-1.21).
+        # The prices are not named in the sentence, which stays a reason rather than a
+        # quotation — the figures themselves are rendered beside each record, so naming
+        # them here would say the same thing twice in a less useful form.
         reason="the two products cost about the same" if closeness >= 0.8 else None,
     )
 

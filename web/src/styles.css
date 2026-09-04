@@ -1209,6 +1209,78 @@ p {
   letter-spacing: 0.04em;
 }
 
+/* What the investigation said, in the shape it wrote it. The first paragraph runs on from
+   the kind mark, because most steps are a single sentence and putting that sentence on its
+   own line would double the height of every one of them. Anything after it — a second
+   paragraph, a list, a code block — falls below it as its own block. */
+.step-said,
+.step-said > .md-paragraph:first-child {
+  display: inline;
+}
+
+/* A step that runs long — the investigation reasoning aloud, or a tool answering at length.
+   Folded, because one of these shown whole fills the screen and pushes the report it leads
+   up to out of sight; quieter than the rest, because it is the working rather than the
+   finding; and scrolling rather than growing, so a step that says a great deal takes no more
+   room than one that says a little. The chevron is the one the check cards use. */
+
+.step-fold-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  list-style: none;
+  cursor: pointer;
+}
+
+.step-fold-summary::-webkit-details-marker {
+  display: none;
+}
+
+.step-fold-summary::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-right: 2px solid var(--sb-ink-faint);
+  border-bottom: 2px solid var(--sb-ink-faint);
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+
+.step-fold[open] > .step-fold-summary::before {
+  transform: rotate(45deg);
+}
+
+.step-fold-summary .step-kind {
+  margin-right: 0;
+}
+
+/* One line of it, cut off where it runs out of room, and gone the moment the step opens. */
+.step-peek {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--sb-ink-faint);
+}
+
+.step-fold[open] .step-peek {
+  display: none;
+}
+
+.step-wrote {
+  max-height: 9.5rem;
+  margin: 0.35rem 0 0 0.9rem;
+  padding: 0.45rem 0.6rem;
+  overflow-y: auto;
+  color: var(--sb-ink-soft);
+  background: var(--sb-canvas);
+  border-radius: var(--sb-radius-small);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
 .step-detail {
   display: flex;
   flex-wrap: wrap;
@@ -1510,5 +1582,55 @@ p {
   margin: 0.5rem 0 0;
   color: var(--sb-ink);
   font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* --- Text the investigation wrote itself -------------------------------- */
+/* Deliberately plain. This is the service's own writing, so it takes the size and colour
+   of whatever it appears inside rather than being given a look of ours; all these rules do
+   is give a list, a heading or a piece of code the shape that makes it readable as one. */
+
+.md-paragraph {
+  margin: 0 0 0.4rem;
+}
+
+.md-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.md-heading {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 1em;
+}
+
+.md-list {
+  margin: 0.3rem 0;
+  padding-left: 1.2rem;
+}
+
+.md-list li {
+  margin: 0.1rem 0;
+}
+
+.md-code {
+  margin: 0.4rem 0;
+  padding: 0.45rem 0.55rem;
+  overflow-x: auto;
+  background: var(--sb-canvas);
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius-small);
+}
+
+.md-code code,
+.md-inline-code {
+  font-family: var(--sb-font-mono);
+  font-size: 0.88em;
+}
+
+/* The account of why a figure, which is the whole of what makes it reviewable. */
+.amount-reasoning {
+  margin: 0.5rem 0 0;
+  color: var(--sb-ink-soft);
+  font-size: 0.88rem;
   line-height: 1.5;
 }

@@ -334,14 +334,14 @@ export interface OutcomeDecision {
 /**
  * One damaged item's part of an amount.
  *
- * `unit_price` is what one cost and `refunded_usd` is what is being refunded for the
- * item — they differ by the refund percentage. Both are text, like every figure here.
+ * `unit_price` is what one of these cost on the invoice. What is being paid for the
+ * damage is the investigation's judgement and is deliberately not a share of this.
+ * Text, like every figure here — a browser number would lose the cents.
  */
 export interface AmountComponent {
   product_name: string;
   quantity: number;
   unit_price: string;
-  refunded_usd: string;
   sku: string | null;
 }
 
@@ -353,17 +353,23 @@ export interface AmountComponent {
  * arithmetic was done in the service, and doing it again in a browser would be a second
  * calculation that could disagree with the first.
  *
- * The steps read: the items came to `items_total_usd`, `refund_percentage` per cent of
- * that is `subtotal_usd`, and the cap brings it to `amount_usd` when `cap_applied`.
+ * The story is in the gaps between three figures. `proposed_usd` is what the investigation
+ * judged the damage to be worth. `items_total_usd` is what those items cost on the invoice,
+ * which is context and not a limit. `amount_usd` is what is actually recommended — the
+ * proposal, unless `cap_applied` says the cap brought it down.
+ *
+ * `reasoning` is the investigation's own account of why that figure. It is the whole
+ * justification for the number now that it is a judgement rather than a sum, so a screen
+ * that hides it leaves a representative with nothing to weigh.
  */
 export interface AmountDerivation {
   components: AmountComponent[];
   items_total_usd: string;
-  refund_percentage: number;
-  subtotal_usd: string;
+  proposed_usd: string;
   amount_usd: string;
   cap_usd: string;
   cap_applied: boolean;
+  reasoning: string;
   priced_from: string | null;
 }
 

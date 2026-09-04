@@ -71,7 +71,7 @@ from claim_agent.domain.evidence import (
 )
 from claim_agent.domain.models import Attachment, DraftedEmail, Invoice
 from claim_agent.domain.outcome import OutcomeDecision, Recommendation, decide_outcome
-from claim_agent.domain.reimbursement import AmountDerivation, compute_reimbursement
+from claim_agent.domain.reimbursement import AmountDerivation, review_recommended_amount
 from claim_agent.errors import ModelOutputRejectedError
 from claim_agent.observability import get_logger
 from claim_agent.policy import Policy
@@ -379,7 +379,7 @@ def _settle(
     conclusion = outcome.answer
     evidence = _what_the_evidence_shows(conclusion.evidence, shared_evidence)
     assessments = _questions_that_were_answered(conclusion.assessments)
-    amount = compute_reimbursement(_damaged_products(conclusion), invoice=invoice, policy=policy)
+    amount = _amount_it_recommends(conclusion, invoice=invoice, policy=policy)
     concerns = _concerns(conclusion, shared_evidence)
 
     decision = decide_outcome(
@@ -463,7 +463,7 @@ def _a_run_that_gave_up(
     told — that is now the representative's to decide.
     """
     evidence = _what_the_evidence_shows((), shared)
-    amount = compute_reimbursement((), invoice=invoice, policy=policy)
+    amount = _no_amount_at_all(invoice=invoice, policy=policy)
     return LineInvestigation(
         line=line,
         evidence=evidence,
@@ -482,6 +482,58 @@ def _a_run_that_gave_up(
         ledger=outcome.ledger,
         budget=outcome.budget,
         conclusion=None,
+    )
+
+
+def _amount_it_recommends(
+    conclusion: InvestigationConclusion, *, invoice: Invoice | None, policy: Policy
+) -> AmountDerivation:
+    """Read the figure the investigation recommends, and hold it to the cap (FR-1.21).
+
+    The figure is the investigation's judgement of what the damage is worth. Two things
+    can be wrong with it and both end the same way — with no amount rather than a guessed
+    one:
+
+    - **It named none.** Ordinary on a line that is not being recommended for payment, and
+      a mistake on one that is. The rules catch the second: an approval with nothing
+      payable cannot stand (FR-1.15).
+    - **What it named is not money.** A symbol, a word, a third decimal place. Refused
+      rather than interpreted, because a payout nobody can read exactly is worse than
+      none, and the line goes to a person (NFR-4).
+
+    Either way the items are still priced from the invoice, so a representative can see
+    what the goods cost even where no amount was reached.
+    """
+    proposed = conclusion.recommended_amount_usd
+    if proposed is None:
+        return _no_amount_at_all(invoice=invoice, policy=policy)
+
+    try:
+        return review_recommended_amount(
+            proposed,
+            reasoning=conclusion.amount_reasoning or "",
+            damaged=_damaged_products(conclusion),
+            invoice=invoice,
+            policy=policy,
+        )
+    except ValueError as refused:
+        logger.warning("recommended_amount_unreadable", proposed=proposed, reason=str(refused))
+        return _no_amount_at_all(invoice=invoice, policy=policy)
+
+
+def _no_amount_at_all(*, invoice: Invoice | None, policy: Policy) -> AmountDerivation:
+    """An amount of nothing, with the items still priced for context.
+
+    Used where no figure was recommended and where one could not be read. Nothing payable
+    is not the same as a payment of nothing being recommended — the rules refuse to
+    approve either, and a representative can see what the goods cost regardless.
+    """
+    return review_recommended_amount(
+        "0",
+        reasoning="",
+        damaged=(),
+        invoice=invoice,
+        policy=policy,
     )
 
 

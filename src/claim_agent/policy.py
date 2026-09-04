@@ -73,14 +73,6 @@ class Policy(BaseSettings):
         default=True,
         description="Whether a claim filed exactly on the limit still passes (FR-0.2). PROVISIONAL.",
     )
-    uninsured_refund_percentage: int = Field(
-        default=60,
-        ge=0,
-        le=100,
-        description="Percentage of a damaged item's price that is refunded on an uninsured "
-        "shipment. Applied to each item before the reimbursement cap is checked "
-        "(FR-1.19, FR-1.20). PROVISIONAL.",
-    )
     high_value_order_usd: Decimal = Field(
         default=Decimal("500.00"),
         description="Order value at which a shipment is flagged high-value (FR-0.5). PROVISIONAL.",
