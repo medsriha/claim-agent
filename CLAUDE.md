@@ -53,6 +53,24 @@ who has never seen this codebase and may not be an engineer:
 - If a sentence only makes sense to someone who already knows the project, rewrite it.
 - Roughly a page per feature. Long is not the same as thorough.
 
+**Record what is not production-ready.** This project is part of an interview process:
+completeness is not expected, and cutting scope is fine. Cutting it *silently* is not. Keep the
+**Future production** section at the end of DESIGN.md current, so every gap is a known
+limitation rather than something a reader has to discover.
+
+- Add an entry whenever you knowingly leave something out, simplify it, hardcode a value, or
+  skip a case you would handle for real.
+- Add an entry whenever you spot something that could break under real use — load, bad data, a
+  slow or unavailable API, a model that answers differently on two runs, work lost on restart,
+  an action that could fire twice.
+- Add an entry for improvements worth making later, and say why they would matter.
+- File each under **Not implemented**, **Could break**, or **Would improve**, and give the
+  consequence, not just the label. "No retry on ShipBob calls" names a gap; "one timeout fails
+  the claim and the rep gets an error with no way to resume" tells the reader why they should
+  care.
+- Never quietly work around a gap or leave a `TODO` comment in the code instead. Write it down
+  here, where someone will actually read it.
+
 ## Progress
 
 **[TODO.md](TODO.md) tracks which requirements are done.** It lists every requirement id in

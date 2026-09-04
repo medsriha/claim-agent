@@ -9,6 +9,9 @@ project, to follow along.
 Every feature we build adds a section under [Features](#features). Read together, those
 sections are the design of the whole project.
 
+[Future production](#future-production) at the end lists what is deliberately not built yet and
+what could break under real use.
+
 > **Adding a section?** Copy the [template](#template) below and follow the writing rules in
 > [CLAUDE.md](CLAUDE.md#design). Plain words, short sentences, no jargon.
 
@@ -90,6 +93,8 @@ The repository currently holds the foundation only: the service skeleton, projec
 the empty packages for each stage above. None of the four stages is implemented yet. Each
 feature adds its section below as it is built.
 
+For what that leaves missing or fragile, see [Future production](#future-production).
+
 ---
 
 ## Features
@@ -115,6 +120,9 @@ Copy this for a new feature. Keep it to roughly a page.
 **Choices we made** — What we picked, what we turned down, and why. Include anything still undecided.
 
 **When things go wrong** — What can fail, and what the system does about it.
+
+**Not ready for production** — What you knowingly left out, simplified, or hardcoded, and what
+could break under real use. Copy anything lasting into [Future production](#future-production).
 
 **Where the code is** — File paths, for a reader who wants to go look.
 ```
@@ -169,5 +177,72 @@ dependency being unreachable) returns a clear message and the right status. Anyt
 is written to the logs in full but returns only a generic message to the caller, so an internal
 detail such as a password in an error string cannot leak out.
 
+**Not ready for production** — Anyone who can reach the service can call it; there is no
+authentication of any kind. The health check only says the process is running, not that it can
+reach anything it depends on. Secrets are read from a local file rather than a secret manager.
+
 **Where the code is** — `src/claim_agent/app.py`, `settings.py`, `policy.py`, `errors.py`,
 `observability.py`, and `src/claim_agent/api/`.
+
+---
+
+## Future production
+
+This project is an interview exercise. It is not complete and it is not production-hardened,
+and it does not need to be. What matters is that the gaps are **known** rather than missed, so
+this section keeps an honest list of them.
+
+Three kinds of entry: things we did not build, things that could break under real use, and
+things worth improving later. Add to it the moment you cut a corner or spot a risk — writing it
+down is what separates a known limitation from a bug someone finds in production.
+
+### Not implemented
+
+- **All four stages of the claim pipeline.** The pre-flight checks, the triage that splits a
+  claim into products, the per-product investigation, the report, the revision loop, and the
+  post-approval sending are all still empty. Only the foundation exists.
+- **Anywhere to store anything.** Reports, their versions, rep feedback, merchant history, and
+  the audit trail have no home yet, and no storage technology has been chosen. Several
+  requirements depend on remembering things across cases, so this blocks more than it looks.
+- **Any connection to ShipBob.** Nothing calls the ShipBob system yet. The full description of
+  its endpoints (`shipbob-mock-api.md`) is also absent from this repository, so some payload
+  shapes are unknown.
+- **Any access control.** The service has no authentication, no authorisation, and no notion of
+  which rep is acting. In production this decides real payments, so it cannot ship without one.
+
+### Could break
+
+- **The claim thresholds are guesses.** Only the $100 cap is a real ShipBob figure. If the age
+  limit or the high-value threshold is wrong, the system will confidently reject claims it
+  should accept, or accept ones it should not. They need confirming before anyone relies on
+  them.
+- **The same claim could get two different answers.** The requirements demand that an identical
+  claim always produces an identical report, but AI models can word things differently between
+  runs. Any part of the report that comes from the model, rather than from fixed arithmetic,
+  is a place where that promise can quietly fail. It needs testing by running the same claim
+  repeatedly, not by assuming.
+- **A slow or unavailable ShipBob system.** There is no retry, no back-off, and no circuit
+  breaker. As written, one timeout would fail a claim outright and leave the rep with an error
+  and no way to resume.
+- **Sending twice.** A double-click, a refresh, or a retry after a network blip must not send a
+  second email or pay a merchant twice. Preventing that needs a stored record of what has
+  already been sent — which does not exist yet, because storage does not.
+- **Losing work on restart.** Until reports are stored somewhere durable, anything held only in
+  memory disappears when the service restarts, and a second copy of the service would not see
+  the first one's work.
+- **Cost.** Reading images is the expensive operation. Without a cache keyed to each attachment,
+  a re-run or a revision could pay to look at the same photo repeatedly.
+
+### Would improve
+
+- **A readiness check as well as a liveness check.** The current health check only says the
+  process is alive. It does not say whether ShipBob or the model is reachable, which is what a
+  deployment system actually needs to know before sending traffic.
+- **Metrics and tracing.** Logs are structured, but there is no measurement of how long a claim
+  takes, how often the agent escalates, or what a case costs to investigate. Those numbers are
+  how you would know the system is working.
+- **A minimum test coverage bar in CI.** Coverage is measured and reported but nothing fails
+  when it drops. Worth turning on once there is real code to cover.
+- **Dependency vulnerability scanning**, and testing against more than one Python version.
+- **A container image and a deployment path.** There is currently no defined way to run this
+  anywhere but a developer's laptop.
