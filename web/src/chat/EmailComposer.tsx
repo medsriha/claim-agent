@@ -58,10 +58,6 @@ export function EmailComposer({ email }: { email: DraftedEmail }): React.JSX.Ele
 
   return (
     <div className="composer">
-      <p className="draft-warning">
-        <strong>Draft — not sent.</strong> Waits for a rep to approve it.
-      </p>
-
       <div className="email">
         <div className="email-headers">
           <EmailHeader label="To">

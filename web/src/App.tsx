@@ -21,7 +21,7 @@ export function App(): React.JSX.Element {
       <header className="header">
         <div className="header-inner">
           <ShipBobLogo />
-          <h1 className="header-title">Claims pre-flight</h1>
+          <h1 className="header-title">Damaged in transit claim platform</h1>
           <nav className="header-nav" aria-label="Screens">
             <ScreenTab screen="screening" label="Screening" showing={showing} onChoose={setShowing} />
             <ScreenTab screen="policy" label="Admin panel" showing={showing} onChoose={setShowing} />
