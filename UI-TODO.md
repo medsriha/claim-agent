@@ -146,7 +146,7 @@ answering to the same id.
 - [x] UI-24 — The send, which sends nothing.
   - **What was built:** a button that swaps the composer for a read-only view of the wording under
     a confirmation reading "Sent to <the merchant's address>".
-  - **Conclusion:** the user asked for a fake send knowing Layer 3 does not exist, and then asked
+  - **Conclusion:** the user asked for a fake send knowing nothing behind it sends, and then asked
     for the disclaimer to come off, so **nothing on screen reveals that the send is not real**.
     That is a product decision, not an oversight: a demonstration should read as a working product
     rather than one apologising for itself. It does mean anyone shown this believes a merchant was
@@ -154,7 +154,9 @@ answering to the same id.
   - **Be aware:** the warning now exists in exactly two places — DESIGN.md under **Not
     implemented**, and the docstring of `chat/EmailComposer.tsx`. Keep both current; they are all
     anyone gets. The real thing owes several things this does not — refusing to send twice,
-    checking the payload against what was approved, keeping a record (FR-3.4, FR-3.5, FR-3.7).
+    checking the payload against what was approved, keeping a record. Those used to be
+    requirements; the execution layer they belonged to has since been cut from REQUIREMENTS.md,
+    so reinstating the send is a scope decision rather than an outstanding task.
     Replace the simulation; do not wire something up behind it.
 
 - [ ] UI-25 — Tried in a browser.

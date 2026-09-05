@@ -77,26 +77,22 @@
   {
    "label": "Assumed representative hourly cost",
    "value": "$50.00",
-   "description": "Assumed fully loaded cost of one support representative hour, including employment costs. The dashboard multiplies estimated hours saved by this rate. PROVISIONAL — this estimate was set by this project, not supplied by ShipBob.",
-   "marker": "PROVISIONAL"
+   "description": "Assumed fully loaded cost of one support representative hour, including employment costs. The dashboard multiplies estimated hours saved by this rate. This estimate was set by this project, not supplied by ShipBob."
   },
   {
    "label": "Estimated AI cost per investigated product",
    "value": "$0.42",
-   "description": "Estimated AI model and image-processing cost for one investigated product. Claims stopped by eligibility checks do not incur this cost. PROVISIONAL — this estimate was set by this project, not supplied by ShipBob.",
-   "marker": "PROVISIONAL"
+   "description": "Estimated AI model and image-processing cost for one investigated product. Claims stopped by eligibility checks do not incur this cost. This estimate was set by this project, not supplied by ShipBob."
   },
   {
    "label": "Assumed manual time per investigated product",
    "value": "22 min",
-   "description": "Assumed time for a representative to investigate one damaged product without AI assistance. Estimated time saved is this amount minus the recorded review time. PROVISIONAL — the manual process has not been timed.",
-   "marker": "PROVISIONAL"
+   "description": "Assumed time for a representative to investigate one damaged product without AI assistance. Estimated time saved is this amount minus the recorded review time. The manual process has not been timed."
   },
   {
    "label": "Assumed manual time per stopped claim",
    "value": "6 min",
-   "description": "Assumed time for a representative to identify and close an ineligible claim without the automated checks. PROVISIONAL — the manual process has not been timed.",
-   "marker": "PROVISIONAL"
+   "description": "Assumed time for a representative to identify and close an ineligible claim without the automated checks. The manual process has not been timed."
   }
  ],
  "approval_trend": {
@@ -2517,7 +2513,7 @@
      "verdict": "too_few_decisions"
     }
    ],
-   "caveat": "A candidate rule is only worth discussing if representatives agreed with the system at least 95% of the time across at least 200 decisions. Both numbers are ours and neither has been agreed with anyone. Meeting the bar is not permission: FR-2.9 says a person approving is the only way a claim can be released, and no figure on this screen changes that. PROVISIONAL."
+   "caveat": "A candidate rule is only worth discussing if representatives agreed with the system at least 95% of the time across at least 200 decisions. Both numbers are ours and neither has been agreed with anyone. Meeting the bar is not permission: a person approving is the only way a claim can be released, and no figure on this screen changes that."
   }
  },
  "generated_at": "2026-09-04T09:00:00Z"

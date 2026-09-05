@@ -23,7 +23,7 @@ the rep a finished report and a drafted merchant email.
 gathering, reading, checking and drafting — the slow, repetitive part — and to present
 what it found so that a decision takes seconds instead of many minutes. The judgement of
 whether to pay, refuse, or ask for more remains a person's, and nothing reaches the
-merchant until that person says so.
+merchant unless that person sends it.
 
 This split is what delivers both goals at once. **Consistency** comes from the agent
 performing the same investigation the same way on every claim, so two identical claims
@@ -31,8 +31,8 @@ arrive at the rep looking identical. **Ease** comes from the rep receiving a com
 legible report rather than a case to work from scratch.
 
 **Scope of this document:** the backend only — the deterministic checks, the AI agent, its
-tools, the report it produces, and what happens after approval. The reviewer-facing UI is
-specified separately.
+tools, the report it produces, and what is recorded when a rep decides. The reviewer-facing UI
+is specified separately.
 
 ---
 
@@ -57,7 +57,8 @@ specified separately.
 
 The system reads from a mock ShipBob API offering: a list of cases, case details, case
 attachments, shipment details, order details, and invoice generation. It can also send an
-email on a case and submit a reimbursement.
+email on a case and submit a reimbursement — **this system calls neither.** Both are listed
+below because they are part of the surface a rep uses, not because anything here reaches them.
 
 There is **no endpoint for merchant history**, **no endpoint for reading merchant replies**,
 and **no way to ask how comparable past claims were handled**. Anything the system needs to
@@ -82,7 +83,7 @@ scenario, and they are referenced throughout this document as concrete examples.
 
 ---
 
-## The four layers
+## The layers
 
 ```
 Layer 0   Pre-flight       deterministic  →  screens out claims that cannot be processed
@@ -91,9 +92,8 @@ Layer 1a  Triage           AI agent       →  identifies which products are bei
 Layer 1b  Investigation    AI agent       →  one run per claimed product
 Layer 2   Report           structured     →  one report per product; the rep decides each
    ├── rep gives feedback →  Layer R  same agent, re-run  →  revised report, back to Layer 2
-   └── rep approves       →  Layer 3
-Layer 3   Execution        deterministic  →  one email and one reimbursement per product
-   └── what the rep decided   →  merchant memory + the precedent store  →  the next claim
+   └── rep approves       →  the report and its email are finished; the rep carries them out
+       └── what the rep decided  →  merchant memory + the precedent store  →  the next claim
 ```
 
 A claim can cover more than one damaged product. Everything from Layer 1b onward operates
@@ -101,12 +101,22 @@ on a **claim line** — one claimed product — not on the claim as a whole.
 
 Layer 2 is a loop, not a step. The rep reviews, and either sends the report back with
 feedback — which a second agent acts on, producing a revised report for another review —
-or approves it, which is the only way out of the loop and into execution.
+or approves it, which is the only way out of the loop.
+
+**The system stops at the approved report.** There is no execution layer. Nothing here sends
+the drafted email or submits a reimbursement, and no part of the system calls ShipBob's
+endpoints for either — a rep takes the approved report and its drafted email and carries them
+out through ShipBob's own tools.
+
+That boundary is deliberate, and it costs two things worth naming rather than discovering. A
+claim line is closed by the rep approving it, not by a merchant actually being told, because
+being told is the part this system cannot see (FR-C.3). And the record of a case ends at what
+was approved; what was ultimately sent is not ours to record (NFR-5).
 
 The principle behind the split: **rules where there is a right answer, the agent where
 there is ambiguity, the human where there is a decision to make.**
 
-Precedent is not a fifth layer. It is a store the system keeps for itself: every claim line
+Precedent is not a layer of its own. It is a store the system keeps for itself: every claim line
 Layer 1b investigates is written into it, and every later line that resembles one is given it to
 read. It exists because the layers above make each claim *internally* consistent and cannot make
 two separate claims agree with each other. See **Claim precedent** below.
@@ -117,8 +127,8 @@ rep deciding a claim line rather than by any layer finishing. That step is speci
 
 Note the distinction between a proposed next action and a decision. The agent returns its
 claim report proposing one of three next actions. When that action is merchant-facing, it also
-returns a separate email draft. The proposal is not an act: nothing takes effect until a rep
-approves it.
+returns a separate email draft. The proposal is not an act: nothing is settled until a rep
+approves it, and nothing is sent by this system even then.
 
 ---
 
@@ -362,15 +372,19 @@ available to it.
 
 > **Reference — endpoint access by layer**
 >
-> | Endpoint | Layer 0 | Agent | Layer 3 |
-> |---|:---:|:---:|:---:|
-> | `GET /cases/:id` | ✅ | | |
-> | `GET /shipments/:id` | ✅ | | |
-> | `GET /orders/:id` | ✅ | | |
-> | `GET /cases/:id/attachments` | | ✅ | |
-> | `POST /invoices/generate` | | ✅ | |
-> | `POST /cases/:id/email` | | ❌ | ✅ |
-> | `POST /reimbursements` | | ❌ | ✅ |
+> | Endpoint | Layer 0 | Agent |
+> |---|:---:|:---:|
+> | `GET /cases/:id` | ✅ | |
+> | `GET /shipments/:id` | ✅ | |
+> | `GET /orders/:id` | ✅ | |
+> | `GET /cases/:id/attachments` | | ✅ |
+> | `POST /invoices/generate` | | ✅ |
+> | `POST /cases/:id/email` | | ❌ |
+> | `POST /reimbursements` | | ❌ |
+>
+> The last two are reached by no layer at all. They are ShipBob's endpoints and a rep's to
+> call; the agent's inability to reach them is a property of its tool surface, and the system's
+> is that nothing was built to.
 
 **FR-1.3 — Guarantee termination.**
 The agent runs within a bounded number of steps with bounded retries. It always terminates.
@@ -665,8 +679,10 @@ the email. The report and email never expose an amount placeholder.
 **FR-2.8 — Support the rep's review actions.**
 A report is presented to the rep, who may:
 
-1. **Approve it.** The report and its email are accepted as they stand. This releases the
-   case to Layer 3, which sends the email and submits any reimbursement.
+1. **Approve it.** The report and its email are accepted as they stand, and the claim line
+   is closed. This is the system's last act on that line: the approved report and its drafted
+   email are the finished output, and the rep sends the email and submits any reimbursement
+   through ShipBob's own tools.
 2. **Send it back with feedback.** The rep describes what is wrong or missing in their own
    words. The agent re-runs with that feedback (Layer R), reworks the report and the email
    accordingly, and returns it for another review.
@@ -753,8 +769,8 @@ Findings and assessments the rep did not dispute carry forward unchanged. A rep 
 one thing must not have to re-check everything else.
 
 **FR-R.6 — Use the same tool surface, with no write tools.**
-Revision adds no capabilities. The agent still cannot send email or submit a reimbursement
-in either mode; those remain in Layer 3, behind approval.
+Revision adds no capabilities. The agent still cannot send email or submit a reimbursement in
+either mode, and neither can anything else here: no part of the system calls those endpoints.
 
 **FR-R.7 — Reconsider the amount through the same controlled path as the first pass.**
 If the feedback bears on the damage, the damaged items, or the amount, the agent may propose a
@@ -805,99 +821,6 @@ Feedback is not only applied to the current case. It is persisted against the me
 (FR-3.8) so it informs the agent's first pass on that merchant's next case — the system
 should be better on the next claim, not just this one. Since it is the same agent in both
 places, a correction learned during revision applies directly to future investigation.
-
----
-
-# Layer 3 — Execution after approval
-
-Deterministic. Runs only once a human has approved.
-
-**FR-3.1 — Execute nothing without explicit rep approval.**
-No email, no reimbursement, under any circumstance, however strong the recommendation. This is a
-hard invariant. Execution is triggered by a rep approving a report (FR-2.8, action 1) and by
-nothing else.
-
-**FR-3.1a — Execute per claim line.**
-Approval is per line, and so is execution: each approved line produces its own
-reimbursement submission and its own merchant email. Lines still under review are
-unaffected by a sibling's approval.
-
-**FR-3.2 — Send the approved email to the merchant.**
-
-> **Reference — `POST /cases/CASE-1001/email`**
-> ```json
-> // request
-> { "to": "sakukreja@shipbob.com", "subject": "Hello", "body": "Hello Case1001" }
->
-> // response
-> { "success": true, "message": "Email queued", "case_id": "CASE-xxxx" }
-> ```
-> The recipient comes from the case's `contact_email`. The response confirms queueing
-> only — it echoes a placeholder `case_id` and returns no message identifier, so it cannot
-> be used to detect a duplicate send. Deduplication is the caller's responsibility
-> (FR-3.5). There is no endpoint for reading replies.
-
-**FR-3.3 — Submit one reimbursement per claim line.**
-The reimbursement endpoint accepts a single product per call, which is exactly the claim
-line boundary. Each approved line is one call, tracked against that line. There is no
-multi-item payload to sequence or partially fail — the API's shape and the system's unit of
-work are the same.
-
-> **Reference — `POST /reimbursements`**
-> ```json
-> // request — note the singular product_name
-> {
->   "case_id": "CASE-1001",
->   "order_id": "334291211",
->   "user_id": "334430",
->   "shipment_id": "342578703",
->   "product_name": "Liposomal Tripeptide Collagen",
->   "amount": 52.00
-> }
->
-> // response
-> { "reimbursement_id": "RMB-00101", "status": "approved", "created_at": "2026-03-21T10:00:00.000+0000" }
-> ```
-> The product is identified by `product_name`, a free-text string, not by `product_id` or
-> `sku` — so the name must be carried through exactly as it appears on the order.
-> Missing fields return `400 invalid_request`.
-
-**FR-3.4 — Verify what is sent against what was approved.**
-The reimbursement API confirms success for any well-formed request, including claims the
-system did not approve. Its response is therefore not evidence of correctness. The payload
-must be checked against the approved report before being sent, so that an edited draft
-cannot result in a different amount than the rep signed off on.
-
-> **Reference — the mock approves everything**
-> The collection stores a `201 {"status": "approved"}` example for **all five test cases**,
-> including `CASE-1004` (73 days old, closed) and `CASE-1005` (no evidence at all). The
-> endpoint performs no validation of eligibility, evidence, or amount. A successful
-> response means the request was well-formed and nothing more.
-
-**FR-3.5 — Be safe to retry.**
-A double-click, a page refresh, or a retry after a network error must not send a second
-email or issue a second reimbursement.
-
-**FR-3.6 — Leave partial failures visible and recoverable.**
-If a line's email sends and its reimbursement fails, that line must end in a state showing
-exactly what happened, resumable without re-sending the email. A failure on one line leaves
-the other lines in the claim unaffected, and the claim view must show a mixed state
-honestly rather than reporting the claim as complete.
-
-**FR-3.7 — Record what was actually sent**, including exact payloads and timestamps.
-
-**FR-3.8 — Persist rep corrections against the merchant.**
-When a rep edits or overrides a recommendation, store what changed and why, keyed to the
-merchant's stable identifier. That correction must be available to the agent the next time
-that merchant files a claim — the system should improve on the next case, not just this one.
-
-> **Reference — which field identifies a merchant**
-> Key on `user_id` (e.g. `"334430"`), which is stable and appears on both the case and the
-> order. Do not key on `account_name` (`"Best Paw Nutrition"`), which is display text.
->
-> All five test cases belong to five different `user_id`s — `334430`, `283959`, `373103`,
-> `374167`, `398045` — so no repeat merchant exists in the sample data. Demonstrating
-> carry-forward requires a constructed second case sharing a `user_id` with an existing one.
 
 ---
 
@@ -1077,19 +1000,36 @@ before each per-line investigation (FR-S.6).
 
 Both are written on the way out, and that half is the one nothing so far specifies. Every write is
 caused by the same event — **a rep deciding a claim line** — and no requirement says that event is
-written down anywhere. FR-2.8 says what a rep may do. FR-3.1 says an approval is what releases
-execution. FR-3.8 and FR-R.14 say a correction is persisted against the merchant. FR-S.1 says a
-precedent record is written when a line closes. None of them says who writes those records, or
-from what. So the promise the system makes — *better on the next claim, not just this one* — rests
+written down anywhere. FR-2.8 says what a rep may do. FR-3.8 and FR-R.14 say a correction is
+persisted against the merchant. FR-S.1 says a precedent record is written when a line closes.
+None of them says who writes those records, or from what. So the promise the system makes — *better on the next claim, not just this one* — rests
 on a step that does not exist, and both stores can currently only be read.
 
 This section specifies that step. It is deliberately small: one record of what a person decided,
 and two writes derived from it.
 
-**Recording a decision is not executing one.** Writing down what a rep chose sends no email and
-moves no money. FR-3.1 still governs execution and nothing here relaxes it. Keeping the two apart
-is also what lets the decision survive a failed send (FR-3.6): what the rep decided is a fact
-about the rep, not about whether an API call worked.
+**Recording a decision is not carrying it out.** Writing down what a rep chose sends no email
+and moves no money — nothing in this system does. The record is a fact about the rep, made when
+they decide, and it does not wait on the rep going away and sending the email from ShipBob's own
+tools. That the system cannot see whether they did is a real limit, and FR-C.3 says where it bites.
+
+**Why FR-3.8 keeps its number, though the layer it was written in is gone.** It was
+specified as the last step of an execution layer this document no longer has. What it asks
+for is not execution — it is the write half of merchant memory, and the rest of this section
+builds directly on it. Renumbering it would break every trace back to it for no gain.
+
+**FR-3.8 — Persist rep corrections against the merchant.**
+When a rep edits or overrides a recommendation, store what changed and why, keyed to the
+merchant's stable identifier. That correction must be available to the agent the next time
+that merchant files a claim — the system should improve on the next case, not just this one.
+
+> **Reference — which field identifies a merchant**
+> Key on `user_id` (e.g. `"334430"`), which is stable and appears on both the case and the
+> order. Do not key on `account_name` (`"Best Paw Nutrition"`), which is display text.
+>
+> All five test cases belong to five different `user_id`s — `334430`, `283959`, `373103`,
+> `374167`, `398045` — so no repeat merchant exists in the sample data. Demonstrating
+> carry-forward requires a constructed second case sharing a `user_id` with an existing one.
 
 **FR-C.1 — Record what the rep decided, per claim line.**
 Every review action (FR-2.8) produces one durable record: which claim line it was taken on, which
@@ -1097,7 +1037,7 @@ version of the report the rep was looking at (FR-R.13), which action they took, 
 if anything, their own words if they gave any, and when. This record is the only thing FR-C.2 and
 FR-C.3 read, and it is the audit trail's account of where the human intervened (NFR-5).
 
-Recorded per line, because approval is per line (FR-3.1a). A rep who approves one line and sends
+Recorded per line, because approval is per line (FR-2.9b). A rep who approves one line and sends
 another back has taken two decisions, and both are recorded.
 
 **A claim stopped in Layer 0 is the exception, and it is not a rare one.** It still produces a
@@ -1147,9 +1087,15 @@ bury the one correction that mattered.
 
 **FR-C.3 — Close a claim line explicitly, and write its precedent then.**
 FR-S.1 says a precedent record is written when a line closes and never before. This says what
-closes it: an approval that took effect. A report sent back for revision does not close a line
-(FR-R.1). Neither does an approval whose execution failed (FR-3.6) — a line whose email never
-reached the merchant has not been settled with them.
+closes it: a rep approving it. A report sent back for revision does not close a line (FR-R.1);
+an approval closes it there and then.
+
+**That is a weaker close than it looks, and the weakness is worth stating.** What ought to close a
+line is the merchant being told. This system does not tell them and cannot observe it being done,
+so the approval is the last event it can see, and it stands in for one it cannot. The cost is that
+a line whose email a rep never got around to sending is still written into precedent as settled.
+Closing on the merchant actually being told needs the system to do the telling, which is the layer
+this document deliberately does not have.
 
 The record carries the outcome that actually took effect and the amount actually submitted, not
 the outcome the agent recommended. Where a rep overrode the recommendation, precedent must show
@@ -1166,11 +1112,11 @@ should know it.
 
 **FR-C.4 — Make both writes repeatable, and never let them fail a decision.**
 Deciding the same line twice — a double-click, a retry after a timeout — must leave one
-correction and one precedent record rather than two (FR-3.5, and FR-S.1's rule that closing a line
-again replaces its record rather than adding a second).
+correction and one precedent record rather than two (FR-S.1's rule that closing a line again
+replaces its record rather than adding a second).
 
-If either write fails, the decision stands and execution proceeds. Losing the record of what was
-learned is bad; losing the decision a person made is worse. But the failure must be visible in the
+If either write fails, the decision still stands. Losing the record of what was learned is bad;
+losing the decision a person made is worse. But the failure must be visible in the
 case's audit record (NFR-5) and recoverable, because a silent failure here means the system
 quietly stops improving — which looks exactly like it working.
 
@@ -1281,7 +1227,8 @@ leads to an unreviewed approval or a silently dropped case.
 
 **NFR-5 — Auditability.**
 Each case retains an ordered record of what each agent did, what it observed, what it
-concluded, every rep action including feedback and revisions, and what was ultimately sent.
+concluded, every rep action including feedback and revisions, and what was ultimately approved.
+What was ultimately *sent* is outside this record, because sending is outside this system.
 
 **NFR-5a — Convergent revision.**
 Each revision must address the feedback it was given without regressing earlier

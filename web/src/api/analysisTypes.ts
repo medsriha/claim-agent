@@ -188,7 +188,6 @@ export interface Assumption {
   readonly label: string;
   readonly value: string;
   readonly description: string;
-  readonly marker: string;
 }
 
 /** One stretch of time the screen can ask for. */

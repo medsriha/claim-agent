@@ -78,7 +78,7 @@ ShipBob sign-off; they are marked as such in the module.
 src/claim_agent/
   api/         HTTP surface        domain/     pure models and rules
   preflight/   Layer 0 (rules)     agent/      Layers 1a/1b/R (LangGraph)
-  execution/   Layer 3 (post-approval)         storage/  reports, audit, memory
+  execution/   empty — nothing is sent         storage/  reports, audit, memory
   shipbob/     ShipBob mock API client
 tests/         unit/ (fast, no I/O) and integration/ (through HTTP)
 tools/         development only — the ShipBob stand-in and demo data

@@ -173,7 +173,7 @@ src/claim_agent/
   admin/          the policy panel's view of policy.py, and what it sends back
   agent/          Layers 1a, 1b, R — the LangGraph agent
   report/         Layer 2 — the report a rep decides from, and the two review actions
-  execution/      Layer 3 — post-approval email and reimbursement
+  execution/      empty — the system sends nothing; see Architecture rules
   storage/        reports, versions, feedback, merchant memory, audit trail
 tests/unit/       fast, no I/O
 tests/integration/ through the HTTP surface
@@ -193,10 +193,16 @@ Layer packages mirror REQUIREMENTS.md so a requirement maps to an obvious place.
 
 These follow from the requirements and are not negotiable without changing them:
 
-- **The agent has no write tools.** Sending email and submitting reimbursements live in
-  `execution/` and must be unreachable from `agent/`. This is structural, not a prompt
-  instruction (FR-1.2). Keep a test asserting the agent's tool registry contains no write
-  tool.
+- **Nothing in this system sends anything.** There is no execution layer: the requirements were
+  changed to remove it, so an approved report and its drafted email are the finished product and
+  a rep carries them out through ShipBob's own tools. `POST /cases/:id/email` and
+  `POST /reimbursements` are called by no layer, and `execution/` is an empty package kept as
+  the named place a future one would go.
+- **The agent has no write tools**, which is a separate and stronger guarantee than the one
+  above: it holds by the shape of its tool registry, not by nothing having been built yet. This
+  is structural, not a prompt instruction (FR-1.2). Keep a test asserting the agent's tool
+  registry contains no write tool, so building an execution layer later cannot quietly hand one
+  to the agent.
 - **The agent decides the amount; code caps it.** The agent judges what the damage is worth
   from the photographs and from how comparable claims were settled, and a deterministic
   function holds that figure to the $100 cap (FR-1.21, FR-1.20). The cap is the only limit on
@@ -253,7 +259,7 @@ production".
 - **The send is a simulation, and the screen does *not* say so.** `drafted_email.is_draft` is
   always true and the UI marks the draft as a draft before sending — the email's own words never
   say "draft". But the send button reaches nothing: no address is contacted, nothing is stored,
-  and there is no endpoint behind it, because Layer 3 does not exist. Pressing it reports the
+  and there is no endpoint behind it, because nothing here sends. Pressing it reports the
   email as sent anyway. **That was a deliberate product decision** — a demonstration should read
   as a working product rather than one apologising for itself — and the cost is that nothing a
   viewer can see reveals the send is not real. So the record lives in DESIGN.md instead, under
@@ -315,7 +321,7 @@ strict and `any` is not allowed, for the same reason mypy is.
 
 ## Working on a feature
 
-REQUIREMENTS.md holds 83 numbered requirements and they interlock, so **work from a todo list
+REQUIREMENTS.md holds 97 numbered requirements and they interlock, so **work from a todo list
 built out of the requirements themselves.** That is what stops a half-finished layer from
 looking finished. TODO.md is the durable record; your working list is how you get through a
 session.
@@ -491,10 +497,11 @@ Decided:
   was added: the service still answers in one response, and the screen plays it back. This was a
   deliberate call to keep the change to the UI. The honest version — the service emitting each
   stage as it completes — is written up under **Would improve** in DESIGN.md.
-- **The send is faked too**, for the same reason: Layer 3 is unbuilt, and building it was out of
-  scope for a UI change. The screen reports it as sent regardless, which was asked for; the
-  warning therefore lives only in DESIGN.md and in the component's docstring. Whoever builds
-  Layer 3 replaces the simulation rather than adding to it.
+- **The send is faked too**, and now permanently: the requirements no longer ask for a sending
+  stage at all, so there is nothing left to build behind the button. The screen reports the email
+  as sent regardless, which was asked for; the warning therefore lives only in DESIGN.md and in
+  the component's docstring. Anyone reinstating real sending replaces the simulation rather than
+  adding to it.
 - **The policy panel has no sign-in and keeps nothing.** Anyone who can reach the service can
   change what every later claim is judged by, and a restart loses the change. Chosen knowingly for
   a demo that is shown once, over a shared admin token and a SQLite table, both of which were

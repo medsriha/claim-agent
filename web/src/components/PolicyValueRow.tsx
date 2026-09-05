@@ -15,6 +15,18 @@ import { humanise } from "../display";
 import type { PolicyValue } from "../api/policyTypes";
 import type { ValueProblem } from "../api/failure";
 
+const INTERNAL_REQUIREMENT_REFERENCES =
+  /\s*\((?:N?FR-[A-Za-z0-9.]+)(?:,\s*N?FR-[A-Za-z0-9.]+)*\)/g;
+
+/** Keep implementation bookkeeping out of the representative-facing policy copy. */
+function displayDescription(description: string): string {
+  return description
+    .replace(INTERNAL_REQUIREMENT_REFERENCES, "")
+    .replace(/\s+INVENTED\s+and\s+PROVISIONAL\.?/gi, "")
+    .replace(/\s+PROVISIONAL\.?/gi, "")
+    .trim();
+}
+
 interface PolicyValueRowProps {
   /** The value as the panel currently holds it, including anything typed into it. */
   value: PolicyValue;
@@ -46,7 +58,7 @@ export function PolicyValueRow({
         {value.changed && <span className="policy-value-changed">Changed</span>}
       </div>
 
-      <p className="policy-value-description">{value.description}</p>
+      <p className="policy-value-description">{displayDescription(value.description)}</p>
 
       {value.kind === "boolean" && (
         <label className="policy-toggle" htmlFor={controlId}>
