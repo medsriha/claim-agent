@@ -1,16 +1,3 @@
-"""Turning settled findings into the structured report somebody acts on.
-
-One report per claim, whether it was investigated or turned away by the quick checks before it
-ever had products in it (FR-2.1, FR-0.4, FR-2.9b). Every fact remains a named field so the UI can
-construct the report without parsing or receiving a prose document.
-
-Nothing here judges anything. Every recommendation, figure and concern was settled before this
-was called, and this only writes them down.
-
-Nothing here reads a clock either — the moment is handed in, so the same findings written twice
-produce the same reports twice (NFR-1).
-"""
-
 from __future__ import annotations
 
 from claim_agent.agent.email import finish_email

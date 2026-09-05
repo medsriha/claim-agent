@@ -1,10 +1,3 @@
-"""Structured reports a representative can render, review, and retrieve later.
-
-A report is one canonical data object. The agent and deterministic rules establish the facts;
-this module keeps those facts in named fields so a UI can choose the presentation. No prose
-document is stored beside them and no reader has to parse wording back into data.
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal

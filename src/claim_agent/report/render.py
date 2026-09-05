@@ -1,27 +1,3 @@
-"""Optional Markdown export for structured investigation findings.
-
-The application does not persist or serve this rendering. Its canonical report is structured
-data and the UI owns the representative-facing layout; this adapter remains available only for a
-caller that explicitly needs a copyable Markdown export.
-
-The AI answers in fixed fields and the rules produce more fields beside them. This file turns all
-of that into one written document (FR-2.1 to FR-2.7). Nothing here decides anything, reads a
-clock, or talks to anything: hand it the same findings twice and it writes the same words twice.
-
-**The order is the point.** What is recommended, what it would cost and what is worrying come
-first, because a representative who agrees should be able to approve without scrolling. Everything
-those rest on comes below, because one who doubts has to be able to check without leaving the
-report (FR-2.5a).
-
-**Every figure is written from an exact decimal.** No amount in this file has ever been a floating
-point number, and none is worked out here — the arithmetic happened before this was called
-(FR-1.21).
-
-**The merchant's email is copied, never rewritten.** It goes inside a fenced block so that nothing
-in a representative's reader can reinterpret a character of it, and so a marker character in the
-wording cannot break the page around it (FR-2.7).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

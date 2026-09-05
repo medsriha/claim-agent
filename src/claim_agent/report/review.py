@@ -1,21 +1,3 @@
-"""The two things a representative may do to a report, and the record each one leaves.
-
-A report is a proposal. This is where a person accepts one or sends it back, and where what they
-chose is written down so it can be counted, audited, and carried forward (FR-2.8, FR-C.1).
-
-**Approving is the only way out.** A report can go back and forth as often as a representative
-likes, and no time limit, level of confidence or number of rounds ever approves one for them
-(FR-2.9). Once approved it is final: it cannot be reopened, sent back, or approved again
-differently.
-
-**Recording a decision is not carrying it out.** Nothing here sends an email or moves money. The
-stage that would act on an approval lives in `claim_agent.execution` and does not exist, so an
-approval today stops at being recorded (FR-3.1).
-
-Pure: no clock, no store, no network. The moment is handed in, so deciding the same report the
-same way twice produces the same record twice.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
