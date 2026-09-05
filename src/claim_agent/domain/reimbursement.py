@@ -1,35 +1,3 @@
-"""Reviewing the amount an investigation recommends, and holding it to the cap.
-
-The investigation decides what to pay. It judges the damage against the photographs and
-against how comparable claims were actually settled, and proposes a figure — because how
-badly a thing is broken is a judgement, and a rule that always paid a fixed share of the
-price could not tell a scuffed box from a smashed bottle.
-
-**This file is the limit on that judgement, not the source of it.** It takes the figure
-the investigation proposed and holds it to the reimbursement cap, which is the one
-monetary limit ShipBob actually stated (FR-1.20). Over the cap, the recommendation becomes
-the cap and says so.
-
-So the guarantee here is narrower than it once was, and it is worth being exact about what
-survives:
-
-- **No claim is ever recommended for more than the cap.** That is arithmetic, and no
-  investigation can talk its way past it.
-- **A figure is money from the first moment it is read.** It arrives as text and is parsed
-  into an exact decimal, so it never passes through a floating point number where cents
-  could drift.
-- **Every result carries its working**: what the investigation proposed, what the items
-  cost on the invoice, whether the cap changed the answer, and what is recommended. A bare
-  figure is not reviewable; "$40.00 — the investigation proposed $40.00 against items worth
-  $52.00, under the cap" is (FR-2.4, NFR-3).
-
-What no longer survives is repeatability. The figure is a judgement, so the same claim can
-come back with a different one, and the number in front of a representative is an estimate
-to weigh rather than arithmetic to check. That is a deliberate trade — see DESIGN.md.
-
-Nothing here reaches out to anything and nothing here reads a clock.
-"""
-
 from __future__ import annotations
 
 import re
