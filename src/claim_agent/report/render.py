@@ -342,16 +342,13 @@ def _assessments(assessments: Sequence[Assessment]) -> str:
         )
 
     rows = [
-        "| Question | Answer | How sure | Why |",
-        "| --- | --- | --- | --- |",
+        "| Question | Answer | Why |",
+        "| --- | --- | --- |",
     ]
     for assessment in assessments:
         answer = "Yes" if assessment.passed else "No"
         rows.append(
-            f"| {_in_words(str(assessment.name))} "
-            f"| {answer} "
-            f"| {assessment.confidence:.2f} "
-            f"| {_cell(assessment.reasoning)} |"
+            f"| {_in_words(str(assessment.name))} | {answer} | {_cell(assessment.reasoning)} |"
         )
 
     note = ""

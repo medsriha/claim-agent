@@ -178,14 +178,13 @@ def evidence_all_in_hand(**states: EvidenceState) -> tuple[EvidenceJudgement, ..
     )
 
 
-def all_four_answered(confidence: float = 0.9, **passed: bool) -> tuple[AssessmentJudgement, ...]:
-    """The four questions, answered yes at a good confidence unless a test says otherwise."""
+def all_four_answered(**passed: bool) -> tuple[AssessmentJudgement, ...]:
+    """The four questions, answered yes unless a test says otherwise."""
     return tuple(
         AssessmentJudgement(
             name=name,
             passed=passed.get(name.value, True),
             reasoning=f"Why {name.value.replace('_', ' ')} is answered that way.",
-            confidence=confidence,
             attachment_ids=(IMAGES[0].attachment_id,),
         )
         for name in REQUIRED_ASSESSMENTS
@@ -212,7 +211,6 @@ def a_conclusion(**overrides: object) -> InvestigationConclusion:
         "recommendation": Recommendation.APPROVE,
         "reasoning": "The photographs show the collagen bottle crushed, and it is on the invoice.",
         "concerns": ("The photograph is taken close in, so the outer box is not visible in it.",),
-        "confidence": 0.9,
         "email_subject": "About your damaged shipment",
         "email_body": "We have looked at your claim and approved the damaged collagen.",
     }
@@ -456,25 +454,14 @@ async def test_a_question_the_run_never_answered_is_not_written_down_as_an_answe
 # --- Uncertainty and exhaustion (FR-1.15, FR-1.16) --------------------------
 
 
-async def test_a_shaky_investigation_is_never_allowed_to_recommend_paying() -> None:
-    """FR-1.15: where confidence is low the line goes to a person, with the doubt stated.
+async def test_an_investigation_does_not_report_subjective_confidence() -> None:
+    """Subjective confidence is no longer part of the agent's conclusion or report."""
+    conclusion = a_conclusion(**an_email_with_no_figure())
 
-    The threshold is the one in the claim policy, so a test sets it rather than assuming
-    the number written into it.
-    """
-    conclusion = a_conclusion(
-        confidence=0.4,
-        **an_email_with_no_figure(),
-    )
+    result = await investigate(a_run_that_concludes(conclusion))
 
-    result = await investigate(
-        a_run_that_concludes(conclusion),
-        policy=Policy(min_assessment_confidence=0.7),
-    )
-
-    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert OverrideReason.NOT_CONFIDENT_ENOUGH in result.outcome.overrides
-    assert "0.40" in result.outcome.explanation
+    assert result.outcome.recommendation is Recommendation.APPROVE
+    assert result.confidence is None
 
 
 async def test_a_run_that_used_up_its_steps_asks_the_rep_with_findings_intact() -> None:
@@ -1055,7 +1042,7 @@ async def test_fr_1_8_to_fr_1_11_all_four_judgements_come_back_with_their_reason
     product appear on the invoice; was the outer packaging photographed. They are
     assessments the system reports with its reasoning, not verdicts that settle the
     claim, so every one of them has to arrive with words a representative can disagree
-    with and a confidence they can weigh (FR-2.3, NFR-3).
+    with (FR-2.3, NFR-3).
 
     All four are reported whatever they found, in a fixed order, so a representative
     sees what was considered rather than inferring it from silence.
@@ -1068,7 +1055,7 @@ async def test_fr_1_8_to_fr_1_11_all_four_judgements_come_back_with_their_reason
     for name in REQUIRED_ASSESSMENTS:
         judgement = answered[name]
         assert judgement.reasoning.strip(), f"{name} was answered with no reasoning"
-        assert 0.0 <= judgement.confidence <= 1.0
+        assert judgement.confidence is None
 
 
 async def test_fr_1_9_a_product_that_cannot_be_identified_is_not_paid_for() -> None:

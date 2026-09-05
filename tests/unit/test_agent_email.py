@@ -41,7 +41,6 @@ def a_conclusion(
         evidence=(),
         recommendation=recommendation,
         reasoning="The photographs show the damage described.",
-        confidence=0.9,
         email_subject=subject,
         email_body=body,
     )

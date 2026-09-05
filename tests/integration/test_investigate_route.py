@@ -104,7 +104,6 @@ def an_unsettled_split() -> tuple[object, StructuredModel]:
                     is_ambiguous=True,
                     ambiguity="The photographs do not say which of the two products broke.",
                     reasoning="Two similar products, and nothing distinguishes them.",
-                    confidence=0.3,
                 )
             ),
             max_attempts=1,
@@ -126,7 +125,6 @@ def a_merchant_resolvable_split() -> tuple[object, StructuredModel]:
                     email_subject="More information needed for your claim",
                     email_body=f"Please send {detail}.",
                     reasoning="The product label is not legible.",
-                    confidence=0.4,
                 )
             ),
             max_attempts=1,
@@ -158,7 +156,6 @@ def an_investigation_that_writes_a_list(app: FastAPI) -> Iterator[None]:
                         is_ambiguous=True,
                         ambiguity="The photographs do not say which of the two products broke.",
                         reasoning="Two similar products, and nothing distinguishes them.",
-                        confidence=0.3,
                     )
                 ),
                 max_attempts=1,
@@ -301,7 +298,7 @@ async def test_the_stream_carries_the_claim_split_and_says_what_was_unclear(
     result = json.loads(next(data for name, data in messages if name == "result"))
     (report,) = result["reports"]
     assert report["recommendation"] == "request_rep_clarification"
-    assert report["confidence"] == 0.3
+    assert report["confidence"] is None
     assert report["drafted_email"] is None
     assert "which of the two products broke" in report["content"]["ambiguity"]
 
@@ -502,11 +499,9 @@ def a_settled_investigation() -> tuple[object, StructuredModel]:
                             quantity=1,
                             damage_attachment_ids=("ATT-CASE-1001-03",),
                             reasoning="The photographs show this bottle broken.",
-                            confidence=0.93,
                         ),
                     ),
                     reasoning="One product is named and photographed.",
-                    confidence=0.93,
                 ),
                 InvestigationConclusion(
                     evidence=tuple(
@@ -535,7 +530,6 @@ def a_settled_investigation() -> tuple[object, StructuredModel]:
                             name=name,
                             passed=True,
                             reasoning="Established from the photographs.",
-                            confidence=0.92,
                         )
                         for name in AssessmentName
                     ),
@@ -549,7 +543,6 @@ def a_settled_investigation() -> tuple[object, StructuredModel]:
                     recommendation=Recommendation.REQUEST_INFO,
                     reasoning="The bottle is smashed, but the claim's evidence is not all in.",
                     concerns=("The outer mailer is only lightly marked.",),
-                    confidence=0.92,
                     email_subject="About your claim",
                     email_body="Could you send us a photograph of the outer box?",
                 ),

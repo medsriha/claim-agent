@@ -116,9 +116,9 @@ rep deciding a claim line rather than by any layer finishing. That step is speci
 **Carry-forward** below, after the precedent section it depends on.
 
 Note the distinction between a proposed next action and a decision. The agent returns its
-confidence and a claim report that proposes one of three next actions. When that action is
-merchant-facing, it also returns a separate email draft. The proposal is not an act: nothing
-takes effect until a rep approves it.
+claim report proposing one of three next actions. When that action is merchant-facing, it also
+returns a separate email draft. The proposal is not an act: nothing takes effect until a rep
+approves it.
 
 ---
 
@@ -238,8 +238,8 @@ The same case must always produce the same verdict. No AI is involved in this la
 are rules with correct answers; a model can only introduce variance.
 
 **FR-0.7 — Keep policy values in one named place.**
-The age limit, the high-value threshold, the reimbursement cap, and confidence thresholds
-belong in a single readable configuration, not scattered through the code. Several of these
+The age limit, the high-value threshold, the reimbursement cap, and deterministic matching
+thresholds belong in a single readable configuration, not scattered through the code. Several of these
 values are not specified by ShipBob and represent judgement calls, so they must be visible
 and changeable rather than buried.
 
@@ -278,7 +278,7 @@ guarantee: every line in a claim sees the same verdict on the shared evidence.
 **FR-1a.4 — Ask the right party when the split is ambiguous.**
 If it cannot be established which products are being claimed for, no meaningful per-product
 investigation is possible, and the system must not guess a split. State what is ambiguous and
-include the confidence. If the merchant can resolve it by providing specific details, return
+why. If the merchant can resolve it by providing specific details, return
 `request_info`, name every detail needed, and draft the merchant email. If the problem is
 internal or there is no specific merchant-supplied detail that would resolve it, return
 `request_rep_clarification` and no email.
@@ -486,10 +486,11 @@ the system cannot identify a concrete merchant action.
 
 ## Recommending
 
-**FR-1.14 — Return confidence and one of three next actions.**
+**FR-1.14 — Return one of three next actions.**
 `approve` (with an amount), `request_info`, or `request_rep_clarification`. Nothing else.
 There is no separate escalation or denial outcome. Each action is a proposal to the rep,
-and none takes effect on its own.
+and none takes effect on its own. Do not ask the model for or display a subjective confidence
+percentage; the evidence and reasoning make the recommendation reviewable.
 
 The routing question is **who can supply the next fact**, not merely whether the claim is
 ambiguous. On a safely completed run, a concrete merchant-supplied answer maps to `request_info`,
@@ -499,11 +500,11 @@ resolution. This rule governs FR-1a.4, FR-1.12, FR-1.13, and FR-1.15 wherever th
 overlaps; NFR-4 still takes priority when the run itself failed.
 
 **FR-1.15 — Never recommend approval under uncertainty.**
-Where the overall action confidence or any supporting assessment confidence is low, or
-evidence is weak, approval is unavailable. If a specific merchant-supplied detail would resolve
-that uncertainty, use `request_info`; otherwise use `request_rep_clarification`, with the
-uncertainty and the clarification needed stated. The agent may recommend paying only when it can
-show why.
+Where evidence is weak, conflicting, or otherwise too uncertain to support payment, approval is
+unavailable. If a specific merchant-supplied detail would resolve that uncertainty, use
+`request_info`; otherwise use `request_rep_clarification`, with the uncertainty and the
+clarification needed stated. The agent may recommend paying only when it can show why; no numeric
+self-rating is used as a substitute for that reasoning.
 
 **FR-1.16 — Request representative clarification when the step budget is exhausted**,
 carrying forward whatever was established, so the rep is not handed an empty result. This
@@ -512,7 +513,7 @@ path produces a report and no merchant email.
 **FR-1.17 — Never present a recommendation as settled.**
 The report states what the agent recommends and why. It does not report an outcome as
 though it were already reached, and its drafted email is a draft — unsent, and marked as
-such — regardless of how confident the recommendation is.
+such — regardless of how strongly the evidence supports the recommendation.
 
 ## Reimbursement amount
 
@@ -607,10 +608,10 @@ conclusion on trust.
 **There is one report per claim line.** A claim covering two damaged products produces two
 reports, each approved or sent back independently.
 
-**FR-2.1 — State confidence, next action, and the amount when approved.**
-The report states one of the three actions and the agent's confidence. For `approve`, it
-states the approved amount. For `request_info`, it lists the specific additional details
-required from the merchant. It is worded as a proposal the rep is deciding on, not as an
+**FR-2.1 — State the next action and the amount when approved.**
+The report states one of the three actions without a subjective confidence percentage. For
+`approve`, it states the approved amount. For `request_info`, it lists the specific additional
+details required from the merchant. It is worded as a proposal the rep is deciding on, not as an
 action already taken.
 
 **FR-2.2 — Show each evidence item and where it was found.**
@@ -633,12 +634,12 @@ alone is not reviewable. "$52.00 — one Liposomal Tripeptide Collagen, invoice 
 under cap" is.
 
 **FR-2.5 — State concerns explicitly.**
-Ambiguities, weak evidence, low-confidence assessments, anything that conflicts. A rep who
+Ambiguities, weak evidence, uncertain assessments, anything that conflicts. A rep who
 cannot tell why the system is unsure will either rubber-stamp or redo the work — and both
 defeat the purpose. Silence here is a defect, not a clean result.
 
 **FR-2.5a — Make the report decidable at a glance, and checkable in depth.**
-The default view leads with the next action, confidence, and either the approved amount, the
+The default view leads with the next action and either the approved amount, the
 specific merchant requests, or a short statement of what the rep must clarify. Supporting
 reasoning, concerns, images, evidence, assessments, context, and amount working are available in
 clearly labelled expandable sections. There is no nested report scrollbar. Each field is concise,
@@ -674,7 +675,7 @@ A report is presented to the rep, who may:
 
 **FR-2.9 — Approval is the only exit.**
 A report leaves the review loop in exactly one way: a rep approves it. There is no
-timeout, no confidence threshold, and no volume of revisions that results in automatic
+timeout, no automated score, and no volume of revisions that results in automatic
 approval. A case may cycle through revision any number of times and still requires a human
 to release it.
 
@@ -812,8 +813,8 @@ places, a correction learned during revision applies directly to future investig
 Deterministic. Runs only once a human has approved.
 
 **FR-3.1 — Execute nothing without explicit rep approval.**
-No email, no reimbursement, under any circumstance, at any confidence level. This is a hard
-invariant. Execution is triggered by a rep approving a report (FR-2.8, action 1) and by
+No email, no reimbursement, under any circumstance, however strong the recommendation. This is a
+hard invariant. Execution is triggered by a rep approving a report (FR-2.8, action 1) and by
 nothing else.
 
 **FR-3.1a — Execute per claim line.**
@@ -1201,9 +1202,9 @@ Three readings, none of them chosen:
    exists today.
 2. **Never recommend approval above the threshold.** A high-value claim asks for
    representative clarification with its value as the stated reason, however good the evidence is.
-3. **A higher bar, not a different outcome.** High-value claims are held to a stricter confidence
-   threshold than FR-1.15's, so the same quality of evidence approves a small claim and asks the
-   representative to clarify a large one.
+3. **A higher evidence bar, not a different outcome.** High-value claims require an explicitly
+   specified additional check, so evidence sufficient for a small claim may ask the representative
+   to clarify a large one.
 
 Whichever is chosen, the rule belongs beside the threshold in the single policy place (FR-0.7,
 NFR-7), and it must be a deterministic rule if it changes an outcome. Asking a model to try harder

@@ -418,9 +418,6 @@ function AssessmentRow({ judgement }: { judgement: Assessment }): React.JSX.Elem
     <li className={judgement.passed ? "judgement judgement-yes" : "judgement judgement-no"}>
       <span className="judgement-name">{humanise(judgement.name)}</span>
       <span className="judgement-answer">{judgement.passed ? "Yes" : "No"}</span>
-      <span className="judgement-confidence">
-        {String(Math.round(judgement.confidence * 100))}% sure
-      </span>
       <span className="judgement-reasoning">{judgement.reasoning}</span>
     </li>
   );

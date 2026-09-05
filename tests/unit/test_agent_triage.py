@@ -245,9 +245,7 @@ def an_image_showing(
     problem: str | None = None,
 ) -> ImageObservation:
     """What the model says when it has looked at one image."""
-    return ImageObservation(
-        shows=shows, kind=kind, is_legible=legible, problem=problem, confidence=0.9
-    )
+    return ImageObservation(shows=shows, kind=kind, is_legible=legible, problem=problem)
 
 
 def a_product(
@@ -260,20 +258,16 @@ def a_product(
         sku=sku,
         damage_attachment_ids=damage,
         reasoning="The photographs show it broken.",
-        confidence=0.9,
     )
 
 
-def a_split(
-    *products: ClaimedProductProposal, ambiguity: str | None = None, confidence: float = 0.9
-) -> ClaimSplit:
+def a_split(*products: ClaimedProductProposal, ambiguity: str | None = None) -> ClaimSplit:
     """The form the pass ends on: which products the claim is for, or why nobody can tell."""
     return ClaimSplit(
         claimed_products=products,
         is_ambiguous=ambiguity is not None,
         ambiguity=ambiguity,
         reasoning="Worked out from the description and the photographs.",
-        confidence=confidence,
     )
 
 
@@ -419,7 +413,6 @@ async def test_a_split_the_investigation_calls_unclear_is_not_turned_into_an_ans
             a_split(
                 a_product("CleanBoss Multi Surface Cleaner 24oz", sku="A00300"),
                 ambiguity=unclear,
-                confidence=0.4,
             ),
         ],
     )

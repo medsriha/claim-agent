@@ -272,7 +272,6 @@ def test_a_merchant_resolvable_split_requests_details_and_drafts_the_email() -> 
         email_subject="More information needed for your claim",
         email_body=f"Please send {detail}.",
         reasoning="The label is not legible.",
-        confidence=0.4,
     )
     investigation = ClaimInvestigation(
         case_id=CASE.case_id,
@@ -299,7 +298,6 @@ def test_an_unsafe_split_email_falls_back_to_the_representative() -> None:
         email_subject="More information needed",
         email_body="Please send a clearer image; the possible item costs $12.99.",
         reasoning="The label is unreadable.",
-        confidence=0.4,
     )
     investigation = ClaimInvestigation(
         case_id=CASE.case_id,

@@ -312,7 +312,7 @@ export interface EvidenceFinding {
   problem: string | null;
 }
 
-/** One of the four judgements, with the reasoning and the confidence behind it. */
+/** One of the four judgements, with the reasoning that makes it reviewable. */
 export interface Assessment {
   name:
     | "damage_visible"
@@ -321,7 +321,8 @@ export interface Assessment {
     | "packaging_documented";
   passed: boolean;
   reasoning: string;
-  confidence: number;
+  /** Present only on reports created before subjective confidence was removed. */
+  confidence: number | null;
   attachment_ids: string[];
 }
 

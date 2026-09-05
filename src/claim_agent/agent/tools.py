@@ -1809,7 +1809,6 @@ def _what_was_seen(attachment_id: str, observation: ImageObservation) -> list[st
     said = [f"What is visible: {observation.shows}"]
     if observation.problem is not None:
         said.append(f"Why it cannot be relied on: {observation.problem}")
-    said.append(f"How sure: {observation.confidence:.2f}")
     return [quote_untrusted(f"IMAGE_{attachment_id}", "\n".join(said))]
 
 

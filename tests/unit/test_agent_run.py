@@ -83,12 +83,10 @@ def a_split(*products: tuple[str, str]) -> ClaimSplit:
                 quantity=1,
                 damage_attachment_ids=("ATT-CASE-1001-02",),
                 reasoning="The photograph shows this one broken.",
-                confidence=0.9,
             )
             for name, sku in products
         ),
         reasoning="The description and the photographs agree on which products broke.",
-        confidence=0.9,
     )
 
 
@@ -113,14 +111,12 @@ def a_conclusion(product: str, sku: str) -> InvestigationConclusion:
                 name=name,
                 passed=True,
                 reasoning="Plain from the photographs.",
-                confidence=0.95,
             )
             for name in REQUIRED_ASSESSMENTS
         ),
         damaged_items=(DamagedItem(product_name=product, quantity=1, sku=sku),),
         recommendation=Recommendation.APPROVE,
         reasoning="The photographs show it broken and it is on the invoice.",
-        confidence=0.95,
         email_subject="About your damaged order",
         email_body="We are sorry. We approved your damage claim.",
     )
@@ -206,7 +202,6 @@ async def test_fr_1a_4_an_unsettled_split_investigates_nothing() -> None:
             is_ambiguous=True,
             ambiguity="The photograph shows a 24oz bottle and the order holds two of them.",
             reasoning="The images do not tell the two apart.",
-            confidence=0.3,
         ),
         conclusions=[],
     )

@@ -85,7 +85,7 @@ logger = get_logger(__name__)
 CLOSING_REQUEST = (
     "Now give your conclusion for this one product: what each of the four pieces of "
     "evidence showed, your answers to the four questions if the evidence was all there, "
-    "which products should be paid for, your confidence and next action, and — only when "
+    "which products should be paid for, your next action, and — only when "
     "that action addresses the merchant — the email draft."
 )
 """What the run is asked once it has stopped looking at things.
@@ -182,16 +182,8 @@ class LineInvestigation(BaseModel):
 
     @property
     def confidence(self) -> float | None:
-        """How sure the investigation was of its own recommendation, from 0 to 1.
-
-        `None` means the run never reached a conclusion, which must not be read as
-        low confidence: nothing was assessed, so there is nothing to be sure about.
-
-        Read off the conclusion rather than stored beside it, so there is one
-        number rather than two that could disagree. It is a self-report and nothing
-        in this system checks it against what turned out to be true.
-        """
-        return self.conclusion.confidence if self.conclusion is not None else None
+        """No subjective confidence score is requested or shown for agent conclusions."""
+        return None
 
 
 async def investigate_line(
@@ -256,8 +248,8 @@ async def investigate_line(
         cache: The claim's memo of what images have already been looked at. Shared by
             every product on the claim, so no photograph is paid for twice (NFR-8).
         events: Where the run narrates itself while it works. Shared by the claim.
-        policy: The thresholds this claim is judged by — the step allowance, the
-            confidence a payment needs, the cap (FR-0.7, NFR-7). Read once here, so a
+        policy: The thresholds this claim is judged by — the step allowance and the
+            reimbursement cap (FR-0.7, NFR-7). Read once here, so a
             line being investigated finishes on the values it started with.
         shared_evidence: What was settled once for the whole claim about the invoice,
             the customer confirmation and the outer packaging (FR-1a.3). Empty means
@@ -394,7 +386,6 @@ def _settle(
         amount=amount,
         policy=policy,
         requested_details=requested_details,
-        confidence=conclusion.confidence,
     )
 
     if decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION:
@@ -711,7 +702,6 @@ def _as_an_assessment(judgement: AssessmentJudgement) -> Assessment:
         name=judgement.name,
         passed=judgement.passed,
         reasoning=judgement.reasoning,
-        confidence=judgement.confidence,
         attachment_ids=judgement.attachment_ids,
     )
 

@@ -31,6 +31,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from pydantic import BaseModel
 from tests.fakes.model import Ask, ScriptedModel, ScriptRanOutError, scripted
 
+from claim_agent.agent.investigate import CLOSING_REQUEST
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.prompts import (
     ALL_PROMPTS,
@@ -44,6 +45,7 @@ from claim_agent.agent.prompts import (
     build_triage_messages,
     quote_untrusted,
 )
+from claim_agent.agent.schemas import ClaimSplit, ImageObservation, InvestigationConclusion
 from claim_agent.domain.assessment import REQUIRED_ASSESSMENTS
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, MatchOutcome
 from claim_agent.domain.evidence import (
@@ -198,6 +200,18 @@ def _spoken(messages: Sequence[BaseMessage]) -> str:
 
 
 # --- The prompts and the code spell the same words (NFR-2) -------------------
+
+
+def test_subjective_confidence_is_absent_from_every_agent_prompt_and_answer_schema() -> None:
+    """Confidence percentages add noise and must not be requested from the model."""
+    for prompt in (*ALL_PROMPTS, CLOSING_REQUEST):
+        assert "confidence" not in prompt.lower()
+        assert "how sure" not in prompt.lower()
+
+    for answer in (ImageObservation, ClaimSplit, InvestigationConclusion):
+        schema = str(answer.model_json_schema()).lower()
+        assert "confidence" not in schema
+        assert "how sure" not in schema
 
 
 @pytest.mark.parametrize("kind", list(EvidenceKind))

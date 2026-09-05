@@ -1454,8 +1454,7 @@ p {
 }
 
 .evidence-state,
-.judgement-answer,
-.judgement-confidence {
+.judgement-answer {
   font-family: var(--sb-font-mono);
   font-size: 0.8rem;
 }
@@ -1494,10 +1493,6 @@ p {
   color: var(--sb-ink-faint);
   font-family: var(--sb-font-mono);
   font-size: 0.76rem;
-}
-
-.judgement-confidence {
-  color: var(--sb-ink-faint);
 }
 
 /* The account of why a figure, which is the whole of what makes it reviewable. */

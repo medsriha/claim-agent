@@ -106,8 +106,8 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
     the unbuilt AI investigation would read, where a control would change nothing observable.
   - **Be aware:** only the $100 cap is a real ShipBob figure. The age limit and whether it is
     inclusive, the high-value threshold, the claim-type wording, the minimum description length,
-    the email reason order, the confidence threshold and the step budgets are placeholders we
-    invented
+    the email reason order, the deterministic matching thresholds and the step budgets are
+    placeholders we invented
     so the code runs — they need sign-off before production. The cap is now the only limit on
     a payout at all, which makes it the one number here with money directly behind it: raise
     it and every claim above it is paid more.
@@ -267,8 +267,8 @@ still unticked below.
 - [x] FR-1.10 — Does that product appear on the invoice.
 - [x] FR-1.11 — Is the outer packaging documented.
   - **Conclusion:** all four are reported whatever they found, in a fixed order, each with
-    its own reasoning and its own confidence — so a rep can disagree with one without
-    discarding the other three. FR-1.11 is about a photograph *existing*, not about the
+    its own reasoning — so a rep can disagree with one without discarding the other three.
+    FR-1.11 is about a photograph *existing*, not about the
     box being damaged: an intact box with a broken product inside is a good claim.
   - **Be aware:** FR-1.10 is judged against ShipBob's *generated* invoice, not the invoice
     image the merchant uploaded. Which document each rule means is our reading, and the
@@ -287,19 +287,15 @@ still unticked below.
     a concrete merchant request, so this path returns `request_info` and an email. Only an
     ambiguity the merchant cannot resolve stays with the representative.
 
-- [x] FR-1.14 — Confidence plus one of three next actions, and nothing else.
+- [x] FR-1.14 — One of three next actions, and nothing else.
   - **Conclusion:** `approve`, `request_info`, or `request_rep_clarification`. Escalation and
     denial are not outcomes. The rules can withhold a payment the requirements forbid, and what
     the agent proposed is kept beside the result so a rep can see where the two differed.
 
 - [x] FR-1.15 — Never recommend approval under uncertainty.
-  - **Conclusion:** both the overall action confidence shown on the report and the weakest
-    supporting assessment must clear the policy threshold before approval can stand. Below the
-    threshold, a concrete merchant-fillable gap remains `request_info`; otherwise the action is
-    `request_rep_clarification`.
-  - **Be aware:** the confidence figure is the model's own opinion of itself, nothing has
-    ever checked it against what turned out to be true, and the threshold is a number we
-    invented. It now withholds real payments. This is the weakest link in the layer.
+  - **Conclusion:** weak or conflicting evidence blocks approval. A concrete merchant-fillable
+    gap remains `request_info`; otherwise the action is `request_rep_clarification`. The model is
+    not asked for a subjective confidence score.
 
 - [x] FR-1.16 — An exhausted budget requests rep clarification, carrying whatever was established.
   - **Conclusion:** exhaustion is an *answer*, not an error, which is why the budget is
@@ -368,7 +364,7 @@ second prose document and no Markdown to parse back into data.
 Reports are written down by the investigation endpoint, including the claim-level report for a
 claim stopped by screening. Asking for screening alone still keeps nothing.
 
-- [x] FR-2.1 — confidence, the next action, and any approved amount lead the report, worded as something a
+- [x] FR-2.1 — the next action and any approved amount lead the report, worded as something a
   representative is deciding on rather than something that happened.
   - **Conclusion:** `request_info` reports also carry a structured list of the exact merchant
     details needed, which the UI shows before the supporting evidence.
@@ -382,7 +378,7 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
     seen rather than inferred from silence.
   - The structured report embeds every attachment URL and the UI renders the images with a
     full-size link, so a representative need not leave the report to inspect its evidence.
-- [x] FR-2.3 — each question with its reasoning and how sure it was.
+- [x] FR-2.3 — each question with its reasoning, without a subjective confidence percentage.
   - **Be aware:** a question **missing** from the structured list was never answered, which is not
     the same as answered no. The UI says so rather than making a reader infer it.
 - [x] FR-2.4 — which items at which prices, from which document, and what the limit did.
@@ -393,7 +389,7 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
   - **Conclusion:** a report with nothing worrying says so rather than showing an empty heading.
     A stopped claim carries its own reasons and findings in screening content.
 - [x] FR-2.5a — decidable at a glance, checkable below.
-  - **Conclusion:** the default view leads with action, confidence, and the approved amount,
+  - **Conclusion:** the default view leads with action and the approved amount,
     merchant requests, or a short rep clarification. Reasoning, concerns, images, evidence,
     questions, context, and amount working stay available in labelled expandable sections. The
     report has no inner scrollbar, and prompt/schema rules keep each field short and non-repetitive.
@@ -419,7 +415,7 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
   - **Conclusion:** written as an explicit state machine and tested transition by transition.
     `approved` is terminal: it cannot be sent back, and a *different* approval on it is refused
     rather than quietly replacing a decision a person took. Nothing else reaches `approved` — no
-    time limit, no confidence, no number of rounds.
+    time limit, no automated score, no number of rounds.
   - **Be aware:** the same approval arriving twice changes nothing and records nothing, so a
     double-click leaves one decision. Two *different* notes sent back are two decisions and both
     are kept.
@@ -629,9 +625,9 @@ should be asked, not answered here.
     same approval twice writes over itself and two different notes sent back on one report stay
     two records. The decision is written **before** the report is moved on, so a failure between
     the two heals itself on the retry rather than losing what a person chose.
-  - **Be aware:** the record carries fields this requirement does not mention — how sure the
-    investigation said it was, what the order was worth, who carried the parcel, and what the
-    merchant reported. They are copied off the report rather than joined to it, which was the
+  - **Be aware:** the record carries fields this requirement does not mention — including a
+    nullable legacy confidence field, what the order was worth, who carried the parcel, and what
+    the merchant reported. They are copied off the report rather than joined to it, which was the
     plan when there was no report store; the join is still worth building, and now there is
     something to join to.
   - **Be aware: nothing measures how long a review took.** It is accepted from whoever calls and

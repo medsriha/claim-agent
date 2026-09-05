@@ -484,16 +484,14 @@ def test_fr_1_15_the_confidence_threshold_comes_from_the_claim_policy() -> None:
     assert OverrideReason.NOT_CONFIDENT_ENOUGH in decision.overrides
 
 
-def test_fr_1_15_an_investigation_that_assessed_nothing_has_cleared_nothing() -> None:
-    """No confidence to test is not the same as being confident, and must not read as it."""
+def test_an_investigation_that_assessed_nothing_is_incomplete() -> None:
+    """Missing assessments block approval without inventing a confidence score."""
     decision = decide(Recommendation.APPROVE, assessments=())
 
     assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert OverrideReason.NOT_CONFIDENT_ENOUGH in decision.overrides
     # A run that answered none of the four questions did not finish, which is a
     # statement about our own investigation rather than about the merchant's evidence.
-    assert OverrideReason.INVESTIGATION_INCOMPLETE in decision.overrides
-    assert "nothing was assessed" in decision.explanation
+    assert decision.overrides == (OverrideReason.INVESTIGATION_INCOMPLETE,)
 
 
 # ---------------------------------------------------------------------------

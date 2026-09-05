@@ -30,9 +30,9 @@ assigned, and the results of rules the model does not get a say in.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from claim_agent.domain.assessment import AssessmentName, Confidence
+from claim_agent.domain.assessment import AssessmentName
 from claim_agent.domain.evidence import EvidenceKind, EvidenceState
 from claim_agent.domain.outcome import Recommendation
 
@@ -45,7 +45,25 @@ it to a representative (FR-1.21).
 """
 
 
-class ImageObservation(BaseModel):
+class _WithoutSubjectiveConfidence(BaseModel):
+    """Accept old stored/test values without advertising confidence to the model.
+
+    Confidence used to be a required part of each structured answer. Removing it
+    from the fields removes it from the JSON schema supplied to the model. Silently
+    discarding the old key keeps replayed answers and rolling deployments readable.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _discard_legacy_confidence(cls, value: object) -> object:
+        if not isinstance(value, dict) or "confidence" not in value:
+            return value
+        without_confidence = dict(value)
+        without_confidence.pop("confidence")
+        return without_confidence
+
+
+class ImageObservation(_WithoutSubjectiveConfidence):
     """What one image turned out to be, and whether it is any use (FR-1.4, FR-1.5).
 
     Filenames and file types are not offered to the model when it answers this,
@@ -80,10 +98,9 @@ class ImageObservation(BaseModel):
             "Null when it can be."
         ),
     )
-    confidence: Confidence = Field(description="How sure you are, from 0 to 1.")
 
 
-class ClaimedProductProposal(BaseModel):
+class ClaimedProductProposal(_WithoutSubjectiveConfidence):
     """One product the investigation believes was damaged (FR-1a.1).
 
     `name` should be copied from the order's line items wherever the evidence
@@ -106,10 +123,9 @@ class ClaimedProductProposal(BaseModel):
         description="Ids of the images that show damage to this particular product.",
     )
     reasoning: str = Field(description="Why you believe this product was damaged.")
-    confidence: Confidence = Field(description="How sure you are, from 0 to 1.")
 
 
-class ClaimSplit(BaseModel):
+class ClaimSplit(_WithoutSubjectiveConfidence):
     """Which products a claim is for — the conclusion of the triage pass (FR-1a.1).
 
     `is_ambiguous` is the important field. Set it when it cannot be established
@@ -163,7 +179,6 @@ class ClaimSplit(BaseModel):
         ),
     )
     reasoning: str = Field(description="One or two short sentences explaining the split.")
-    confidence: Confidence = Field(description="How sure you are of the split, from 0 to 1.")
 
 
 class EvidenceJudgement(BaseModel):
@@ -196,7 +211,7 @@ class EvidenceJudgement(BaseModel):
     )
 
 
-class AssessmentJudgement(BaseModel):
+class AssessmentJudgement(_WithoutSubjectiveConfidence):
     """One of the four judgements, with the reasoning that makes it reviewable (FR-2.3).
 
     The reasoning is not decoration. A rep has to be able to disagree with this one
@@ -209,7 +224,6 @@ class AssessmentJudgement(BaseModel):
     name: AssessmentName = Field(description="Which of the four questions this answers.")
     passed: bool = Field(description="Your answer to it.")
     reasoning: str = Field(description="Why, in one or two plain sentences.")
-    confidence: Confidence = Field(description="How sure you are, from 0 to 1.")
     attachment_ids: tuple[str, ...] = Field(
         default=(), description="Ids of the images this judgement rests on."
     )
@@ -234,7 +248,7 @@ class DamagedItem(BaseModel):
     sku: str | None = Field(default=None, description="The product's code, or null.")
 
 
-class InvestigationConclusion(BaseModel):
+class InvestigationConclusion(_WithoutSubjectiveConfidence):
     """The conclusion of one claim line's investigation — the model's whole answer.
 
     Everything a rep is shown about a claim line traces back to a field here, apart
@@ -330,9 +344,6 @@ class InvestigationConclusion(BaseModel):
             "Short, separate items for anything weak, conflicting or uncertain a reviewer "
             "should know. Do not repeat requested_details or write a headed mini-report."
         ),
-    )
-    confidence: Confidence = Field(
-        description="How sure you are of this recommendation overall, from 0 to 1."
     )
     corrections_considered: tuple[str, ...] = Field(
         default=(),

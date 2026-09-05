@@ -31,11 +31,12 @@ This system does the slow part. For each damaged product it gathers the evidence
 against the rules, and returns two distinct outputs: a structured claim report and, only when
 the next action is merchant-facing, a draft email. Then it stops.
 
-There are three next actions. An approval report carries the confidence and approved amount,
-and its email communicates that amount. A request for merchant information names the exact
+There are three next actions. An approval report carries the approved amount, and its email
+communicates that amount. A request for merchant information names the exact
 details needed in both the report and email, including a merchant-resolvable ambiguity. Anything
-incorrect, ambiguous, internally failed, or insufficiently confident that the merchant cannot
-resolve with a specific detail asks the representative for clarification and produces no email.
+incorrect, ambiguous, internally failed, or too uncertain for the evidence to support asks the
+representative for clarification when the merchant cannot resolve it with a specific detail, and
+produces no email.
 Escalation and denial are not outcomes in this contract.
 
 **The system never decides, and never sends anything.** A representative reads what it found and
@@ -157,8 +158,9 @@ nothing. There is also no sign-in on any of it.
 
 **There is a third screen, for the business rather than for one claim.** It shows how often
 representatives took the advice exactly as it stood, how far they changed it when they did, how
-long claims took, what that was worth in time and money, and whether the system's own statement of
-how sure it was predicts whether anybody agreed with it.
+long claims took, and what that was worth in time and money. A legacy panel also compares old
+subjective confidence values with representative agreement; new investigations no longer produce
+those values.
 
 **Every figure on it is invented, and the screen does not say so.** Nothing in the system records
 what a representative decided, because the stage where a person decides is still untouched, so
@@ -239,7 +241,8 @@ feature built after this one starts from it.
 - **Policy values sit in their own file, separate from technical settings.** The requirements
   ask for one named place for them, and mixing them with database URLs would bury them.
 - **Only the $100 cap is a real number.** The age limit, the high-value threshold, the
-  confidence threshold, and the step budgets are placeholders we invented so the code runs. They
+  deterministic matching thresholds, and the step budgets are placeholders we invented so the
+  code runs. They
   are labelled as provisional and need ShipBob to confirm them.
 - **Configuration is handed to the service rather than read from a global.** This means a test
   can run the service with different values, which keeps later features easy to test.
@@ -973,7 +976,7 @@ could do is limited by the AI not being able to send or pay anything, but it is 
 ### Investigating one damaged product
 
 **What it does** — Takes one damaged product and works out what the evidence shows, whether it
-looks like something ShipBob should pay for, how sure it is, and what to say to the merchant. Then
+looks like something ShipBob should pay for, and what to say to the merchant. Then
 it stops.
 
 **Why we need it** — This is the slow part of a representative's day: opening the photos, checking
@@ -1020,9 +1023,9 @@ arrived at, and the draft email. Nothing is sent and nothing is stored.
 
 **Choices we made**
 
-- **The AI recommends; it does not decide.** It proposes one of three next actions and supplies
-  its confidence. Where the rules say an
-  approval is not available — a piece of evidence is missing, it is not sure enough, or it ran out
+- **The AI recommends; it does not decide.** It proposes one of three next actions and explains
+  why. Where the rules say an
+  approval is not available — a piece of evidence is missing, the evidence is uncertain, or it ran out
   of steps — the recommendation is moved to asking the merchant or requesting rep clarification, and what
   the AI originally said is recorded next to it. Nothing can move a recommendation *towards* paying.
 - **The AI decides what the damage is worth, and one limit holds it.** This was the other way
@@ -1048,12 +1051,10 @@ arrived at, and the draft email. Nothing is sent and nothing is stored.
   produces an email for one hundred. New drafts contain no placeholder; the finalizer resolves
   the old marker if it reads an earlier stored draft. Any amount of money the AI writes itself is
   rejected, and the claim goes to a person.
-- **How sure it is, is part of the answer.** Each of the four questions carries its own confidence,
-  and so does the identification of which product was damaged, because that is the judgement the
-  money rests on. Below a set level, paying is not available. A named fact the merchant can supply
-  becomes an information request; uncertainty with no concrete merchant resolution goes to the
-  representative (FR-1.15). The figure is shown to a representative either way — a number someone
-  can see is worth more than a threshold they cannot.
+- **Reasoning is part of the answer; a subjective percentage is not.** Each of the four questions
+  carries the evidence and reasoning behind it so a representative can review the actual basis.
+  A named fact the merchant can supply becomes an information request; uncertainty with no
+  concrete merchant resolution goes to the representative (FR-1.15).
 - **Each product is judged on its own.** A poorly evidenced product cannot drag down a
   well-evidenced one, and a strong one cannot carry a weak one (FR-1b.3). One product can be
   recommended for payment while its neighbour is waiting on a photograph.
@@ -1087,10 +1088,9 @@ wrong, and there is no arithmetic for anybody to redo. What an item cost is show
 figure but does not limit it — nothing in the requirements says a claim may never exceed the price
 of the goods, so nothing here decides that, and it is worth asking.
 
-The confidence figure has the same shape of problem: it is the AI's own opinion of itself, we use
-it to withhold payments because there is nothing better to use, and nobody has checked it against
-what actually turned out to be true. The same goes for the level we set it at. Nothing is stored,
-so there is no lasting record of an investigation. And "the invoice" means two different things in
+Subjective confidence was removed because it was the AI's uncalibrated opinion of itself and added
+noise instead of evidence. Nothing is stored, so there is no lasting record of an investigation.
+And "the invoice" means two different things in
 the requirements — the picture the merchant uploaded, and the one ShipBob generates on request —
 and which of them each rule means is our reading rather than ShipBob's.
 
@@ -1412,7 +1412,7 @@ result contains only canonical structured reports and their persistence status�
 raw-investigation report. Each report contains
 the settled evidence, assessments, outcome, amount, context, concerns, attachment image URLs, and
 one conditional email draft; the UI owns their layout. Its default report view shows only the
-decision, confidence, approved amount or immediate next request, and a short reason. Labelled
+decision, approved amount or immediate next request, and a short reason. Labelled
 expanders hold reasoning, concerns, images, evidence, assessments, context, and amount working, so
 the full record stays checkable without becoming the first thing a representative must read.
 
@@ -1428,9 +1428,9 @@ the full record stays checkable without becoming the first thing a representativ
 administrator changes the rules on. It answers a different question from either: not "what
 should happen to this claim", but "how well has this been going, over months, and is it getting
 better". It shows how often a representative took the recommendation exactly as it stood, how
-often and how far they changed it, how long claims took, what that is worth in time and money,
-and — the part the whole screen is really for — whether the system's own statement of how sure
-it is turns out to predict whether a representative agreed with it.
+often and how far they changed it, how long claims took, and what that is worth in time and money.
+Its static demonstration data still contains the old subjective-confidence comparison, but new
+investigations no longer create that score.
 
 **Why we need it** — The intention behind this project is to run the system with a
 representative checking every claim, learn from what they do, and use that to decide when some
@@ -1441,7 +1441,7 @@ below.
 
 It is worth being blunt about the limit. **The requirements forbid automatic approval outright.**
 FR-2.9 says a report leaves review in exactly one way — a person approves it — and that there is
-no confidence level and no number of revisions that changes this. FR-3.1 calls the same thing a
+no automated score and no number of revisions that changes this. FR-3.1 calls the same thing a
 hard invariant. So this screen cannot switch anything on, and does not pretend to. It is the
 evidence somebody would need in order to argue that those requirements should change, and it
 says so where a reader will see it.
@@ -1456,23 +1456,22 @@ says so where a reader will see it.
 2. Every decision in a period is read, and the figures worked out from them: the share taken as
    recommended, the share changed, how far they were changed, how long they took, and what that
    adds up to in hours and money.
-3. Those decisions are grouped by how sure the system said it was, and that is compared against
-   how often a person agreed. **That comparison is the point of the screen.**
+3. Legacy decisions that carry the retired subjective score are grouped by that score and
+   compared against how often a person agreed. New decisions are omitted from that legacy panel.
 3a. The same decisions are also cut four ways, and each part reports the share that went out
    untouched. Three of the cuts are things known *before* anybody looks at a claim — what the
    merchant said was damaged, what they said caused it, and who carried the parcel — because a
    cut by something the investigation produced could only describe work already done. The fourth
-   is how sure the system said it was.
+   is the retired subjective score and therefore applies only to legacy data.
 
    The useful thing is the spread inside a group rather than any one number, so the service
    works that spread out, says it in words, and puts the groups in order of it. A group at the
    top sorts the work before anybody starts on it; one at the bottom says that way of sorting
    claims does not help, which is an answer rather than a gap. This is the part that tells a
    reader **which claims come back ready and which need a person**.
-4. A handful of candidate rules are scored — claims under a certain value, where the system was
-   more than a certain amount sure — and for each, how much of the work it would cover and how
-   often people agreed with it. They are scored. None is chosen, and there is no button next to
-   any of them.
+4. The legacy data also scores candidate rules that combine claim value with the retired score.
+   None is chosen, and there is no button next to any of them. This calculation needs a replacement
+   based on current inputs before it can say anything about new investigations.
 5. The screen draws the first three of those, and adds nothing.
 
 **Step 4 is worked out and not shown.** The table of candidate rules was on the screen and was
@@ -1566,8 +1565,8 @@ second as the first is the one badly wrong outcome.
 service that would produce real ones is built but unused, so the whole feature is currently a
 picture of what this would look like rather than a measurement of anything. The record store is
 half a feature — the half that reads. The hourly rate and the AI cost are numbers we chose. The
-confidence comparison is only as good as the invented data behind it, and on real data it might
-show something quite different. See [Future production](#future-production).
+legacy confidence comparison is only as good as the invented data behind it and receives no new
+scores. See [Future production](#future-production).
 
 **Where the code is** — What the screen actually uses:
 `web/src/analysis/demoFigures.ts` holds the figures and says they are invented,
@@ -1596,7 +1595,7 @@ that exists (FR-C.1, FR-R.13).
 
 1. A claim is investigated exactly as before. Nothing about the investigation changes.
 2. When it finishes, each damaged product's findings are written into a structured **report**.
-   The default view leads with the next action, confidence, and amount or immediate request.
+   The default view leads with the next action and amount or immediate request.
    Supporting reasoning, concerns, images, evidence, questions, context, and amount working are
    grouped under labelled expanders. Any applicable merchant email is a separate second output.
 3. A claim the quick checks stopped is written up the same way, from its own reasons. It has no
@@ -1621,7 +1620,7 @@ stage that sends an approved email does not exist yet, so an approval stops at b
   prose report and no Markdown parsing step. The applicable merchant email is stored separately
   from the report content and rendered once.
 - **The default view is intentionally small.** It contains what the representative needs to act:
-  next action, confidence, approved amount or immediate request, and a short reason. Complete
+  next action, approved amount or immediate request, and a short reason. Complete
   supporting detail remains one click away in labelled sections rather than inside a nested
   scrolling document.
 - **What the merchant said was wrong is read out of their own description**, using the reader
@@ -1635,7 +1634,7 @@ stage that sends an approved email does not exist yet, so an approval stops at b
   read.
 - **Approving is the only way out, and it is final.** A report can go back and forth as often as
   a representative likes, but once approved it cannot be reopened, sent back, or approved again
-  differently. Nothing else can approve one: no time limit, no level of confidence, no number of
+  differently. Nothing else can approve one: no time limit, no automated score, no number of
   rounds.
 - **Approving twice is safe.** A double click, or a retry after a slow reply, leaves one decision
   rather than two. Two *different* notes sent back on the same report are two decisions, and both
@@ -2703,11 +2702,9 @@ finds in production.
   clearest gap between what the system promises about consistency and what it can actually
   deliver, and the honest defence is that the parts that decide money and outcomes are not the
   parts that vary.
-- **The confidence figure now withholds real payments.** It is the AI's own opinion of how sure it
-  is, nothing in this system has ever checked it against what turned out to be true, and the level
-  we compare it against is a number we invented. A model that is confidently wrong will say so
-  confidently, and a model that is habitually modest will send good claims to a person for no
-  reason.
+- **Subjective confidence no longer controls payments.** The agent is not asked to score its own
+  certainty; uncertainty has to appear in the evidence, concerns, and reasoning a representative
+  can actually inspect.
 - **A mistake in our own loop reaches a rep as a blank error.** Spending more steps than the
   budget allows is treated as a fault in our code rather than an outcome for the claim, and
   nothing translates it into an answer. Safe, in that no claim is ever paid or closed by it, but
@@ -2738,11 +2735,10 @@ finds in production.
   question about the stream rather than the layout: a talkative model on a claim with several
   products makes a larger reply, and nothing anywhere says how large is too large.
 
-- **The confidence comparison is only as good as the data under it.** The analysis screen puts how
-  sure the system said it was next to how often a representative agreed, which is the check nobody
-  has ever run on that figure. On the invented data it shows the system flattering itself at the
-  top of the range. On real data it might show the opposite, or nothing at all, and the screen
-  would report that just as confidently. The panel is a way of asking the question, not an answer.
+- **The legacy confidence comparison no longer receives new data.** The static analysis demo can
+  still draw it for old invented records, but current investigations do not produce a subjective
+  score. It must be replaced with a measure based on observable evidence before this screen can
+  describe current operation.
 
 - **The candidate rules could be read as an offer.** They are scored and labelled, there is no
   switch beside any of them, the verdict carries no colour, and the caveat naming FR-2.9 travels

@@ -1,4 +1,4 @@
-"""The four judgements made once the evidence is all in, and how sure each one is.
+"""The four judgements made once the evidence is all in.
 
 Having all four pieces of evidence is not the same as having a claim worth paying.
 Once the evidence is present and usable, four questions have to be answered
@@ -12,13 +12,7 @@ Once the evidence is present and usable, four questions have to be answered
 These are **assessments the system reports, with its reasoning**, not verdicts that
 settle the claim. A rep has to be able to disagree with any single one of them
 without throwing away the other three, which is why each carries its own words and
-its own confidence rather than the four being rolled into a score (FR-2.3).
-
-Confidence is the honest part of this file and the weakest. It is the model's own
-opinion of how sure it is, and we use it to withhold recommendations of payment
-(FR-1.15) because there is nothing better to use — not because it has ever been
-checked against what turned out to be true. DESIGN.md says so under "Future
-production", and it should stay said.
+is not rolled into a single score (FR-2.3).
 
 Nothing here reaches out to anything.
 """
@@ -76,7 +70,7 @@ rep can see what was considered rather than inferring it from silence (FR-2.3).
 
 
 class Assessment(BaseModel):
-    """One of the four judgements: what was concluded, why, and how sure.
+    """One of the four judgements: what was concluded and why.
 
     `passed` is the judgement itself. `reasoning` is the sentence a rep reads to
     decide whether they agree, and is the whole point of the shape — a bare yes or
@@ -93,7 +87,9 @@ class Assessment(BaseModel):
     name: AssessmentName
     passed: bool
     reasoning: str
-    confidence: Confidence
+    # Kept nullable so reports written before subjective confidence was removed
+    # remain readable. New agent assessments leave it empty.
+    confidence: Confidence | None = None
     attachment_ids: tuple[str, ...] = ()
 
 
@@ -132,15 +128,16 @@ def failed(assessments: Sequence[Assessment]) -> tuple[AssessmentName, ...]:
 
 
 def lowest_confidence(assessments: Sequence[Assessment]) -> float | None:
-    """The least confident of the assessments, or `None` if there are none.
+    """The least historical confidence value, or `None` if none was recorded.
 
     This is the figure a recommendation of payment is tested against: a claim is
     only as well established as its weakest judgement, so averaging would let one
     confident answer cover for a shaky one (FR-1.15).
 
-    `None` means there is nothing to test, which the caller must not read as
-    "confident" — an investigation that assessed nothing has not cleared anything.
+    New agent assessments intentionally have no confidence value. Completeness is
+    checked separately by `all_answered`; absence here is not itself a failure.
     """
-    if not assessments:
-        return None
-    return min(assessment.confidence for assessment in assessments)
+    reported = [
+        assessment.confidence for assessment in assessments if assessment.confidence is not None
+    ]
+    return min(reported) if reported else None

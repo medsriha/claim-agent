@@ -61,7 +61,6 @@ from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.prompts import build_triage_messages
 from claim_agent.agent.schemas import ClaimSplit
 from claim_agent.agent.tools import LIST_ATTACHMENTS, ImageInspection, investigation_tools
-from claim_agent.domain.assessment import Confidence
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, MatchOutcome, build_claim_lines
 from claim_agent.domain.evidence import (
     SHARED_EVIDENCE,
@@ -124,8 +123,6 @@ class AttachmentClassification(BaseModel):
         problem: Why the image cannot be relied on, and `None` when it can. For an
             `UNUSABLE` image these are words the merchant could act on; for an
             `UNREADABLE` one they describe a fault on our side.
-        confidence: How sure the reading was, from 0 to 1. `None` when the image was
-            never successfully looked at, so there is nothing to be sure about.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -135,7 +132,6 @@ class AttachmentClassification(BaseModel):
     state: EvidenceState
     observed: str
     problem: str | None = None
-    confidence: Confidence | None = None
 
 
 class ClaimTriage(BaseModel):
@@ -176,8 +172,8 @@ class ClaimTriage(BaseModel):
             could not finish" both mean the claim needs a person (NFR-4).
         attachment_classifications: What each image the pass looked at turned out to
             be. An image looked at more than once appears once.
-        split: What the pass concluded, in its own words — its reasoning and how sure
-            it was. `None` when the pass gave up before concluding, and then
+        split: What the pass concluded, in its own words. `None` when the pass gave up
+            before concluding, and then
             `ambiguity` holds the reason.
         ledger: Every step the pass took, in order, so a representative can audit how
             the split was reached (NFR-3). Present even when the pass gave up: what
@@ -430,8 +426,8 @@ def _classification_of(output: object) -> AttachmentClassification | None:
         return None
 
     if artifact.state is EvidenceState.UNREADABLE:
-        # Ours, not the merchant's. Nothing was seen, so there is no kind and no
-        # confidence — only the fact that we could not look (NFR-4).
+        # Ours, not the merchant's. Nothing was seen, only the fact that we could
+        # not look (NFR-4).
         return AttachmentClassification(
             attachment_id=artifact.attachment_id,
             state=EvidenceState.UNREADABLE,
@@ -452,7 +448,6 @@ def _classification_of(output: object) -> AttachmentClassification | None:
         state=EvidenceState.UNUSABLE if not observation.is_legible else EvidenceState.PRESENT,
         observed=observation.shows,
         problem=observation.problem,
-        confidence=observation.confidence,
     )
 
 

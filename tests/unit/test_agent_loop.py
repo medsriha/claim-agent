@@ -43,7 +43,7 @@ def budget_of(*, steps: int = 6, retries: int = 1) -> RunBudget:
 
 def a_split(reasoning: str = "The claim is for one bottle.") -> ClaimSplit:
     """A filled-in triage form, standing in for whatever the model would really say."""
-    return ClaimSplit(reasoning=reasoning, confidence=0.9)
+    return ClaimSplit(reasoning=reasoning)
 
 
 def a_conclusion() -> InvestigationConclusion:
@@ -52,7 +52,6 @@ def a_conclusion() -> InvestigationConclusion:
         evidence=(),
         recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
         reasoning="Nothing was established.",
-        confidence=0.4,
         email_subject="About your claim",
         email_body="We are looking into it.",
     )

@@ -196,7 +196,7 @@ def _claim_clarification(
         state=ReportState.AWAITING_REVIEW,
         recommendation=recommendation,
         amount_usd=None,
-        confidence=triage.split.confidence if triage.split is not None else None,
+        confidence=None,
         carrier=_carrier(screening),
         defect_type=described.defect_type,
         damage_type=described.damage_type,

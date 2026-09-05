@@ -244,13 +244,14 @@ def test_evidence_nobody_found_is_written_down_rather_than_left_out() -> None:
 # --- The four questions, and the ones nobody answered (FR-2.3) ---------------
 
 
-def test_an_assessment_carries_its_reasoning_and_how_sure_it_was() -> None:
+def test_an_assessment_carries_its_reasoning_without_a_confidence_score() -> None:
     """FR-2.3: a rep has to be able to disagree with one answer without discarding the rest."""
     document = rendered()
 
     assert "damage visible" in document
     assert "The crack runs the length of the bottle." in document
-    assert "0.95" in document
+    assert "How sure" not in document
+    assert "0.95" not in document
 
 
 def test_questions_nobody_answered_are_said_to_be_unanswered() -> None:

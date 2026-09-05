@@ -389,8 +389,10 @@ def _reasons_to_withhold_approval(
         )
 
     assessment_confidence = lowest_confidence(assessments)
-    weakest = None if assessment_confidence is None else min(confidence, assessment_confidence)
-    if weakest is None or weakest < policy.min_assessment_confidence:
+    weakest = (
+        confidence if assessment_confidence is None else min(confidence, assessment_confidence)
+    )
+    if weakest < policy.min_assessment_confidence:
         withheld.append((OverrideReason.NOT_CONFIDENT_ENOUGH, _confidence_clause(weakest, policy)))
 
     not_priceable = _why_not_priceable(line, amount)
