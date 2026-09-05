@@ -1,5 +1,3 @@
-"""Fetching the pictures a merchant attached, so a model can look at them (FR-1.4)."""
-
 from __future__ import annotations
 
 import asyncio

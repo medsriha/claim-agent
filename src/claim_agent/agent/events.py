@@ -1,5 +1,3 @@
-"""What the investigation says about itself while it is still working."""
-
 from __future__ import annotations
 
 import asyncio

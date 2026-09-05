@@ -1,5 +1,3 @@
-"""Finishing the merchant email with the capped amount, and refusing invented money."""
-
 from __future__ import annotations
 
 import re

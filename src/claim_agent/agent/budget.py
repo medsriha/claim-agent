@@ -1,5 +1,3 @@
-"""The bounds one investigation run works inside, so that it always stops (FR-1.3)."""
-
 from __future__ import annotations
 
 from enum import StrEnum

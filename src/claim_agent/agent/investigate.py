@@ -1,5 +1,3 @@
-"""Layer 1b — look into one whole claim and hand a representative a decision (FR-1b.1)."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
