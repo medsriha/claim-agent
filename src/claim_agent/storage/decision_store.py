@@ -1,25 +1,3 @@
-"""Every review action a representative has taken, kept so it can be counted later.
-
-A decision is a fact about what a person chose at a moment, so nothing here edits one. Writing
-the same decision twice replaces it rather than adding a second copy, which makes an id one
-event rather than one row — every rate worked out from this store would be wrong otherwise.
-
-There is one way to remove decisions, and it removes all of them. It exists because a
-development tool invents this history and invented history has to be removable (FR-C.8), not
-because anything in the service ever needs to forget a decision.
-
-Only one kind of question is ever asked of this store — *what was decided between these two
-moments* — because everything built on it reports on a period. So the whole record is kept as
-text in one column, with only the moment broken out beside it, and the counting happens in
-Python over what comes back. That is the same shape the store of past claims uses, and for the
-same reason: nothing needs to search inside a record.
-
-**Nothing in the service writes to this store yet.** The stage where a representative decides is
-not built, so on a fresh machine this store is empty and every figure worked out from it is
-honestly zero. A development tool fills it with invented history so the screen can be shown
-(FR-C.8), and that tool says so in its own words.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

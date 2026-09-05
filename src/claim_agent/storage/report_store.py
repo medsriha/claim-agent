@@ -1,31 +1,3 @@
-"""The reports representatives decide from, kept so they can be fetched back.
-
-Until this store existed, everything an investigation established lived only in the reply to the
-request that asked for it: close the page and it was gone, and there was nothing for a
-representative to approve later or for anyone to audit afterwards (NFR-3, NFR-5).
-
-**A report keeps every version of itself.** `report_id` names a report and `(report_id, version)`
-names one telling of it, because reworking a report around a representative's feedback has to
-leave the version they were looking at intact (FR-R.13). That stage is not built, so every report
-here is version 1 today — which is exactly why every read that does not name a version has to ask
-for the highest one rather than assuming there is only one.
-
-**Only one thing about a stored report ever changes**, and that is where its review has got to. It
-changes by writing the row again with a new copy of the report, never by editing what the report
-says. A report is the account of something that already happened; the account of who changed its
-state lives in the record of decisions next door.
-
-**This store fails loudly.** A claim whose reports could not be read must not come back as a claim
-with no reports — those look identical on a screen and mean entirely different things, and a
-representative has no way to tell them apart. That is the choice merchant memory makes, and the
-opposite of the one the store of past claims makes: there, an answer of "we could not look" is
-still an answer a claim can carry on without, and here it is not.
-
-The whole record is kept as text in one column with only the fields a query needs beside it, which
-is the shape the store of past claims uses and for the same reason: nothing searches inside a
-report.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

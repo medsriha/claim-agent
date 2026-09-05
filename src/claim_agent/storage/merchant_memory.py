@@ -1,20 +1,3 @@
-"""What a support rep has already corrected on a merchant's earlier claims.
-
-When a rep changes something the system recommended — the wrong product picked
-out, an amount that should not have been paid — that correction is worth keeping.
-The next time the same merchant files a claim, the investigation starts knowing
-about it, so the same correction does not have to be made twice (FR-0.5,
-FR-3.8). ShipBob has no endpoint that stores this, so the service remembers it
-itself.
-
-Merchants are identified by their account number, which never changes, and never
-by the brand name shown on the case, which is display text and can be edited
-(FR-3.8).
-
-A merchant we have nothing on is the ordinary case, not a problem: a claim from a
-merchant who has never needed correcting simply carries no notes.
-"""
-
 from __future__ import annotations
 
 import sqlite3

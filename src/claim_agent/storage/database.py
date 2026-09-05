@@ -1,22 +1,3 @@
-"""The single file on disk where this service keeps what it has to remember.
-
-Some things cannot be looked up in ShipBob because ShipBob has nowhere to put
-them. Today that is two things: the corrections a support rep made on a merchant's
-earlier claims, which the next claim from that merchant should start out knowing
-about (FR-0.5, FR-3.8); and a record of every damaged product whose claim has been
-closed, so a later claim like one of them can be handled the same way (FR-S.1).
-
-Those go into one SQLite database file. SQLite is a database that lives entirely
-in a single file, with no server to run alongside the service. It was chosen
-because it survives a restart, needs nothing installed, and can be opened and
-read by hand when someone wants to see what is actually stored.
-
-This module owns two things only: what tables exist, and how the file is opened
-and closed safely. What goes in the tables is decided next door. The file and its
-tables are created the first time anything uses them, so there is no setup step
-for anyone to forget.
-"""
-
 from __future__ import annotations
 
 import sqlite3
