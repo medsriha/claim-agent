@@ -23,6 +23,9 @@ from tests.fixtures.shipbob import (
     CASE_1003,
     CASE_1004,
     CASE_1005,
+    CONSTRUCTED_INSURED_SUBCATEGORY_CASE,
+    CONSTRUCTED_INSURED_SUBCATEGORY_ORDER,
+    CONSTRUCTED_INSURED_SUBCATEGORY_SHIPMENT,
     NOT_FOUND_BODY,
     ORDER_1001,
     ORDER_1002,
@@ -97,6 +100,53 @@ async def test_a_case_with_no_evidence_still_proceeds(
     assert response.status_code == 200
     assert response.json()["verdict"] == "proceed"
     assert response.json()["terminal_reasons"] == []
+
+
+async def test_a_carrier_suffix_on_the_handled_claim_type_still_proceeds(
+    client: AsyncClient, shipbob: respx.Router
+) -> None:
+    """Claim-type routing accepts details appended after the configured prefix."""
+    carrier_specific_case = {
+        **CASE_1001,
+        "sub_category": "Claim | Damaged in Transit by USPS",
+    }
+    mock_shipbob(
+        shipbob,
+        case=carrier_specific_case,
+        shipment=SHIPMENT_1001,
+        order=ORDER_1001,
+    )
+
+    response = await client.post("/cases/CASE-1001/preflight")
+
+    assert response.status_code == 200
+    assert response.json()["verdict"] == "proceed"
+    assert response.json()["terminal_reasons"] == []
+
+
+async def test_an_insured_claim_type_routes_out_when_the_shipment_flag_is_false(
+    client: AsyncClient, shipbob: respx.Router
+) -> None:
+    """An insured subtype takes precedence over ShipBob's false shipment flag."""
+    mock_shipbob(
+        shipbob,
+        case=CONSTRUCTED_INSURED_SUBCATEGORY_CASE,
+        shipment=CONSTRUCTED_INSURED_SUBCATEGORY_SHIPMENT,
+        order=CONSTRUCTED_INSURED_SUBCATEGORY_ORDER,
+    )
+
+    response = await client.post("/cases/CASE-9003/preflight")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["verdict"] == "terminal"
+    assert body["terminal_reasons"] == ["shipment_insured"]
+    assert body["report"]["requires_rep_clarification"] is True
+    assert body["report"]["drafted_email"] is None
+
+    insurance_gate = next(gate for gate in body["gates"] if gate["gate"] == "insurance")
+    assert insurance_gate["observed"]["is_insured"] == "no"
+    assert insurance_gate["observed"]["claim_type_indicates_insured"] == "yes"
 
 
 async def test_a_stopped_claim_is_a_success_with_a_report_and_an_email(

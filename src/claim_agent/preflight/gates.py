@@ -27,6 +27,7 @@ logs or running anything again (NFR-3):
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import datetime
 
@@ -76,6 +77,9 @@ _DELIVERY_SOURCE_LABELS = {
 The stored value is a short code the rest of the code matches on; a
 representative reading the result should see words instead.
 """
+
+_INSURED_WORD = re.compile(r"\binsured\b", re.IGNORECASE)
+"""Match an insured claim-type marker without treating "uninsured" as insured."""
 
 
 def resolve_delivered_date(record: CaseRecord) -> DeliveryDate:
@@ -196,12 +200,11 @@ def check_age(delivery: DeliveryDate, case: Case, policy: Policy) -> GateResult:
 def check_claim_type(case: Case, policy: Policy) -> GateResult:
     """Check this is a damaged-in-transit claim, the only kind handled here (FR-0.2).
 
-    The claim type has to match the handled one exactly, once capitals and extra
-    spaces are ignored — those are typing, not meaning. Anything that merely
-    *starts* with the right words is deliberately not a match: a type such as
-    "Claim | Damaged in Transit - Insured" is a different thing entirely, and
-    letting it through would send an insured claim down a path insured claims
-    must never take. That is the worst mistake available in this layer.
+    The claim type has to start with the handled one, once capitals and extra
+    spaces are ignored — those are typing, not meaning. ShipBob can append more
+    detail, such as "by USPS", without changing the underlying claim type. An
+    insured suffix also clears this gate, but the separate insurance gate sees
+    the word "insured" and routes that claim to the insurance process.
 
     A claim that does not say what type it is fails the same way as a claim of
     the wrong type. There is no third answer: we cannot handle what we cannot
@@ -219,13 +222,16 @@ def check_claim_type(case: Case, policy: Policy) -> GateResult:
     handled = policy.damaged_in_transit_sub_category
     claim_type = case.sub_category
     compared = _for_comparison(claim_type) if claim_type is not None else None
-    matches = compared is not None and compared == _for_comparison(handled)
+    handled_compared = _for_comparison(handled)
+    matches = (
+        bool(handled_compared) and compared is not None and compared.startswith(handled_compared)
+    )
 
     observed = {
         "claim_type": _text(claim_type),
         "claim_type_compared": _text(compared),
         "handled_claim_type": handled,
-        "handled_claim_type_compared": _for_comparison(handled),
+        "handled_claim_type_compared": handled_compared,
     }
 
     if matches:
@@ -334,11 +340,12 @@ def check_key_information(record: CaseRecord, policy: Policy) -> GateResult:
     )
 
 
-def check_insurance(shipment: Shipment | None) -> GateResult:
-    """Check the parcel was not insured, because insured parcels go elsewhere (FR-0.2).
+def check_insurance(shipment: Shipment | None, claim_type: str | None = None) -> GateResult:
+    """Check the claim is not insured, because insured claims go elsewhere (FR-0.2).
 
-    An insured parcel is claimed on its insurance and follows a completely
-    different process, so it has to be routed away rather than investigated here.
+    The claim type is an insurance signal as well as the shipment's ``is_insured``
+    field. ShipBob can return false for the field while marking the claim type as
+    insured, and either signal has to route the claim away from this process.
 
     A parcel record we do not have fails this check too, citing missing
     information. "Insured parcels must never be processed here" only holds if an
@@ -349,15 +356,32 @@ def check_insurance(shipment: Shipment | None) -> GateResult:
     Args:
         shipment: The parcel record, or nothing when the claim named no parcel or
             ShipBob could not give us one.
+        claim_type: The type recorded on the claim. The standalone word
+            "insured" marks the claim as insured, regardless of capitalization.
 
     Returns:
         The outcome, recording whether the parcel record was available and what
-        it said about insurance.
+        it said about insurance and whether the claim type marked it as insured.
     """
+    claim_type_indicates_insured = bool(claim_type and _INSURED_WORD.search(claim_type))
     observed = {
         "shipment_record": "read" if shipment is not None else "not available",
         "is_insured": _yes_or_no(shipment.is_insured) if shipment is not None else NOT_KNOWN,
+        "claim_type": _text(claim_type),
+        "claim_type_indicates_insured": _yes_or_no(claim_type_indicates_insured),
     }
+
+    if claim_type_indicates_insured:
+        return GateResult(
+            gate=GateName.INSURANCE,
+            passed=False,
+            reason=TerminalReason.SHIPMENT_INSURED,
+            explanation=(
+                f'This claim was filed as "{claim_type}", which marks it as insured. '
+                "Insured claims are routed through a different process."
+            ),
+            observed=observed,
+        )
 
     if shipment is None:
         return GateResult(
@@ -416,7 +440,7 @@ def evaluate_gates(
         check_age(delivery, record.case, policy),
         check_claim_type(record.case, policy),
         check_key_information(record, policy),
-        check_insurance(record.shipment),
+        check_insurance(record.shipment, record.case.sub_category),
     )
 
 

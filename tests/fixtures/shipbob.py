@@ -515,9 +515,9 @@ CONSTRUCTED_LOST_IN_TRANSIT_ORDER = order_payload(
     created_date="2026-02-27T10:00:00.000+0000",
 )
 
-# A claim type that begins with the handled one and is still a different thing. Matching
-# claim type by "starts with" would let this through, and an insured claim must never be
-# processed here (FR-0.2, gates 2 and 4). It is the trap case for that check.
+# A claim type that begins with the handled one and carries an insurance marker. It clears
+# the prefix-based claim-type gate, then the insurance gate must route it away even when
+# the shipment's is_insured field is false (FR-0.2, gates 2 and 4).
 CONSTRUCTED_INSURED_SUBCATEGORY_CASE = case_payload(
     case_id="CASE-9003",
     sub_category="Claim | Damaged in Transit - Insured",

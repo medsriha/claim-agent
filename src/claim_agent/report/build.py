@@ -266,12 +266,20 @@ def _one_product(
             amount=line.amount,
             concerns=line.concerns,
             requested_details=line.requested_details,
+            finding_summary=_finding_summary(line),
             corrections_considered=(
                 line.conclusion.corrections_considered if line.conclusion is not None else ()
             ),
         ),
         created_at=at,
     )
+
+
+def _finding_summary(line: LineInvestigation) -> str:
+    """Keep the agent's concise finding while merchant asks remain in the email only."""
+    if line.conclusion is not None and line.conclusion.reasoning.strip():
+        return line.conclusion.reasoning.strip()
+    return line.outcome.explanation
 
 
 def siblings_of(report: Report, claim: ClaimView) -> tuple[SiblingLine, ...]:

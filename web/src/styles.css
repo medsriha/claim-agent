@@ -1266,11 +1266,17 @@ p {
 }
 
 .line-key-finding,
+.line-next-step,
 .line-detail-copy {
   margin: 0;
   color: var(--sb-ink);
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.line-next-step {
+  margin-top: 0.45rem;
+  color: var(--sb-ink-soft);
 }
 
 .line-detail-copy {

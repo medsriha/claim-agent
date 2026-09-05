@@ -84,10 +84,10 @@ class Policy(BaseSettings):
     )
     damaged_in_transit_sub_category: str = Field(
         default="Claim | Damaged in Transit",
-        description="The only claim type handled here, matched exactly (FR-0.2). PROVISIONAL.",
+        description="Claim-type prefix handled here (FR-0.2). PROVISIONAL.",
         # Offered as a choice on the panel rather than typed, because a claim type is
-        # matched exactly and a typo here turns every claim away. Still a plain string, so
-        # the environment can set one this list has never seen.
+        # matched from this prefix and a typo here turns every claim away. Still a plain
+        # string, so the environment can set one this list has never seen.
         json_schema_extra={"options": list(KNOWN_CLAIM_SUB_CATEGORIES)},
     )
     min_description_length: int = Field(

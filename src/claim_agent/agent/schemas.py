@@ -302,7 +302,9 @@ class InvestigationConclusion(BaseModel):
     recommendation: Recommendation = Field(description="What you recommend doing about this line.")
     reasoning: str = Field(
         description=(
-            "One or two short sentences giving the decision basis without retelling every finding."
+            "One or two short sentences giving the decision basis without retelling every finding "
+            "or listing requested_details. This is the findings summary a representative sees "
+            "beside the next step; the exact merchant requests appear in the email instead."
         )
     )
     recommended_amount_usd: str | None = Field(

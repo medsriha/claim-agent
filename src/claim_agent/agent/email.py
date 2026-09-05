@@ -252,6 +252,46 @@ _DRAFT_MARKER_PATTERN = re.compile(rf"\b(?:{'|'.join(_DRAFT_MARKERS)})\b", re.IG
 Every space in them is written as "any whitespace", so a phrase that happens to fall
 across two lines is still found."""
 
+_REQUEST_WORD_PATTERN = re.compile(r"[a-z0-9]+(?:'[a-z]+)?", re.IGNORECASE)
+_REQUEST_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "about",
+        "concerning",
+        "for",
+        "from",
+        "in",
+        "of",
+        "on",
+        "or",
+        "please",
+        "provide",
+        "regarding",
+        "send",
+        "that",
+        "the",
+        "this",
+        "to",
+        "which",
+        "with",
+        "your",
+    }
+)
+_REQUEST_WORD_ALIASES = {
+    "photograph": "photo",
+    "photographs": "photo",
+    "photos": "photo",
+}
+"""Small wording normalization used only to avoid appending a request twice.
+
+The investigation often writes a natural sentence around a requested detail: "regarding"
+instead of "about", or "photograph" instead of "photo". Requiring a literal substring made
+the safety net append the same request again. Content words still have to overlap strongly, so
+a genuinely omitted request continues to be appended.
+"""
+
 
 EmailWording = InvestigationConclusion | ClaimSplit
 """A structured agent answer that carries merchant email wording."""
@@ -359,7 +399,7 @@ def finish_email(
             # deterministic request instead of telling the merchant they were approved.
             subject = "More information needed for your damage claim"
             body = "We need some additional information before we can complete your claim."
-        missing_from_body = [detail for detail in details if detail.lower() not in body.lower()]
+        missing_from_body = [detail for detail in details if not _request_is_covered(detail, body)]
         if missing_from_body:
             requested = "\n".join(f"- {detail}" for detail in missing_from_body)
             body = f"{body.rstrip()}\n\nPlease provide:\n{requested}"
@@ -371,6 +411,37 @@ def finish_email(
         )
 
     return DraftedEmail(to=contact_email, subject=subject, body=body)
+
+
+def _request_is_covered(detail: str, body: str) -> bool:
+    """Recognize a requested detail already expressed naturally in the email body."""
+    normalized_detail = " ".join(detail.lower().split())
+    normalized_body = " ".join(body.lower().split())
+    if normalized_detail in normalized_body:
+        return True
+
+    wanted = _request_words(detail)
+    if not wanted:
+        return False
+    units = re.split(r"\n+|(?<=[.!?])\s+", body)
+    for unit in units:
+        expressed = _request_words(unit)
+        shared = wanted & expressed
+        required_overlap = 1.0 if len(wanted) < 4 else 0.8
+        if len(shared) / len(wanted) >= required_overlap:
+            return True
+    return False
+
+
+def _request_words(value: str) -> set[str]:
+    """Reduce request wording to the content words used by the coverage check."""
+    words: set[str] = set()
+    for raw in _REQUEST_WORD_PATTERN.findall(value.replace(chr(0x2019), "'")):
+        word = raw.lower().removesuffix("'s")
+        if word in _REQUEST_STOP_WORDS:
+            continue
+        words.add(_REQUEST_WORD_ALIASES.get(word, word))
+    return words
 
 
 def money_the_model_wrote(text: str) -> tuple[str, ...]:

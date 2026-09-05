@@ -144,7 +144,7 @@ def test_a_yes_or_no_is_described_as_a_yes_or_no() -> None:
 
 
 def test_the_claim_type_is_described_as_a_choice_not_a_text_box() -> None:
-    """FR-0.2, FR-0.7: the claim type is matched exactly, so it is picked, not typed.
+    """FR-0.2, FR-0.7: the claim-type prefix is picked rather than typed.
 
     A typo in this value turns every claim away at the claim-type check, which is the
     reason it is offered as a list rather than a box.

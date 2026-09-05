@@ -405,6 +405,8 @@ export interface InvestigationReportContent {
   readonly amount: AmountDerivation;
   readonly concerns: readonly string[];
   readonly requested_details: readonly string[];
+  /** Concise findings; exact merchant asks live in the drafted email instead. */
+  readonly finding_summary: string | null;
   readonly corrections_considered: readonly string[];
 }
 

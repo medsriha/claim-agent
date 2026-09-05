@@ -41,7 +41,12 @@ class EmailWording(BaseModel):
 
 
 class InvestigationReportContent(BaseModel):
-    """Settled findings for one damaged product, ready for a UI to lay out."""
+    """Settled findings for one damaged product, ready for a UI to lay out.
+
+    `finding_summary` keeps the investigation's concise decision basis separate from the
+    itemized merchant request. It is optional so reports stored before this field was added
+    remain readable; their UI can fall back to the deterministic outcome explanation.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -55,6 +60,7 @@ class InvestigationReportContent(BaseModel):
     amount: AmountDerivation
     concerns: tuple[str, ...]
     requested_details: tuple[str, ...] = ()
+    finding_summary: str | None = None
     corrections_considered: tuple[str, ...] = ()
 
 

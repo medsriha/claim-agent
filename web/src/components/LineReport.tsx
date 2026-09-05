@@ -33,38 +33,21 @@ function ClarificationContent({
   content: ClarificationReportContent;
   recommendation: Report["recommendation"];
 }): React.JSX.Element {
-  const asksMerchant = recommendation === "request_info";
-
   return (
     <div className="structured-report">
-      <section className="line-priority">
-        <h4 className="line-section">
-          {asksMerchant ? "Needed from the merchant" : "Representative action needed"}
-        </h4>
-        {asksMerchant && content.requested_details.length > 0 && (
+      <FindingsAndNextSteps finding={content.ambiguity} recommendation={recommendation} />
+
+      {content.candidate_lines.length > 0 && (
+        <details className="line-details">
+          <summary className="line-details-summary">Possible products considered</summary>
+          <h4 className="line-section">Possible products</h4>
           <ul className="line-list">
-            {content.requested_details.map((detail) => (
-              <li key={detail}>{detail}</li>
+            {content.candidate_lines.map((line) => (
+              <li key={line.claim_line_id}>{line.claimed.name}</li>
             ))}
           </ul>
-        )}
-        {!asksMerchant && <p className="line-key-finding">{shortSummary(content.ambiguity)}</p>}
-      </section>
-
-      <details className="line-details">
-        <summary className="line-details-summary">Why this action is needed</summary>
-        <p className="line-detail-copy">{content.ambiguity}</p>
-        {content.candidate_lines.length > 0 && (
-          <>
-            <h4 className="line-section">Possible products</h4>
-            <ul className="line-list">
-              {content.candidate_lines.map((line) => (
-                <li key={line.claim_line_id}>{line.claimed.name}</li>
-              ))}
-            </ul>
-          </>
-        )}
-      </details>
+        </details>
+      )}
 
       {content.attachments.length > 0 && (
         <details className="line-details">
@@ -98,30 +81,10 @@ function InvestigationContent({
         </p>
       )}
 
-      {outcome.recommendation === "request_info" && content.requested_details.length > 0 && (
-        <section className="line-priority">
-          <h4 className="line-section">Needed from the merchant</h4>
-          <ul className="line-list">
-            {content.requested_details.map((detail) => (
-              <li key={detail}>{detail}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {outcome.recommendation === "request_rep_clarification" && (
-        <section className="line-priority">
-          <h4 className="line-section">Representative action needed</h4>
-          <p className="line-key-finding">
-            {shortSummary(concerns[0] ?? outcome.explanation)}
-          </p>
-        </section>
-      )}
-
-      <details className="line-details">
-        <summary className="line-details-summary">Why this recommendation was made</summary>
-        <p className="line-detail-copy">{outcome.explanation}</p>
-      </details>
+      <FindingsAndNextSteps
+        finding={content.finding_summary ?? outcome.explanation}
+        recommendation={outcome.recommendation}
+      />
 
       {concerns.length > 0 && (
         <details className="line-details">
@@ -179,6 +142,37 @@ function InvestigationContent({
       </details>
     </div>
   );
+}
+
+function FindingsAndNextSteps({
+  finding,
+  recommendation,
+}: {
+  finding: string;
+  recommendation: Report["recommendation"];
+}): React.JSX.Element {
+  return (
+    <section className="line-priority">
+      <h4 className="line-section">Findings and next steps</h4>
+      <p className="line-key-finding">{finding}</p>
+      <p className="line-next-step">
+        <strong>Next:</strong> {nextStepFor(recommendation)}
+      </p>
+    </section>
+  );
+}
+
+function nextStepFor(recommendation: Report["recommendation"]): string {
+  switch (recommendation) {
+    case "approve":
+      return "Review the recommendation and amount, then send the approval email if they are correct.";
+    case "request_info":
+      return "Send the drafted email, then resume the review when the merchant provides the missing or corrected information.";
+    case "request_rep_clarification":
+      return "Resolve the internal uncertainty before deciding whether the merchant needs to be contacted.";
+    default:
+      return "Review the findings and decide how the claim should proceed.";
+  }
 }
 
 function AttachmentGallery({
@@ -294,17 +288,6 @@ function ScreeningContent({
       </details>
     </div>
   );
-}
-
-/** Keep the default report view scannable while preserving the complete wording below it. */
-function shortSummary(value: string, limit = 220): string {
-  const beforeNumberedDetail = value.split(/\s+\(\d+\)/u, 1)[0]?.trim() ?? value.trim();
-  if (beforeNumberedDetail.length <= limit) {
-    return beforeNumberedDetail;
-  }
-  const shortened = beforeNumberedDetail.slice(0, limit + 1);
-  const lastSpace = shortened.lastIndexOf(" ");
-  return `${shortened.slice(0, lastSpace > 0 ? lastSpace : limit).trimEnd()}…`;
 }
 
 function ReportContext({

@@ -448,6 +448,50 @@ def test_a_request_that_needs_no_figure_is_finished_untouched() -> None:
     assert email.to == "ops@merchant.example"
 
 
+def test_naturally_reworded_requests_are_not_appended_a_second_time() -> None:
+    """The safety net recognizes the same ask despite harmless wording differences."""
+    details = (
+        "A photograph of the outer box the order arrived in, even if it appears undamaged",
+        "The two image files referenced in the customer's email about the L Carnitine, "
+        "which were not included with the claim",
+    )
+    body = """Before we can complete our review, please send the following:
+
+- A photograph of the outer box the order arrived in, even if the box itself appears undamaged.
+- The two image files referenced in your customer's email regarding the L Carnitine, which were not included with the claim.
+
+Once we have these, we will continue our review."""
+
+    email = finish_email(
+        a_conclusion(body=body, recommendation=Recommendation.REQUEST_INFO),
+        recommendation=Recommendation.REQUEST_INFO,
+        amount=None,
+        contact_email="ops@merchant.example",
+        requested_details=details,
+    )
+
+    assert email.body == body
+    assert "Please provide:" not in email.body
+
+
+def test_a_genuinely_omitted_request_is_still_appended() -> None:
+    """Fuzzy duplicate detection must not weaken the complete-request guarantee."""
+    missing = "a photograph of the damaged Blue Razz Liquid Carnitine"
+
+    email = finish_email(
+        a_conclusion(
+            body="Please send the invoice for this order.",
+            recommendation=Recommendation.REQUEST_INFO,
+        ),
+        recommendation=Recommendation.REQUEST_INFO,
+        amount=None,
+        contact_email="ops@merchant.example",
+        requested_details=("the invoice for this order", missing),
+    )
+
+    assert email.body.endswith(f"Please provide:\n- {missing}")
+
+
 def test_every_piece_of_evidence_has_merchant_facing_wording() -> None:
     """FR-1.7: a request names the specific gap, so a fifth kind cannot arrive unworded."""
     assert set(MISSING_EVIDENCE_WORDING) == set(EvidenceKind)

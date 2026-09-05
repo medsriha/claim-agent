@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from tests.fixtures.shipbob import CASE_1001, ORDER_1001, SHIPMENT_1001
+from tests.unit.test_agent_investigate import a_conclusion
 from tests.unit.test_report_render import a_context, a_line, a_stopped_claim
 
 from claim_agent.agent.budget import BudgetSnapshot
@@ -182,6 +183,33 @@ def test_a_report_carries_what_was_recommended_and_for_how_much() -> None:
     assert report.amount_usd == Decimal("52.00")
     assert report.state is ReportState.AWAITING_REVIEW
     assert report.decided is None
+
+
+def test_a_report_keeps_findings_separate_from_the_itemized_merchant_request() -> None:
+    """The report summarizes why; the email alone presents every requested item."""
+    finding = "The evidence is incomplete and the invoice does not correspond to this shipment."
+    detail = "an invoice corresponding to this shipment"
+    line = a_line(
+        conclusion=a_conclusion(reasoning=finding),
+        outcome=a_line().outcome.model_copy(
+            update={
+                "recommendation": Recommendation.REQUEST_INFO,
+                "recommended_by_agent": Recommendation.REQUEST_INFO,
+            }
+        ),
+        requested_details=(detail,),
+    )
+    investigation = ClaimInvestigation(
+        case_id=CASE.case_id,
+        triage=a_triage((COLLAGEN, "COLLAGEN1")),
+        lines=(line,),
+    )
+
+    (report,) = build_investigation_reports(a_passing_screening(), investigation, at=A_MOMENT)
+
+    assert isinstance(report.content, InvestigationReportContent)
+    assert report.content.finding_summary == finding
+    assert report.content.requested_details == (detail,)
 
 
 def test_a_report_embeds_the_claim_image_urls_for_the_representative() -> None:

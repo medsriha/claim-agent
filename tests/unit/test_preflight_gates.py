@@ -310,16 +310,21 @@ def test_fr_0_2_a_lost_in_transit_claim_is_the_wrong_kind() -> None:
     assert gate.observed["claim_type"] == "Claim | Lost in Transit"
 
 
-def test_fr_0_2_a_claim_type_that_merely_starts_with_the_right_words_is_turned_away() -> None:
-    """A type ending "- Insured" is a different thing altogether.
+@pytest.mark.parametrize(
+    "claim_type",
+    [
+        "Claim | Damaged in Transit by USPS",
+        "Claim | Damaged in Transit - Insured",
+    ],
+)
+def test_fr_0_2_claim_type_details_after_the_handled_prefix_are_accepted(
+    claim_type: str,
+) -> None:
+    """ShipBob can append routing detail without changing the underlying claim type."""
+    gate = check_claim_type(case_from(case_payload(sub_category=claim_type)), Policy())
 
-    Matching on the opening words would send an insured claim down the one path
-    insured claims must never take, which is the worst mistake available here.
-    """
-    gate = check_claim_type(case_from(CONSTRUCTED_INSURED_SUBCATEGORY_CASE), Policy())
-
-    assert not gate.passed
-    assert gate.reason is TerminalReason.WRONG_CLAIM_TYPE
+    assert gate.passed
+    assert gate.reason is None
 
 
 @pytest.mark.parametrize(
@@ -491,6 +496,33 @@ def test_fr_0_2_an_insured_parcel_is_routed_away() -> None:
     assert gate.observed["is_insured"] == "yes"
 
 
+@pytest.mark.parametrize(
+    "claim_type",
+    [
+        "Claim | Damaged in Transit - Insured",
+        "Claim | INSURED Damaged in Transit",
+    ],
+)
+def test_fr_0_2_an_insured_claim_type_overrides_a_false_shipment_flag(
+    claim_type: str,
+) -> None:
+    """The claim type can carry the insurance marker when the shipment flag does not."""
+    gate = check_insurance(shipment_from(SHIPMENT_1001), claim_type)
+
+    assert not gate.passed
+    assert gate.reason is TerminalReason.SHIPMENT_INSURED
+    assert gate.observed["is_insured"] == "no"
+    assert gate.observed["claim_type_indicates_insured"] == "yes"
+
+
+def test_fr_0_2_insured_must_be_a_word_in_the_claim_type() -> None:
+    """Uninsured contains the same letters but must not route to the insured team."""
+    gate = check_insurance(shipment_from(SHIPMENT_1001), "Claim | Uninsured Damage")
+
+    assert gate.passed
+    assert gate.observed["claim_type_indicates_insured"] == "no"
+
+
 def test_fr_0_2_a_parcel_we_do_not_have_fails_because_its_insurance_is_unknown() -> None:
     """Passing a claim because nobody told us it was insured is the outcome this
     check exists to prevent (NFR-4)."""
@@ -548,6 +580,19 @@ def test_fr_0_2_a_claim_that_clears_everything_has_no_reason_to_be_stopped() -> 
 
     assert all(gate.passed for gate in gates)
     assert terminal_reasons(gates) == ()
+
+
+def test_fr_0_2_an_insured_claim_type_is_routed_out_when_the_shipment_says_false() -> None:
+    """Both claim signals reach the endpoint-level gate evaluation."""
+    record = record_of(
+        CONSTRUCTED_INSURED_SUBCATEGORY_CASE,
+        shipment_payload(shipment_id="990000003", order_id="990000003", is_insured=False),
+        order_payload(order_id="990000003", user_id="990000003"),
+    )
+
+    gates = evaluate_gates(record, resolve_delivered_date(record), Policy())
+
+    assert terminal_reasons(gates) == (TerminalReason.SHIPMENT_INSURED,)
 
 
 def test_fr_0_3_reasons_come_back_in_a_fixed_order_led_by_insurance() -> None:

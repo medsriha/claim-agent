@@ -33,7 +33,7 @@ class PolicyValueKind(StrEnum):
     dollars and cents. `FRACTION` is a number between nothing and one, used for a
     confidence level. `TEXT` is words. `CHOICE` is words too, but picked from a list
     the service supplies rather than typed — the claim type we handle is one, because
-    it is matched exactly and a typo would turn every claim away. `BOOLEAN` is a yes
+    it is used as a prefix and a typo would turn every claim away. `BOOLEAN` is a yes
     or no.
 
     Every claim threshold today is one of these six. A value that is a list — an
