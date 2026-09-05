@@ -1,9 +1,3 @@
-"""The shapes a claim is made of: times, money, and the fields that may be missing.
-
-Day counting lives in the same package and is checked here too, because the age
-check that decides whether a claim is too old rests on it (FR-0.2).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta, timezone

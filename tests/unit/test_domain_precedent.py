@@ -1,12 +1,3 @@
-"""Capturing a claim we investigated, and scoring how alike two claims are (FR-S.1 to FR-S.7).
-
-Everything here is pure: no database, no clock, no model. The point of these tests
-is that similarity is a matter of degree rather than a matching exercise — two
-claims resemble each other through wording, kind of product, price and the shape of
-the evidence, and none of those has to agree exactly for the pair to be the closest
-thing in the store.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

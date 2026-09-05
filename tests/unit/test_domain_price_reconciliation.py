@@ -1,23 +1,3 @@
-"""Holding ShipBob's prices up against the prices on the customer's own receipt.
-
-The four sample claims that came with any evidence at all disagree with ShipBob's records
-about money — every single one of them — so the first four tests here are those four
-claims, with their real figures. They are the reason this comparison exists: a claim
-settled from ShipBob's $195.94 when the customer paid $134.99 overpays by sixty dollars,
-and nothing else in the system would notice.
-
-ShipBob's side of each of those four is taken from the shared sample records rather than
-retyped, so a test here and a test anywhere else can never disagree about what an order
-holds. The receipt side was read off the attachment images. **The figures on it are real;
-the wording on some of the lines was not recorded, and where that is so the test says so
-in its own docstring.**
-
-The rest of the file is the behaviour around the edges: two documents that agree, a gap
-sitting either side of the threshold, a product code that matches nothing, an empty
-document, and the case this system is never allowed to resolve — one line that could be
-two (FR-1.13).
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal

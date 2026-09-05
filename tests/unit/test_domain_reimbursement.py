@@ -1,25 +1,3 @@
-"""What a claim is recommended for: the investigation's figure, held to the cap.
-
-The investigation decides what the damage is worth. This module does two things to that
-figure and nothing else — reads it as exact money, and refuses to let it exceed the
-reimbursement cap — so the tests come in two halves.
-
-**The cap.** The only limit on a recommended amount, and the one thing here no
-investigation can talk its way past (FR-1.20).
-
-**Reading the figure.** Money arrives as text and is parsed. Anything that is not money is
-refused rather than interpreted, because a payout somebody had to guess at is worse than no
-payout at all.
-
-The items are still read off the invoice, but only as context now — what the goods cost,
-shown beside what is being recommended for them. Those tests are still here because
-matching a claimed product to an invoice line is unchanged and still easy to get wrong.
-
-The invoice used almost everywhere is the one REQUIREMENTS.md quotes in full for
-`POST /invoices/generate`: two items, $38.00 and $52.00. The $0.00 promotional insert card
-comes from CASE-1005's real order.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

@@ -1,12 +1,3 @@
-"""Reading what a merchant's own words ask for, by keyword rather than by a model.
-
-Both real quotes this module was built for get their own test: CASE-1004's request for a
-part, not the whole item, and CASE-1002's either/or between a refund and the package sent
-again. The rest cover the honest default — `unclear` — and the practical limits the module
-docstring already admits to: only the first occurrence of "replace" is read, and only a
-bounded amount of text is scanned at all.
-"""
-
 from __future__ import annotations
 
 from claim_agent.domain.remedy import RemedyKind, classify_remedy
