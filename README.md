@@ -3,14 +3,6 @@
 Backend service that investigates ShipBob damaged-in-transit claims and returns a structured
 report plus a drafted merchant email. The agent recommends and a representative decides.
 
-## Demo
-
-<img src="media/demo.webp" alt="Walkthrough of a claim moving from investigation to a representative's decision" width="760">
-
-The 1 minute 39 second walkthrough, at 4x speed. See a claim move from investigation to a
-representative's decision, including the evidence, recommendation, drafted reply, and feedback
-workflow.
-
 ## Run it
 
 ```bash
@@ -38,3 +30,7 @@ docker compose down       # add -v to drop what the service remembered
 ```bash
 docker compose run --rm api pytest
 ```
+
+## Demo
+
+<img src="media/demo.webp" alt="Walkthrough of a claim moving from investigation to a representative's decision" width="500">
