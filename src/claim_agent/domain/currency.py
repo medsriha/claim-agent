@@ -1,36 +1,3 @@
-"""Which money a claim is written in, and what it is worth in dollars.
-
-The reimbursement cap is a dollar figure: a claim may be reimbursed at most $100
-(FR-1.20). ShipBob's records give us prices, and **they never say what currency those
-prices are in.** There is no currency field anywhere in the API. A price arrives as the
-bare number `52.00`, and until now this system read every one of them as dollars.
-
-That is a real hole and not a theoretical one. One of the sample claims ships by Royal
-Mail on a tracking number ending `GB`, and the merchant's own order screen — a
-photograph attached to the claim — reads **£55.95**. Its order totals `90.00`. Read as
-dollars that is comfortably inside the cap. Read as pounds it is over it. The same
-claim, the same records, two different answers about whether a representative may
-approve it.
-
-So this module does two separate jobs, and keeping them separate matters:
-
-1. **Working out which currency a claim is in**, from the few clues the data actually
-   carries — a symbol somebody photographed, the country a tracking number ends in, the
-   carrier's name. None of these is authoritative. Two that disagree produce an
-   *ambiguous* answer and no winner, because quietly picking one is how you mis-cap real
-   money (FR-1.13).
-2. **Converting a figure to dollars**, from a fixed rate table, so the cap can be
-   applied to it.
-
-**No requirement covers any of this.** REQUIREMENTS.md does not mention currency, and
-neither does ShipBob's API documentation. Everything here was worked out from reading
-the sample data, and the rates in `policy.py` are placeholders somebody has to sign off.
-DESIGN.md records that under "Reading money that is not in dollars".
-
-**Nothing here decides a claim.** It reports what it found and how sure it is. A claim
-whose currency nobody can establish goes to a person (NFR-4).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

@@ -1,15 +1,3 @@
-"""Counting days between two moments, and reading a date somebody wrote down.
-
-Two jobs, and they sit together because both are about turning a date into something a
-claim can be judged on.
-
-Counting the days is the older of the two and answers the age limit (FR-0.2). Reading a
-written date is newer and answers no requirement at all: it exists because one sample
-claim's evidence carries the email header `Wed 11/02/2026`, which is 11 February to most
-of the world and 2 November in the United States. The age limit is measured from a date
-like that one, so the reading you take decides the answer. See `read_written_date`.
-"""
-
 from __future__ import annotations
 
 import re
