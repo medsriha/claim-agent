@@ -1,10 +1,3 @@
-"""What the analysis screen is sent, and what it must never have to work out.
-
-The rule these tests defend is that the browser turns a number into a length and does nothing
-else (FR-1.21, NFR-2). Anything a chart needs — the scale, the cumulative edges of a stack, the
-words beside every figure — has to be in the reply already.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

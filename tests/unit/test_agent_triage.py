@@ -1,21 +1,3 @@
-"""Layer 1a: working out which products a claim is for, and settling shared evidence.
-
-Nothing here reaches the network and nothing here needs a key. ShipBob and the image
-storage are both answered by a stand-in running in the same process, and the model
-answers from a script the test writes beforehand. That is also what makes these tests
-about the triage rather than about the model: the answers are fixed, so what is left
-to observe is what the triage does with them.
-
-The attachment listings are ShipBob's own, from `tests/fixtures/attachments.py`, so a
-test here is written against the images a real claim actually carries — including
-CASE-1005, which has none at all.
-
-**The script has to be read as one queue.** The same scripted model answers the
-pass's turns *and* the questions about images, in the order they are asked: a turn
-that asks to look at two images spends three replies — the turn itself, then one
-answer per image.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator, Sequence

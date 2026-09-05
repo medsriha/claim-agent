@@ -1,11 +1,3 @@
-"""The arithmetic behind the analysis screen.
-
-No requirement asks for any of this, so nothing here carries a requirement id of its own. The
-requirements that do bear on it are named where they apply: FR-C.1 for the two populations,
-FR-C.7 for the value bands, FR-1.15 for the confidence level, NFR-1 for getting the same answer
-twice.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

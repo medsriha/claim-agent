@@ -1,14 +1,3 @@
-"""Investigating a whole claim: the split, then the one run that answers for it.
-
-What is checked here is what happens *around* the investigation rather than inside it:
-that a claim nobody could split is investigated not at all, that the images and the
-invoice are read once however many products there are, that precedent arrives before
-the run starts, and that the whole thing narrates itself on one stream.
-
-Everything is driven by a scripted model. Nothing reaches Anthropic and nothing needs
-a key, so the same script always produces the same claim (NFR-1).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
