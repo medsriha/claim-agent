@@ -1,6 +1,3 @@
-# What the screen's image does not need. `npm ci` installs from the lock file, so a
-# node_modules copied in from this machine would only be thrown away again.
-
 node_modules/
 dist/
 .env
