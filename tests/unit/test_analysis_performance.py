@@ -81,7 +81,7 @@ def test_the_four_ways_a_decision_can_go_add_up_to_the_total_exactly_once() -> N
         investigated(email_edited=True),
         investigated(
             action=RepAction.APPROVED_WITH_OVERRIDE,
-            decided=Proposal(outcome=Recommendation.DENY, amount_usd=None),
+            decided=Proposal(outcome=Recommendation.REQUEST_REP_CLARIFICATION, amount_usd=None),
         ),
         investigated(action=RepAction.SENT_BACK),
     ]
@@ -106,7 +106,7 @@ def test_a_changed_decision_that_was_also_reworded_is_counted_as_changed_only() 
             investigated(
                 action=RepAction.APPROVED_WITH_OVERRIDE,
                 email_edited=True,
-                decided=Proposal(outcome=Recommendation.DENY, amount_usd=None),
+                decided=Proposal(outcome=Recommendation.REQUEST_REP_CLARIFICATION, amount_usd=None),
             )
         ]
     )

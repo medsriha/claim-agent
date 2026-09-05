@@ -42,8 +42,8 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
     deliberately not a prefix, or `"Claim | Damaged in Transit - Insured"` would be let through.
   - **Be aware:** `missing_key_information` currently covers three different problems, including
     "neither record has a delivery date", which a merchant cannot fix. See DESIGN.md.
-  - **Be aware:** an insured parcel is now *routed out* rather than answered — the write-up is
-    marked for escalation and no merchant email mentions insurance. FR-0.2 says insured shipments
+  - **Be aware:** an insured parcel is now *routed out* rather than answered — the write-up asks
+    the representative for clarification and no merchant email mentions insurance. FR-0.2 says insured shipments
     are "routed out, never processed here"; FR-0.4 says every ineligible claim is closed with an
     explanation to the merchant and does not except this one. Reading the two together is our
     interpretation, and it is listed among DESIGN.md's questions.
@@ -63,15 +63,15 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
   - **Conclusion:** written from fixed sentences with the claim's real numbers filled in — no AI,
     so an ineligible claim costs three reads and nothing more (NFR-8). The report carries all four
     gate results, so a rep can see what passed rather than infer it from silence.
-  - **Be aware:** an insured claim is the exception — it carries an escalation and no email,
-    because no email explains insurance. A claim that is insured *and* stopped for another reason
-    carries both, and the rep chooses which to act on. The report refuses to exist in any other
-    combination: an email with nothing to say, or a reason the merchant could be told with no
-    email, is a mistake in our own code and is rejected on construction.
+  - **Be aware:** an insured claim is the exception — it requests rep clarification and has no email,
+    because no email explains insurance. That action takes priority even when another gate also
+    failed, so the report never combines a rep clarification request with merchant wording. Invalid
+    action/email combinations are rejected on construction.
   - **Be aware:** this shape is still scoped to Layer 0 and was **not** extended. Layer 2
     reconciled the two by reading from it: a stopped claim's write-up is rendered into the same
-    report a rep decides from, behind the same head, naming no product. Nothing here changed. Nothing is stored and nothing is sent — the email is a draft on an object, and
-    the word "draft" is deliberately absent from its text so a marker can never reach a merchant.
+    report a rep decides from, behind the same head, naming no product. The report is persisted;
+    nothing is sent. Any email remains a draft, and the word "draft" is deliberately absent from
+    its text so a marker can never reach a merchant.
 
 - [x] FR-0.5 — Order value, high-value flag, days since delivery, and the merchant's past
   corrections, computed once and passed on.
@@ -274,28 +274,29 @@ still unticked below.
     image the merchant uploaded. Which document each rule means is our reading, and the
     real data shows the two genuinely disagree — see DESIGN.md's questions.
 
-- [x] FR-1.12 — A failed judgement produces a recommendation to go back to the merchant,
-  naming the reason.
+- [x] FR-1.12 — A failed judgement requests representative clarification, naming what is wrong.
   - **Be aware:** a question answered "no" and a question *never answered* are different
     problems and no longer share a label. An unanswered question is our unfinished work,
-    so it goes to a person; only a genuine "no" reaches the merchant.
+    so it goes to the representative; a genuine "no" also stays internal and produces no email.
 
 - [x] FR-1.13 — Where the damaged item is ambiguous, the system asks instead of choosing.
   - **Conclusion:** CASE-1002 is the real example and the photographs bear it out — a
     broken CleanBoss bottle whose label does not say which of two 24oz products at
     different prices it is.
 
-- [x] FR-1.14 — One of four outcomes, and nothing else.
-  - **Conclusion:** the agent picks it, including refusing a claim. The rules only ever
-    withhold a payment the requirements forbid, and what the agent recommended is kept
-    beside the result so a rep can see where the two differed.
+- [x] FR-1.14 — Confidence plus one of three next actions, and nothing else.
+  - **Conclusion:** `approve`, `request_info`, or `request_rep_clarification`. Escalation and
+    denial are not outcomes. The rules can withhold a payment the requirements forbid, and what
+    the agent proposed is kept beside the result so a rep can see where the two differed.
 
 - [x] FR-1.15 — Never recommend approval under uncertainty.
+  - **Conclusion:** both the overall action confidence shown on the report and the weakest
+    supporting assessment must clear the policy threshold before approval can stand.
   - **Be aware:** the confidence figure is the model's own opinion of itself, nothing has
     ever checked it against what turned out to be true, and the threshold is a number we
     invented. It now withholds real payments. This is the weakest link in the layer.
 
-- [x] FR-1.16 — An exhausted budget escalates, carrying whatever was established.
+- [x] FR-1.16 — An exhausted budget requests rep clarification, carrying whatever was established.
   - **Conclusion:** exhaustion is an *answer*, not an error, which is why the budget is
     polled rather than raising — an exception would unwind the stack holding the findings.
 
@@ -305,7 +306,7 @@ still unticked below.
     a merchant. The subject is checked too.
 
 - [x] FR-1.18 — The amount is priced from the invoice.
-  - **Be aware:** a shipment ShipBob will not price escalates with that as the stated
+  - **Be aware:** a shipment ShipBob will not price requests rep clarification with that as the stated
     reason. It never falls back to the order's prices — they happen to be identical in the
     sample data, and silently swapping the source would put a figure in front of a rep
     that did not come from where the report says it came from.
@@ -353,36 +354,38 @@ still unticked below.
 
 ## Layer 2 — The report
 
-**Read this first.** The report is a **markdown document**, not a set of fields. The AI answers in
-fixed fields as it always did and a pure function writes those into what a representative reads.
-That was asked for, and it is why FR-2.10 below is deliberately unticked. Do not "fix" it by adding
-a structured shape beside the document — see DESIGN.md and CLAUDE.md's decisions.
+**Read this first.** The agent returns two distinct outputs: one structured **claim report** and,
+when the action is merchant-facing, one **email draft**. The backend persists the report fields and
+conditional email separately within the report record, and the UI renders each once. There is no
+second prose document and no Markdown to parse back into data.
 
-Reports are written down only when a claim is **investigated**. Asking for a screening on its own
-keeps nothing.
+Reports are written down by the investigation endpoint, including the claim-level report for a
+claim stopped by screening. Asking for screening alone still keeps nothing.
 
-- [x] FR-2.1 — the recommendation and the amount lead the report, worded as something a
+- [x] FR-2.1 — confidence, the next action, and any approved amount lead the report, worded as something a
   representative is deciding on rather than something that happened.
-  - **Conclusion:** a claim the quick checks stopped recommends **nothing** — the four
-    recommendations are about a damaged product and it has none. `domain/decision.py` had already
+  - **Conclusion:** `request_info` reports also carry a structured list of the exact merchant
+    details needed, which the UI shows before the supporting evidence.
+  - **Conclusion:** a claim the quick checks stopped recommends **nothing** — the three
+    actions are about a damaged product and it has none. `domain/decision.py` had already
     ruled this for a decision, so the report follows it rather than inventing a mapping.
   - **Be aware:** what the representative settled on is kept beside what was advised, so a report
     approved at a different figure never shows only the old one.
 - [x] FR-2.2 — all four pieces of evidence, each naming the image it came from.
   - **Be aware:** a piece nobody found is written out as missing rather than left off, so a gap is
     seen rather than inferred from silence.
+  - The structured report embeds every attachment URL and the UI renders the images with a
+    full-size link, so a representative need not leave the report to inspect its evidence.
 - [x] FR-2.3 — each question with its reasoning and how sure it was.
-  - **Be aware:** a question **missing** from the table was never answered, which is not the same
-    as answered no. The report says so in words underneath, because a reader counting three rows
-    would otherwise have to guess.
+  - **Be aware:** a question **missing** from the structured list was never answered, which is not
+    the same as answered no. The UI says so rather than making a reader infer it.
 - [x] FR-2.4 — which items at which prices, from which document, and what the limit did.
   - **Be aware:** it is written even where nothing would be paid — "nothing, and here is why" is
     something a representative can act on. The figure is the AI's judgement of the damage, not the
     sum of the prices shown; the prices are there to weigh it against.
 - [x] FR-2.5 — concerns, and never silence.
-  - **Conclusion:** a report with nothing worrying says so in words rather than showing an empty
-    heading. A stopped claim's findings are rendered as its concerns, which is the only way that
-    kind of report has anything to put here.
+  - **Conclusion:** a report with nothing worrying says so rather than showing an empty heading.
+    A stopped claim carries its own reasons and findings in screening content.
 - [x] FR-2.5a — decidable at a glance, checkable below.
   - **Conclusion:** recommendation, amount and concerns first; evidence, questions, working and the
     email under them. A test pins the order rather than trusting it.
@@ -394,11 +397,11 @@ keeps nothing.
   corrections are both on the report. What is missing is the third clause: `corrections_considered`
   gives *which* past correction changed the conclusion and can never say *how*, because that is all
   the AI is asked for. Widening what it is asked for is the work left.
-- [x] FR-2.7 — the merchant's email, in the exact wording that would be sent.
-  - **Be aware:** it sits inside a fenced block so nothing in a reader can reinterpret a character
-    of it. A rewording by a representative is shown in full underneath, because after a rewording
-    that is the wording. There is nowhere to send a *recipient* from — who hears about a claim
-    comes from the claim.
+- [x] FR-2.7 — the conditional merchant email, in the exact wording that would be sent.
+  - **Conclusion:** approval emails communicate the approved amount; information requests name
+    the specific details the merchant must provide; rep-clarification reports carry no email.
+  - **Be aware:** it is a separate structured field rendered once by the report card. A rewording
+    replaces its subject and body, while its recipient always comes from the claim.
 - [ ] FR-2.8 — **two of the three actions.** Approving works, and so does rewording the email
   before approving (which is a flag on the approval, not an action of its own — FR-2.8 reads it
   that way and `RepAction` already said so). Sending a report back records the note and parks the
@@ -421,10 +424,9 @@ keeps nothing.
   - **Be aware:** it shows each product at the version in force, never every version of every one.
     Layer R is unbuilt so every report is version 1 today, which is exactly why this was easy to
     get wrong.
-- [ ] FR-2.10 — **deliberately not met.** The report is prose, because that is what was asked for.
-  A screen can show the writing and cannot lay out its parts, sort them, or fold one away. Ticking
-  this means writing the report a second way, as structured fields, rather than adjusting what is
-  there. See DESIGN.md under **Could break**.
+- [x] FR-2.10 — the persisted report contains structured screening or investigation content. The
+  UI lays out those fields directly; the investigation result does not also send a prose report or
+  a second raw investigation object for the UI to render.
 
 ## Layer R — Revision
 

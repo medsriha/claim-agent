@@ -164,13 +164,23 @@ def test_an_email_is_still_written_when_the_case_has_no_contact_address() -> Non
 
 def test_every_finished_email_is_marked_unsent() -> None:
     """FR-1.17: nothing this file produces can describe itself as already sent."""
-    for recommendation in Recommendation:
+    for recommendation in (Recommendation.APPROVE, Recommendation.REQUEST_INFO):
         amount = an_amount("52.00") if recommendation is Recommendation.APPROVE else None
+        body = (
+            f"We will refund {AMOUNT_PLACEHOLDER}."
+            if recommendation is Recommendation.APPROVE
+            else "Please send a photo of the damaged product."
+        )
         email = finish_email(
-            a_conclusion(recommendation=recommendation),
+            a_conclusion(recommendation=recommendation, body=body),
             recommendation=recommendation,
             amount=amount,
             contact_email="ops@merchant.example",
+            requested_details=(
+                ("a photo of the damaged product",)
+                if recommendation is Recommendation.REQUEST_INFO
+                else ()
+            ),
         )
         assert email.is_draft is True
 
@@ -350,6 +360,7 @@ def test_a_marker_left_where_no_figure_can_go_is_refused() -> None:
             recommendation=Recommendation.REQUEST_INFO,
             amount=None,
             contact_email="ops@merchant.example",
+            requested_details=("a photo of the outer shipping box",),
         )
 
     assert refusal.value.details["recommendation"] == "request_info"
@@ -363,13 +374,13 @@ def test_a_marker_is_refused_on_a_non_approval_even_when_an_amount_was_worked_ou
     """
     conclusion = a_conclusion(
         body=f"We will refund {AMOUNT_PLACEHOLDER}.",
-        recommendation=Recommendation.ESCALATE,
+        recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
     )
 
     with pytest.raises(ModelOutputRejectedError):
         finish_email(
             conclusion,
-            recommendation=Recommendation.ESCALATE,
+            recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
             amount=an_amount("52.00"),
             contact_email="ops@merchant.example",
         )
@@ -401,18 +412,17 @@ def test_an_approval_whose_amount_comes_to_nothing_is_refused() -> None:
         )
 
 
-def test_an_email_that_never_mentions_a_figure_is_accepted() -> None:
-    """FR-2.7: a thinner email is not a dangerous one, and refusing it would cost a good claim."""
+def test_an_approval_email_that_never_mentions_the_amount_is_refused() -> None:
+    """An approval email must communicate the exact amount the report approved."""
     conclusion = a_conclusion(body="We have approved your claim and a credit is on its way.")
 
-    email = finish_email(
-        conclusion,
-        recommendation=Recommendation.APPROVE,
-        amount=an_amount("52.00"),
-        contact_email="ops@merchant.example",
-    )
-
-    assert email.body == "We have approved your claim and a credit is on its way."
+    with pytest.raises(ModelOutputRejectedError):
+        finish_email(
+            conclusion,
+            recommendation=Recommendation.APPROVE,
+            amount=an_amount("52.00"),
+            contact_email="ops@merchant.example",
+        )
 
 
 def test_a_request_that_needs_no_figure_is_finished_untouched() -> None:
@@ -427,6 +437,7 @@ def test_a_request_that_needs_no_figure_is_finished_untouched() -> None:
         recommendation=Recommendation.REQUEST_INFO,
         amount=None,
         contact_email="ops@merchant.example",
+        requested_details=("a photo of the outer shipping box",),
     )
 
     assert email.body == "Please send a photo of the outer shipping box."

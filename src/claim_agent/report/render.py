@@ -1,4 +1,8 @@
-"""Turning what was established into the report a representative actually reads.
+"""Optional Markdown export for structured investigation findings.
+
+The application does not persist or serve this rendering. Its canonical report is structured
+data and the UI owns the representative-facing layout; this adapter remains available only for a
+caller that explicitly needs a copyable Markdown export.
 
 The AI answers in fixed fields and the rules produce more fields beside them. This file turns all
 of that into one written document (FR-2.1 to FR-2.7). Nothing here decides anything, reads a
@@ -36,8 +40,9 @@ from claim_agent.report.models import EmailWording
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
     Recommendation.APPROVE: "Approve — pay this product",
     Recommendation.REQUEST_INFO: "Request information — go back to the merchant",
-    Recommendation.DENY: "Deny — refuse this product",
-    Recommendation.ESCALATE: "Escalate — hand this product to a person",
+    Recommendation.REQUEST_REP_CLARIFICATION: (
+        "Representative clarification needed — resolve what is incorrect or ambiguous"
+    ),
 }
 """Each recommendation as a heading a representative reads, rather than as its stored name.
 
@@ -108,7 +113,10 @@ def render_stopped_claim(report: TerminalReport, *, case: Case) -> str:
         _concerns(report.findings),
         _claim_context(report.context, considered=()),
         _the_four_checks(report.gates),
-        _the_merchant_email(report.drafted_email, escalating=report.requires_escalation),
+        _the_merchant_email(
+            report.drafted_email,
+            needs_rep_clarification=report.requires_rep_clarification,
+        ),
     ]
     return "\n\n".join(section for section in sections if section)
 
@@ -417,7 +425,9 @@ def _how_the_amount_was_reached(amount: AmountDerivation, recommended: Recommend
     return "\n".join(lines)
 
 
-def _the_merchant_email(email: DraftedEmail | None, *, escalating: bool = False) -> str:
+def _the_merchant_email(
+    email: DraftedEmail | None, *, needs_rep_clarification: bool = False
+) -> str:
     """Show the exact wording that would go to the merchant, and nothing else (FR-2.7).
 
     Inside a fenced block, so that a reader's markdown cannot reinterpret a character of what a
@@ -429,7 +439,7 @@ def _the_merchant_email(email: DraftedEmail | None, *, escalating: bool = False)
     know rather than something to discover on approving.
     """
     if email is None:
-        if escalating:
+        if needs_rep_clarification:
             return (
                 "## The merchant's email\n\n"
                 "There is none. This claim is routed out rather than answered, and no email "
@@ -462,7 +472,7 @@ def _why_the_claim_was_stopped(report: TerminalReport) -> str:
     """
     reasons = "\n".join(f"- {_in_words(str(reason))}" for reason in report.reasons)
     lines = ["## Why this claim was stopped", "", reasons]
-    if report.requires_escalation:
+    if report.requires_rep_clarification:
         lines += [
             "",
             "**This claim has to be routed out rather than answered.** The parcel was insured, "

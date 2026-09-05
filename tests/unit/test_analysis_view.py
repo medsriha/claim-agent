@@ -126,7 +126,7 @@ def test_a_stacked_band_carries_its_cumulative_top_edge_already_added_up() -> No
         investigated(
             decision_id="c",
             action=RepAction.APPROVED_WITH_OVERRIDE,
-            decided=Proposal(outcome=Recommendation.DENY, amount_usd=None),
+            decided=Proposal(outcome=Recommendation.REQUEST_REP_CLARIFICATION, amount_usd=None),
         ),
         investigated(decision_id="d", action=RepAction.SENT_BACK),
     ]

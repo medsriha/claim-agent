@@ -1,9 +1,8 @@
-"""Turning a finished screening or investigation into reports somebody can act on.
+"""Turning settled findings into structured reports somebody can act on.
 
 One report per damaged product, and one for a claim the quick checks turned away before it ever
-had products in it (FR-2.1, FR-0.4). Everything a representative reads is written here into the
-report's own words; the few fields beside it are the ones a screen and the record of a decision
-have to work with rather than read.
+had products in it (FR-2.1, FR-0.4). Every fact remains a named field so the UI can construct the
+report without parsing or receiving a prose document.
 
 Nothing here judges anything. Every recommendation, figure and concern was settled before this
 was called, and this only writes them down.
@@ -18,10 +17,18 @@ from claim_agent.agent.investigate import LineInvestigation
 from claim_agent.agent.run import ClaimInvestigation
 from claim_agent.domain.case_facts import read_case_facts
 from claim_agent.domain.decision import DecisionStage
-from claim_agent.domain.models import Case, UtcDatetime
+from claim_agent.domain.models import Attachment, Case, UtcDatetime
+from claim_agent.domain.outcome import Recommendation
 from claim_agent.preflight.models import ClaimContext, PreflightResult
-from claim_agent.report.models import ClaimView, Report, ReportState, SiblingLine
-from claim_agent.report.render import render_investigated_product, render_stopped_claim
+from claim_agent.report.models import (
+    ClaimView,
+    ClarificationReportContent,
+    InvestigationReportContent,
+    Report,
+    ReportState,
+    ScreeningReportContent,
+    SiblingLine,
+)
 
 
 def report_id_for_claim(case_id: str) -> str:
@@ -46,7 +53,7 @@ def build_screening_report(screening: PreflightResult, *, at: UtcDatetime) -> Re
     and a stopped claim never gets there — so this report is about the whole claim, and names no
     product.
 
-    It also recommends nothing. The four recommendations are about a damaged product and there is
+    It also recommends nothing. The three actions are about a damaged product and there is
     none; its reasons are what it has to say instead, and turning them into a recommendation would
     be the system inventing an answer nobody gave.
 
@@ -69,6 +76,7 @@ def build_screening_report(screening: PreflightResult, *, at: UtcDatetime) -> Re
         case_id=screening.case_id,
         claim_line_id=None,
         product_name=None,
+        account_name=screening.record.case.account_name,
         user_id=screening.report.user_id,
         stage=DecisionStage.SCREENING,
         state=ReportState.AWAITING_REVIEW,
@@ -82,7 +90,13 @@ def build_screening_report(screening: PreflightResult, *, at: UtcDatetime) -> Re
         decided=None,
         decisions_taken=0,
         drafted_email=screening.report.drafted_email,
-        markdown=render_stopped_claim(screening.report, case=screening.record.case),
+        content=ScreeningReportContent(
+            context=screening.report.context,
+            reasons=screening.report.reasons,
+            findings=screening.report.findings,
+            gates=screening.report.gates,
+            requires_rep_clarification=screening.report.requires_rep_clarification,
+        ),
         created_at=at,
     )
 
@@ -98,11 +112,10 @@ def build_investigation_reports(
     One report each, because approval is per product and each is approved or sent back on its own
     (FR-3.1a).
 
-    **A claim whose split could not be settled produces no reports.** Nothing was established about
-    any product, because nothing may be investigated while it is unclear which products are being
-    claimed for (FR-1a.4) — so there is nothing to recommend and nothing to approve. The claim
-    still needs a person, and today the only place that is said is the reply the investigation
-    streams back. DESIGN.md lists it as a gap rather than this inventing a report about nothing.
+    **A claim whose split could not be settled produces one claim-level clarification report.**
+    Nothing was established about any product, because nothing may be investigated while it is
+    unclear which products are being claimed for (FR-1a.4). The report therefore names the
+    ambiguity and asks the representative to clarify it without inventing a product or an email.
 
     Args:
         screening: What the quick checks established, read for the claim itself and for the facts
@@ -111,18 +124,63 @@ def build_investigation_reports(
         at: When these reports are being written.
 
     Returns:
-        One report per damaged product, in the order the investigation returned them. Empty when
-        the split could not be settled.
+        One report per damaged product, in the order the investigation returned them, or one
+        claim-level clarification report when the split could not be settled.
     """
+    if not investigation.lines:
+        return (_claim_clarification(screening, investigation, at=at),)
+
     return tuple(
         _one_product(
             line=line,
             case=screening.record.case,
             carrier=_carrier(screening),
             context=screening.context,
+            attachments=investigation.triage.attachments,
             at=at,
         )
         for line in investigation.lines
+    )
+
+
+def _claim_clarification(
+    screening: PreflightResult,
+    investigation: ClaimInvestigation,
+    *,
+    at: UtcDatetime,
+) -> Report:
+    """Report an unsettled or incorrect claim split without drafting a merchant email."""
+    described = read_case_facts(screening.record.case)
+    triage = investigation.triage
+    ambiguity = triage.ambiguity or "The investigation could not establish a claimable product."
+    return Report(
+        report_id=report_id_for_claim(screening.case_id),
+        version=1,
+        case_id=screening.case_id,
+        claim_line_id=None,
+        product_name=None,
+        account_name=screening.record.case.account_name,
+        user_id=screening.record.case.user_id,
+        stage=DecisionStage.INVESTIGATION,
+        state=ReportState.AWAITING_REVIEW,
+        recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
+        amount_usd=None,
+        confidence=triage.split.confidence if triage.split is not None else None,
+        carrier=_carrier(screening),
+        defect_type=described.defect_type,
+        damage_type=described.damage_type,
+        order_value_usd=screening.context.order_value_usd,
+        decided=None,
+        decisions_taken=0,
+        drafted_email=None,
+        content=ClarificationReportContent(
+            context=screening.context,
+            attachments=triage.attachments,
+            candidate_lines=triage.claim_lines,
+            ambiguity=ambiguity,
+            concerns=(ambiguity, *investigation.claim_concerns),
+        ),
+        created_at=at,
     )
 
 
@@ -132,6 +190,7 @@ def _one_product(
     case: Case,
     carrier: str | None,
     context: ClaimContext,
+    attachments: tuple[Attachment, ...],
     at: UtcDatetime,
 ) -> Report:
     """Write one damaged product's findings into a report.
@@ -147,11 +206,16 @@ def _one_product(
         case_id=case.case_id,
         claim_line_id=line.line.claim_line_id,
         product_name=line.line.product_name,
+        account_name=case.account_name,
         user_id=case.user_id,
         stage=DecisionStage.INVESTIGATION,
         state=ReportState.AWAITING_REVIEW,
         recommendation=line.outcome.recommendation,
-        amount_usd=line.amount.amount_usd,
+        amount_usd=(
+            line.amount.amount_usd
+            if line.outcome.recommendation is Recommendation.APPROVE
+            else None
+        ),
         confidence=line.confidence,
         carrier=carrier,
         defect_type=described.defect_type,
@@ -160,7 +224,20 @@ def _one_product(
         decided=None,
         decisions_taken=0,
         drafted_email=line.drafted_email,
-        markdown=render_investigated_product(line=line, context=context, case=case),
+        content=InvestigationReportContent(
+            line=line.line,
+            context=context,
+            attachments=attachments,
+            evidence=line.evidence,
+            assessments=line.assessments,
+            outcome=line.outcome,
+            amount=line.amount,
+            concerns=line.concerns,
+            requested_details=line.requested_details,
+            corrections_considered=(
+                line.conclusion.corrections_considered if line.conclusion is not None else ()
+            ),
+        ),
         created_at=at,
     )
 

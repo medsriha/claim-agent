@@ -22,7 +22,7 @@ is one loop rather than two near-identical copies drifting apart.
   pass ends on.
 * **Give up** — the steps ran out, or the model failed. The pass stops and hands
   back everything it had established by then, and the caller turns that into an
-  escalation to a support representative (FR-1.16, NFR-4).
+  representative clarification request to a support representative (FR-1.16, NFR-4).
 
 **Concluding is a separate question, not a fifth tool.** The obvious alternative
 is a "submit your answer" tool the model calls when it is finished. We do not do
@@ -45,7 +45,7 @@ a failed tool call is bounded the same way, per individual call.
 **Nothing here raises for an ordinary failure.** A model that cannot be reached,
 an answer that will not fit the form, a tool that breaks, a budget that runs out:
 each one ends as a `LoopOutcome` with no answer and a plain sentence saying why.
-That is what lets the caller escalate every one of them to a person instead of
+That is what lets the caller request representative clarification every one of them to a person instead of
 turning some into an error page (NFR-4).
 
 **How the pass is put together.** Three moves and the choices between them, built
@@ -118,7 +118,7 @@ def _graph_limit(budget: RunBudget) -> int:
     """Work out the graph's own limit, always looser than the step allowance.
 
     Kept deliberately generous. If this were ever the tighter bound, a long
-    investigation would end in an exception instead of an escalation, and a rep
+    investigation would end in an exception instead of an representative clarification request, and a rep
     would get an error where they should have got a claim with findings attached.
     """
     return budget.snapshot().steps_allowed * _MOVES_PER_STEP + _MOVES_TO_SPARE
@@ -143,7 +143,7 @@ class LoopOutcome(Generic[Answer]):
     This is the only thing a pass hands back, and it is deliberately the same
     shape whether the pass succeeded or not. A pass that gave up is an ordinary
     result to be read, not an exception to be caught: the caller looks at
-    `answer`, finds nothing there, and escalates the claim to a representative
+    `answer`, finds nothing there, and requests representative clarification the claim to a representative
     with the reason and the record attached (FR-1.16, NFR-4).
 
     Frozen, because it is the account of something that has already happened.
@@ -176,7 +176,7 @@ class LoopOutcome(Generic[Answer]):
 
         Worked out from `answer` rather than stored beside it, so the two can
         never contradict each other. A stored flag would eventually be set wrong
-        in one branch, and a caller trusting it would escalate a claim that had
+        in one branch, and a caller trusting it would request representative clarification a claim that had
         an answer, or approve one that did not.
         """
         return self.answer is None
@@ -564,7 +564,7 @@ async def _try_until_out_of_retries(
     words the model can reason about. This is what happens when one breaks that
     contract anyway — a bug, or something nobody anticipated in the four separate
     things the tools touch. It is turned into words too, so that a broken tool
-    escalates a claim to a person instead of turning the whole request into an
+    requests representative clarification a claim to a person instead of turning the whole request into an
     error (NFR-4, NFR-6).
     """
     while True:
@@ -579,7 +579,7 @@ async def _try_until_out_of_retries(
             # places in the system where that is right. A tool reaches ShipBob,
             # downloads images and does arithmetic; anything at all can come out
             # of that, and none of it is a reason for a claim to reach a
-            # representative as a server error rather than as an escalation she
+            # representative as a server error rather than as an representative clarification request she
             # can act on (NFR-4). What is caught is written down and handed to the
             # model in plain words, never swallowed.
             if budget.has_retry_left(call_id):
@@ -641,7 +641,7 @@ def _refuse_a_used_budget(budget: RunBudget) -> None:
 
     Budgets are per run, so a claim with four products has four of them (FR-1.3).
     A shared one would give the last product a fraction of the allowance the first
-    got, and the only sign of it would be claims escalating for no visible reason.
+    got, and the only sign would be unexplained representative clarification requests.
     Only the step count is checked, because steps are spent in this file and
     nowhere else: an image allowance may legitimately have been drawn on before the
     pass started.
@@ -667,7 +667,7 @@ def _model_turn_failed(
 ) -> LoopOutcome[Answer]:
     """Write down a turn the model could not answer, and end the pass on it.
 
-    Recorded in the ledger as well as returned, because "why was this escalated?"
+    Recorded in the ledger as well as returned, because "why was this sent for representative clarification?"
     has to be answerable from the record a representative is handed, and a pass
     that failed on its first turn would otherwise leave a record with nothing
     wrong in it (NFR-3).

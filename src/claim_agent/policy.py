@@ -97,21 +97,19 @@ class Policy(BaseSettings):
         "(FR-0.2). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
-    # The seven below are read by the AI investigation, which is being built but is not
-    # yet reachable over HTTP. Nothing a running service does looks at them, so a panel
-    # offering them would be offering a change nobody could see the effect of. When the
-    # investigation is reachable, these markings are the ones to take off.
+    # The investigation settings below are provisional and deliberately absent from the
+    # policy panel until their operational values have been agreed.
     min_assessment_confidence: float = Field(
         default=0.7,
         ge=0.0,
         le=1.0,
-        description="Below this, recommend escalate rather than approve (FR-1.15). PROVISIONAL.",
+        description="Below this, request representative clarification rather than approve (FR-1.15). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
     max_agent_steps: int = Field(
         default=12,
         gt=0,
-        description="Per-run step budget; exhaustion escalates (FR-1.3, FR-1.16). PROVISIONAL.",
+        description="Per-run step budget; exhaustion requests representative clarification (FR-1.3, FR-1.16). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
     max_tool_retries: int = Field(
@@ -147,7 +145,7 @@ class Policy(BaseSettings):
     cap_applies_to_whole_claim: bool = Field(
         default=True,
         description="Whether the reimbursement cap limits the whole claim as well as each line. "
-        "REQUIREMENTS.md open question 2; when true, lines summing above the cap are escalated "
+        "REQUIREMENTS.md open question 2; when true, lines summing above the cap are sent for representative clarification "
         "rather than trimmed (FR-1.20). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )

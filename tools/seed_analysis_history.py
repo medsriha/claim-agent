@@ -156,8 +156,7 @@ _CARRIER_EFFECT = {
 _RECOMMENDATIONS = (
     (Recommendation.APPROVE, 0.55),
     (Recommendation.REQUEST_INFO, 0.22),
-    (Recommendation.DENY, 0.13),
-    (Recommendation.ESCALATE, 0.10),
+    (Recommendation.REQUEST_REP_CLARIFICATION, 0.23),
 )
 
 # Invented, like everything else here. Kept short and specific, because a correction that says
@@ -260,14 +259,14 @@ def _draw_confidence(rng: random.Random, clarity: float) -> float:
 
 
 def _draw_recommendation(rng: random.Random) -> Recommendation:
-    """Which of the four the investigation landed on."""
+    """Which of the three next actions the investigation landed on."""
     roll = rng.random()
     running = 0.0
     for recommendation, weight in _RECOMMENDATIONS:
         running += weight
         if roll < running:
             return recommendation
-    return Recommendation.ESCALATE
+    return Recommendation.REQUEST_REP_CLARIFICATION
 
 
 def _amount_for(outcome: Recommendation, order_value: Decimal) -> Decimal | None:

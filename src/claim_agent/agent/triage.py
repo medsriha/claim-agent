@@ -180,7 +180,7 @@ class ClaimTriage(BaseModel):
             the split was reached (NFR-3). Present even when the pass gave up: what
             was established is carried forward rather than lost (FR-1.16).
         budget: What the pass spent and which of its limits it reached, so an
-            escalation can be explained without anyone reading logs.
+            representative clarification request can be explained without anyone reading logs.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

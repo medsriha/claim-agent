@@ -103,7 +103,7 @@ def test_a_moment_is_recorded_only_when_the_caller_supplies_one() -> None:
         kind=StepKind.REASONING,
         name="InvestigationConclusion",
         asked="What do you recommend for this line?",
-        observed="Escalate: the packaging photograph is missing.",
+        observed="Request representative clarification: the packaging photograph is missing.",
         succeeded=True,
         at=A_LATER_MOMENT,
     )
@@ -131,7 +131,7 @@ def test_a_failed_step_stays_in_the_record() -> None:
 
 
 def test_the_failed_steps_can_be_read_on_their_own() -> None:
-    """NFR-3: "why was this escalated?" is answerable from the record itself."""
+    """NFR-3: "why is clarification needed?" is answerable from the record itself."""
     ledger = RunLedger()
 
     ledger.record(

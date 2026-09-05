@@ -174,7 +174,7 @@ def a_stopped_claim(**overrides: Any) -> TerminalReport:
             subject="About your claim",
             body="This claim was filed more than 60 days after delivery.",
         ),
-        "requires_escalation": False,
+        "requires_rep_clarification": False,
     }
     fields.update(overrides)
     return TerminalReport(**fields)
@@ -492,7 +492,7 @@ def test_an_insured_claim_says_it_is_routed_out_and_carries_no_email() -> None:
             reasons=(TerminalReason.SHIPMENT_INSURED,),
             findings=("The parcel was insured.",),
             drafted_email=None,
-            requires_escalation=True,
+            requires_rep_clarification=True,
         ),
         case=CASE,
     )

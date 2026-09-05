@@ -526,7 +526,7 @@ def _readiness(performance: Performance) -> Panel[Readiness]:
 
 
 def _disagreement(performance: Performance) -> Panel[BarChart]:
-    """Which of the four recommendations representatives changed most often."""
+    """Which of the three proposed actions representatives changed most often."""
     if performance.totals.investigation.decisions == 0:
         return Panel(
             empty_reason=(

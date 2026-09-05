@@ -295,7 +295,7 @@ async def test_shipbob_refusing_to_price_a_shipment_is_its_own_answer(
     # The code is what a caller branches on. The status is deliberately not ShipBob's
     # own 422: that is what FastAPI itself returns for a malformed request, and the two
     # would be confused if this ever travelled out of the API — which it should not,
-    # since an investigation turns it into an escalation long before then.
+    # since an investigation turns it into an representative clarification request long before then.
     assert failure.status_code == 502
     assert failure.details == {"resource": "invoice", "shipment_id": "342578703"}
 

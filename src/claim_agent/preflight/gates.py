@@ -51,9 +51,8 @@ not depend on it.
 **Being insured is not in this list, and that is the point.** An insured shipment is
 routed out rather than answered (FR-0.2): it is claimed on its insurance, through a
 process that is not ours, so nobody here writes to the merchant about it. It is
-escalated for someone else to pick up instead. A claim that is both insured and, say,
-too old still gets the email about its age — the escalation and the email are two
-separate things a representative can act on.
+sent for representative clarification for someone else to pick up instead. If another gate also fails,
+the clarification action still takes precedence and no merchant email is generated.
 
 Fixing the order in code rather than in the claim policy is deliberate. A fixed
 order is what keeps two screenings of the same claim identical (FR-0.6), and nobody
@@ -411,7 +410,7 @@ def evaluate_gates(
         policy: The thresholds every check judges against.
 
     Returns:
-        Four outcomes, passed and failed alike, in a fixed order.
+        Four gate results, passed and failed alike, in a fixed order.
     """
     return (
         check_age(delivery, record.case, policy),

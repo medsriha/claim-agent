@@ -183,7 +183,7 @@ def review_recommended_amount(
         ValueError: `proposed` is not money — not a number, or carrying more than two
             decimal places. Refused rather than rounded or reinterpreted: a figure we had
             to guess at is a figure nobody can review, and the caller turns this into an
-            escalation instead (NFR-4).
+            representative clarification request instead (NFR-4).
     """
     cap = _to_cents(policy.reimbursement_cap_usd)
     # Named even when nothing could be read from it, so a rep asking "against what?" can

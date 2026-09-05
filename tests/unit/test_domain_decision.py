@@ -44,7 +44,7 @@ def test_changing_the_outcome_is_neither_direct_nor_agreement() -> None:
     """The serious kind of disagreement: the answer itself was wrong."""
     decision = investigated(
         action=RepAction.APPROVED_WITH_OVERRIDE,
-        decided=Proposal(outcome=Recommendation.DENY, amount_usd=None),
+        decided=Proposal(outcome=Recommendation.REQUEST_REP_CLARIFICATION, amount_usd=None),
     )
 
     assert decision.outcome_changed

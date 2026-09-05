@@ -2113,14 +2113,9 @@
      "label": "request_info"
     },
     {
-     "value": 0.16699410609037327,
+     "value": 0.16871008512664025,
      "text": "17%",
-     "label": "deny"
-    },
-    {
-     "value": 0.17042606516290726,
-     "text": "17%",
-     "label": "escalate"
+     "label": "request_rep_clarification"
     }
    ],
    "summary": "Each bar shows the percentage of recommendations a representative changed or sent back. Outcomes with no recommendations have no bar."

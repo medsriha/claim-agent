@@ -152,14 +152,14 @@ async def test_a_report_that_does_not_exist_says_so(client: AsyncClient) -> None
 
 async def test_an_earlier_version_can_be_read_back(client: AsyncClient, store: ReportStore) -> None:
     """FR-R.13: the version a rep was looking at has to survive being superseded."""
-    store.record(a_report(version=1, markdown="first"))
-    store.record(a_report(version=2, markdown="second"))
+    store.record(a_report(version=1))
+    store.record(a_report(version=2))
 
     latest = (await client.get("/reports/RPT-CASE-1001-L01")).json()
     earlier = (await client.get("/reports/RPT-CASE-1001-L01?version=1")).json()
 
-    assert latest["report"]["markdown"] == "second"
-    assert earlier["report"]["markdown"] == "first"
+    assert latest["report"]["version"] == 2
+    assert earlier["report"]["version"] == 1
 
 
 # --- Approving (FR-2.8, FR-2.9, FR-C.1) --------------------------------------
@@ -211,7 +211,7 @@ async def test_a_figure_over_the_cap_is_accepted_and_flagged(
 
     assert body["state"] == "approved"
     assert body["decided"]["amount_usd"] == "150.00"
-    assert "over the most the system may recommend" in body["markdown"]
+    assert body["reviews"][-1]["over_the_cap_by"] == "50.00"
 
 
 async def test_a_figure_that_is_not_an_amount_is_refused(
@@ -242,7 +242,8 @@ async def test_a_reworded_email_is_shown_in_full(client: AsyncClient, store: Rep
         )
     ).json()
 
-    assert "We are refunding you." in body["markdown"]
+    assert body["drafted_email"]["body"] == "We are refunding you."
+    assert body["reviews"][-1]["edited_email"]["body"] == "We are refunding you."
 
 
 async def test_a_recipient_cannot_be_sent_from_a_caller(
@@ -316,7 +317,7 @@ async def test_sending_a_report_back_parks_it_and_records_the_note(
     ).json()
 
     assert body["state"] == "changes_requested"
-    assert "The packaging photo is the box, not the product." in body["markdown"]
+    assert body["reviews"][-1]["rep_words"] == ("The packaging photo is the box, not the product.")
     assert decisions.count() == 1
 
 

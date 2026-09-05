@@ -115,10 +115,10 @@ Both stores are read on the way in and written on the way out, and the write is 
 rep deciding a claim line rather than by any layer finishing. That step is specified in
 **Carry-forward** below, after the precedent section it depends on.
 
-Note the distinction between a recommendation and a decision. The agent produces a
-recommended outcome because the rep needs a starting point and the email cannot be drafted
-without one — the assignment asks for exactly this. But a recommendation is a proposal,
-not an act. No outcome takes effect until a rep approves it.
+Note the distinction between a proposed next action and a decision. The agent returns its
+confidence and a claim report that proposes one of three next actions. When that action is
+merchant-facing, it also returns a separate email draft. The proposal is not an act: nothing
+takes effect until a rep approves it.
 
 ---
 
@@ -275,10 +275,11 @@ available to every claim line. Only the damaged-product photos are product-speci
 This is both a cost control — the invoice is not re-read once per line — and a consistency
 guarantee: every line in a claim sees the same verdict on the shared evidence.
 
-**FR-1a.4 — Escalate the claim when the split is ambiguous.**
+**FR-1a.4 — Ask the representative when the split is ambiguous.**
 If it cannot be established which products are being claimed for, no meaningful per-product
-investigation is possible. Recommend `escalate` at the claim level, stating what is
-ambiguous, and do not guess a split. A rep who is told "the photos show a damaged 24oz
+investigation is possible. Return a claim-level report with
+`request_rep_clarification`, state what is ambiguous, include the confidence, and do not
+generate a merchant email or guess a split. A rep who is told "the photos show a damaged 24oz
 bottle, but the order contains two different 24oz bottles at different prices" can resolve
 it in seconds; a wrong split is silent and expensive.
 
@@ -437,15 +438,16 @@ A claim for something that was not in the order cannot be reimbursed.
 It needs to be *photographed*, not damaged. Intact packaging with a damaged product inside
 is a legitimate claim.
 
-**FR-1.12 — A failed assessment produces a recommendation to go back to the merchant**,
-naming the specific reason. Whether that happens is the rep's call.
+**FR-1.12 — A failed assessment requests representative clarification.**
+It means something appears wrong or conflicts with the claim, rather than that a specific
+merchant-supplied detail is absent. The report names the failed assessment and no email is made.
 
 **FR-1.13 — Ask rather than pick when the damaged item is ambiguous.**
 Orders can contain several similar products at different prices. If photos do not
 distinguish which one was damaged, the amount cannot be determined, and the system must
-ask instead of choosing the most likely candidate. At triage this means recommending
-`escalate` for the claim (FR-1a.4); within a line it means recommending `request_info`
-naming what would resolve it.
+ask instead of choosing the most likely candidate. If the merchant can supply a specific
+missing detail, use `request_info` and name that detail in the email. If records conflict or
+something appears incorrect, use `request_rep_clarification` and generate no email.
 
 > **Reference — `GET /orders/336431771` (CASE-1002, CleanBoss)**
 > ```json
@@ -463,17 +465,20 @@ naming what would resolve it.
 
 ## Recommending
 
-**FR-1.14 — Recommend one of four outcomes.**
-`approve` (with an amount), `request_info`, `deny`, or `escalate`. Nothing else. Each is a
-proposal to the rep, and none takes effect on its own.
+**FR-1.14 — Return confidence and one of three next actions.**
+`approve` (with an amount), `request_info`, or `request_rep_clarification`. Nothing else.
+There is no separate escalation or denial outcome. Each action is a proposal to the rep,
+and none takes effect on its own.
 
 **FR-1.15 — Never recommend approval under uncertainty.**
-Where confidence is low or evidence is weak, the recommendation must be `escalate`, with
-the uncertainty stated. The agent may recommend paying only when it can show why. It errs
-toward asking a human, never toward paying.
+Where the overall action confidence or any supporting assessment confidence is low, or
+evidence is weak, the action must be
+`request_rep_clarification`, with the uncertainty and the clarification needed stated. The
+agent may recommend paying only when it can show why.
 
-**FR-1.16 — Recommend `escalate` when the step budget is exhausted**, carrying forward
-whatever was established, so the rep is not handed an empty result.
+**FR-1.16 — Request representative clarification when the step budget is exhausted**,
+carrying forward whatever was established, so the rep is not handed an empty result. This
+path produces a report and no merchant email.
 
 **FR-1.17 — Never present a recommendation as settled.**
 The report states what the agent recommends and why. It does not report an outcome as
@@ -562,9 +567,10 @@ not express.
 
 ---
 
-# Layer 2 — The report
+# Layer 2 — The report and email draft
 
-The agent's single output and the entire handoff to the rep. **This is where the decision
+The agent returns a claim report and, only when applicable, a separate merchant email draft.
+Together they are the handoff to the rep. **This is where the decision
 is actually made**, so the report must contain everything needed to make it — the rep
 should never have to go hunting through raw data, and should never have to take a
 conclusion on trust.
@@ -572,9 +578,11 @@ conclusion on trust.
 **There is one report per claim line.** A claim covering two damaged products produces two
 reports, each approved or sent back independently.
 
-**FR-2.1 — State the recommended outcome and amount.**
-Which of the four outcomes is recommended, and if approval, how much. Worded as a
-recommendation the rep is deciding on, not as a result.
+**FR-2.1 — State confidence, next action, and the amount when approved.**
+The report states one of the three actions and the agent's confidence. For `approve`, it
+states the approved amount. For `request_info`, it lists the specific additional details
+required from the merchant. It is worded as a proposal the rep is deciding on, not as an
+action already taken.
 
 **FR-2.2 — Show each evidence item and where it was found.**
 All four items, marked present or missing, each linked to the specific attachment it came
@@ -609,7 +617,12 @@ rep who doubts should be able to verify without leaving the report.
 Whether this is a high-value shipment, relevant history for this merchant, and — if a past
 correction from the rep influenced this recommendation — which one and how.
 
-**FR-2.7 — Include the drafted merchant email**, in the exact wording that would be sent.
+**FR-2.7 — Return the merchant email as a conditional second output**, in the exact wording
+that would be sent.
+
+- `approve`: draft an email that communicates the exact approved amount.
+- `request_info`: draft an email that requests every specific detail needed from the merchant.
+- `request_rep_clarification`: return no email draft.
 
 **FR-2.8 — Support the rep's review actions.**
 A report is presented to the rep, who may:
@@ -714,7 +727,7 @@ code did not produce.
 Feedback cannot make an ineligible claim eligible, exceed the cap, or bypass a required
 evidence item. Where feedback asks for something the rules forbid, the agent must say so
 plainly in the revised report rather than silently complying or silently ignoring it. That
-disagreement goes back to the rep, who remains free to escalate outside the system.
+disagreement goes back to the rep, who remains free to seek further review outside the system.
 
 This is the one place the agent does not defer. The rep decides the claim; she does not
 decide the policy, and the agent will not quietly write a payout that the rules do not
@@ -807,7 +820,7 @@ work are the same.
 
 **FR-3.4 — Verify what is sent against what was approved.**
 The reimbursement API confirms success for any well-formed request, including claims the
-system decided to deny. Its response is therefore not evidence of correctness. The payload
+system did not approve. Its response is therefore not evidence of correctness. The payload
 must be checked against the approved report before being sent, so that an edited draft
 cannot result in a different amount than the rep signed off on.
 
@@ -1143,11 +1156,11 @@ Three readings, none of them chosen:
 
 1. **Presentation only.** The rep is told, and decides what extra care to take. This is what
    exists today.
-2. **Never recommend approval above the threshold.** A high-value claim is recommended for
-   escalation with its value as the stated reason, however good the evidence is.
+2. **Never recommend approval above the threshold.** A high-value claim asks for
+   representative clarification with its value as the stated reason, however good the evidence is.
 3. **A higher bar, not a different outcome.** High-value claims are held to a stricter confidence
-   threshold than FR-1.15's, so the same quality of evidence approves a small claim and escalates
-   a large one.
+   threshold than FR-1.15's, so the same quality of evidence approves a small claim and asks the
+   representative to clarify a large one.
 
 Whichever is chosen, the rule belongs beside the threshold in the single policy place (FR-0.7,
 NFR-7), and it must be a deterministic rule if it changes an outcome. Asking a model to try harder
@@ -1212,14 +1225,15 @@ survived it and not the one that was proposed.
 
 **NFR-3 — Explainability.**
 Every conclusion traces to the observation that produced it. It must be possible to answer
-"why this amount?" and "why was this escalated?" from the report itself, without reading
+"why this amount?" and "why is representative clarification needed?" from the report itself,
+without reading
 logs or re-running anything. The rep is being asked to decide, so she must be able to
 audit any part of what she is deciding on.
 
 **NFR-4 — Fail toward the human.**
-Any failure — model error, API timeout, malformed response, exhausted budget — results in
-escalation to a rep. No failure path leads to an unreviewed approval or a silently dropped
-case.
+Any failure — model error, API timeout, malformed response, exhausted budget — results in a
+claim report requesting representative clarification and no merchant email. No failure path
+leads to an unreviewed approval or a silently dropped case.
 
 **NFR-5 — Auditability.**
 Each case retains an ordered record of what each agent did, what it observed, what it

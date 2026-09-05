@@ -8,11 +8,19 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from tests.unit.test_report_render import a_context, a_line, a_stopped_claim
 
 from claim_agent.domain.decision import DecisionStage, Proposal
 from claim_agent.domain.models import DraftedEmail
 from claim_agent.domain.outcome import Recommendation
-from claim_agent.report.models import ClaimView, Report, ReportState, SiblingLine
+from claim_agent.report.models import (
+    ClaimView,
+    InvestigationReportContent,
+    Report,
+    ReportState,
+    ScreeningReportContent,
+    SiblingLine,
+)
 
 A_MOMENT = datetime(2026, 3, 21, 10, 4, 11, tzinfo=UTC)
 
@@ -25,6 +33,7 @@ def a_report(**overrides: Any) -> Report:
         "case_id": "CASE-1001",
         "claim_line_id": "CASE-1001-L01",
         "product_name": "Liposomal Tripeptide Collagen",
+        "account_name": "Best Paw Nutrition",
         "user_id": "334430",
         "stage": DecisionStage.INVESTIGATION,
         "state": ReportState.AWAITING_REVIEW,
@@ -40,10 +49,37 @@ def a_report(**overrides: Any) -> Report:
         "drafted_email": DraftedEmail(
             to="merchant@example.test", subject="About your claim", body="Hello."
         ),
-        "markdown": "## Recommendation\n\nApprove — $52.00\n",
         "created_at": A_MOMENT,
     }
     fields.update(overrides)
+    if "content" not in fields:
+        line = a_line()
+        claim_line = line.line.model_copy(update={"claim_line_id": fields["claim_line_id"]})
+        product_name = fields["product_name"]
+        if isinstance(product_name, str) and product_name != claim_line.product_name:
+            claimed = claim_line.claimed.model_copy(update={"name": product_name})
+            order_line = (
+                claim_line.order_line.model_copy(update={"name": product_name})
+                if claim_line.order_line is not None
+                else None
+            )
+            claim_line = claim_line.model_copy(
+                update={"claimed": claimed, "order_line": order_line}
+            )
+        fields["content"] = InvestigationReportContent(
+            line=claim_line,
+            context=a_context(),
+            evidence=line.evidence,
+            assessments=line.assessments,
+            outcome=line.outcome.model_copy(update={"recommendation": fields["recommendation"]}),
+            amount=line.amount.model_copy(update={"amount_usd": fields["amount_usd"]}),
+            concerns=line.concerns,
+            requested_details=(
+                ("a clear photograph showing the full product label",)
+                if fields["recommendation"] is Recommendation.REQUEST_INFO
+                else ()
+            ),
+        )
     return Report(**fields)
 
 
@@ -58,6 +94,13 @@ def a_screening_report(**overrides: Any) -> Report:
         "recommendation": None,
         "amount_usd": None,
         "confidence": None,
+        "content": ScreeningReportContent(
+            context=a_context(days_since_delivery=73),
+            reasons=a_stopped_claim().reasons,
+            findings=a_stopped_claim().findings,
+            gates=a_stopped_claim().gates,
+            requires_rep_clarification=a_stopped_claim().requires_rep_clarification,
+        ),
     }
     fields.update(overrides)
     return a_report(**fields)
@@ -90,7 +133,7 @@ def test_an_investigated_report_has_to_name_its_product() -> None:
 
 
 def test_a_stopped_claim_recommends_nothing_and_that_is_a_real_answer() -> None:
-    """FR-2.1: the four recommendations are about a damaged product, and there is none."""
+    """FR-2.1: the three actions are about a damaged product, and there is none."""
     report = a_screening_report()
 
     assert report.recommendation is None
@@ -100,7 +143,7 @@ def test_a_stopped_claim_recommends_nothing_and_that_is_a_real_answer() -> None:
 @pytest.mark.parametrize(
     "invented",
     [
-        {"recommendation": Recommendation.DENY},
+        {"recommendation": Recommendation.REQUEST_REP_CLARIFICATION},
         {"amount_usd": Decimal("52.00")},
     ],
 )
@@ -108,6 +151,64 @@ def test_a_stopped_claim_given_a_recommendation_is_refused(invented: dict[str, A
     """FR-2.1: turning a claim's reasons into a recommendation would invent an answer."""
     with pytest.raises(ValidationError):
         a_screening_report(**invented)
+
+
+def test_a_screening_clarification_request_cannot_carry_an_email() -> None:
+    """The representative-facing screening action must not generate merchant wording."""
+    stopped = a_stopped_claim()
+    content = ScreeningReportContent(
+        context=a_context(days_since_delivery=73),
+        reasons=stopped.reasons,
+        findings=stopped.findings,
+        gates=stopped.gates,
+        requires_rep_clarification=True,
+    )
+
+    with pytest.raises(ValidationError, match="must not carry an email"):
+        a_screening_report(content=content)
+
+
+def test_a_merchant_facing_screening_report_needs_an_email() -> None:
+    """A merchant-facing next action returns the second output as an email draft."""
+    with pytest.raises(ValidationError, match="needs an email draft"):
+        a_screening_report(drafted_email=None)
+
+
+# --- The action controls whether the second output exists --------------------
+
+
+@pytest.mark.parametrize("recommendation", [Recommendation.APPROVE, Recommendation.REQUEST_INFO])
+def test_a_merchant_facing_investigation_action_needs_an_email(
+    recommendation: Recommendation,
+) -> None:
+    """Approval and merchant-information actions always return an email draft."""
+    amount = Decimal("52.00") if recommendation is Recommendation.APPROVE else None
+
+    with pytest.raises(ValidationError, match="needs an email draft"):
+        a_report(recommendation=recommendation, amount_usd=amount, drafted_email=None)
+
+
+def test_a_rep_clarification_action_cannot_carry_an_email() -> None:
+    """Ambiguous or incorrect claims stay with the representative and generate no email."""
+    with pytest.raises(ValidationError, match="must not carry an email"):
+        a_report(
+            recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
+            amount_usd=None,
+        )
+
+
+def test_a_merchant_information_report_must_name_the_details_needed() -> None:
+    """The claim report is actionable without making the rep infer from the email."""
+    report = a_report(recommendation=Recommendation.REQUEST_INFO, amount_usd=None)
+    assert isinstance(report.content, InvestigationReportContent)
+    content = report.content.model_copy(update={"requested_details": ()})
+
+    with pytest.raises(ValidationError, match="specific details needed"):
+        a_report(
+            recommendation=Recommendation.REQUEST_INFO,
+            amount_usd=None,
+            content=content,
+        )
 
 
 # --- What the representative settled on (FR-2.1) ------------------------------
@@ -179,6 +280,14 @@ def test_money_is_written_down_as_text_rather_than_a_number() -> None:
     written = a_report().model_dump(mode="json")
 
     assert written["amount_usd"] == "52.00"
+
+
+def test_a_report_is_structured_and_does_not_carry_a_second_prose_document() -> None:
+    """FR-2.10: the UI receives report data once and owns how it is presented."""
+    written = a_report().model_dump(mode="json")
+
+    assert written["content"]["kind"] == "investigation"
+    assert "markdown" not in written
 
 
 # --- The claim view (FR-2.9b) -------------------------------------------------

@@ -151,6 +151,8 @@ def decide(
     amount: AmountDerivation | None = PAYABLE_AMOUNT,
     policy: Policy | None = None,
     budget_exhausted: bool = False,
+    requested_details: tuple[str, ...] = (),
+    confidence: float = 1.0,
 ) -> OutcomeDecision:
     """Decide one claim line, defaulting everything a test does not care about to clean.
 
@@ -170,6 +172,8 @@ def decide(
         amount=amount,
         policy=Policy() if policy is None else policy,
         budget_exhausted=budget_exhausted,
+        requested_details=requested_details,
+        confidence=confidence,
     )
 
 
@@ -190,19 +194,19 @@ def test_fr_1_14_a_well_evidenced_approval_is_left_exactly_as_it_was_recommended
     assert "none of the rules changed that" in decision.explanation
 
 
-def test_fr_1_14_a_recommendation_to_refuse_the_claim_is_the_investigations_to_make() -> None:
-    """Refusing is a judgement about the merits, and no rule here makes judgements."""
+def test_fr_1_14_a_request_for_rep_clarification_passes_through_untouched() -> None:
+    """An internal ambiguity remains a request to the representative, never the merchant."""
     decision = decide(
-        Recommendation.DENY,
+        Recommendation.REQUEST_REP_CLARIFICATION,
         evidence=(),
         assessments=(),
         line=unmatched_line(MatchOutcome.NOT_ON_ORDER),
         amount=None,
     )
 
-    assert decision.recommendation is Recommendation.DENY
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == ()
-    assert "refusing this line" in decision.explanation
+    assert "asking the representative for clarification" in decision.explanation
 
 
 def test_fr_1_14_a_recommendation_to_go_back_to_the_merchant_passes_through_untouched() -> None:
@@ -213,19 +217,43 @@ def test_fr_1_14_a_recommendation_to_go_back_to_the_merchant_passes_through_unto
     assert decision.overrides == ()
 
 
-def test_fr_1_14_a_recommendation_to_hand_the_claim_to_a_person_passes_through_untouched() -> None:
-    """Escalating is already the most cautious answer, so nothing can improve on it."""
-    decision = decide(Recommendation.ESCALATE, evidence=(), assessments=(), amount=None)
+def test_fr_1_14_a_specific_non_evidence_detail_can_be_requested_from_the_merchant() -> None:
+    """An identification detail is actionable even when all standard evidence is present."""
+    decision = decide(
+        Recommendation.REQUEST_INFO,
+        amount=None,
+        requested_details=("a clear photograph of the product label",),
+    )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_INFO
+    assert decision.overrides == ()
+
+
+def test_fr_1_14_an_unspecified_merchant_request_goes_back_to_the_representative() -> None:
+    """A vague request for more information cannot become merchant-facing wording."""
+    decision = decide(Recommendation.REQUEST_INFO, amount=None)
+
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert decision.overrides == (OverrideReason.MERCHANT_DETAILS_UNSPECIFIED,)
+
+
+def test_fr_1_14_a_recommendation_to_hand_the_claim_to_a_person_passes_through_untouched() -> None:
+    """Asking the representative is already the cautious answer, so it passes through."""
+    decision = decide(
+        Recommendation.REQUEST_REP_CLARIFICATION, evidence=(), assessments=(), amount=None
+    )
+
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == ()
 
 
 def test_fr_1_15_a_refusal_made_on_thin_confidence_is_still_the_investigations_to_make() -> None:
     """Never approving under uncertainty is a rule about approving, and about nothing else."""
-    decision = decide(Recommendation.DENY, assessments=all_questions_answered(confidence=0.1))
+    decision = decide(
+        Recommendation.REQUEST_REP_CLARIFICATION, assessments=all_questions_answered(confidence=0.1)
+    )
 
-    assert decision.recommendation is Recommendation.DENY
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == ()
 
 
@@ -238,7 +266,7 @@ def test_fr_1_16_a_run_that_ran_out_of_steps_goes_to_a_person_however_clean_the_
     """A run that did not finish has not established a payment, whatever it managed to say."""
     decision = decide(Recommendation.APPROVE, budget_exhausted=True)
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.BUDGET_EXHAUSTED,)
     assert "ran out of steps" in decision.explanation
 
@@ -252,17 +280,17 @@ def test_fr_1_16_what_the_investigation_established_is_carried_forward_not_throw
 
 def test_fr_1_16_running_out_of_steps_overrides_even_a_recommendation_to_refuse() -> None:
     """An unfinished run has not established a refusal either, so a person decides."""
-    decision = decide(Recommendation.DENY, budget_exhausted=True)
+    decision = decide(Recommendation.REQUEST_REP_CLARIFICATION, budget_exhausted=True)
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.BUDGET_EXHAUSTED,)
 
 
-def test_fr_1_16_a_run_that_had_already_escalated_says_so_without_claiming_a_change() -> None:
+def test_fr_1_16_an_existing_rep_clarification_action_does_not_claim_a_change() -> None:
     """The recommendation did not change, so the sentence must not say it did."""
-    decision = decide(Recommendation.ESCALATE, budget_exhausted=True)
+    decision = decide(Recommendation.REQUEST_REP_CLARIFICATION, budget_exhausted=True)
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.BUDGET_EXHAUSTED,)
     assert "instead" not in decision.explanation
     assert "the same recommendation" in decision.explanation
@@ -275,7 +303,7 @@ def test_nfr_4_evidence_we_could_not_read_ourselves_goes_to_a_person() -> None:
         evidence=evidence_with(EvidenceKind.DAMAGED_PRODUCT_PHOTO, EvidenceState.UNREADABLE),
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.EVIDENCE_UNREADABLE in decision.overrides
     assert "could not read the damaged product photo" in decision.explanation
 
@@ -287,18 +315,18 @@ def test_fr_1_7_a_merchant_is_never_asked_for_something_only_we_could_fix() -> N
         evidence=evidence_with(EvidenceKind.INVOICE, EvidenceState.UNREADABLE),
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert "the merchant" not in decision.explanation
 
 
 def test_nfr_4_evidence_we_could_not_read_goes_to_a_person_even_after_a_refusal() -> None:
     """A conclusion drawn without being able to see the evidence is not a conclusion."""
     decision = decide(
-        Recommendation.DENY,
+        Recommendation.REQUEST_REP_CLARIFICATION,
         evidence=evidence_with(EvidenceKind.OUTER_PACKAGING_PHOTO, EvidenceState.UNREADABLE),
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.EVIDENCE_UNREADABLE,)
 
 
@@ -345,8 +373,8 @@ def test_fr_1_6_evidence_nobody_looked_for_is_not_evidence_we_have() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_fr_1_12_a_question_answered_no_sends_the_claim_back_to_the_merchant() -> None:
-    """Naming which question failed is the point: a vague request costs another round trip."""
+def test_fr_1_12_a_question_answered_no_asks_the_rep_for_clarification() -> None:
+    """A negative finding is something wrong to resolve, not missing merchant evidence."""
     answers = (
         assessment(AssessmentName.DAMAGE_VISIBLE, passed=False),
         assessment(AssessmentName.PRODUCT_IDENTIFIABLE),
@@ -356,8 +384,8 @@ def test_fr_1_12_a_question_answered_no_sends_the_claim_back_to_the_merchant() -
 
     decision = decide(Recommendation.APPROVE, assessments=answers)
 
-    assert decision.recommendation is Recommendation.REQUEST_INFO
-    assert decision.overrides == (OverrideReason.EVIDENCE_INCOMPLETE,)
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert decision.overrides == (OverrideReason.ASSESSMENT_FAILED,)
     assert "answered no on damage visible" in decision.explanation
 
 
@@ -376,7 +404,7 @@ def test_fr_1_12_a_question_that_was_never_answered_is_not_a_question_that_passe
 
     decision = decide(Recommendation.APPROVE, assessments=answers)
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.INVESTIGATION_INCOMPLETE,)
     assert "never answered packaging documented" in decision.explanation
 
@@ -390,11 +418,11 @@ def test_fr_1_12_a_failed_question_and_an_unanswered_one_are_both_reported() -> 
 
     decision = decide(Recommendation.APPROVE, assessments=answers)
 
-    # A question answered no is the merchant's to act on; a question never answered is
-    # ours. Both are reported, and the more cautious of the two recommendations stands.
-    assert decision.recommendation is Recommendation.ESCALATE
+    # A question answered no says something is wrong; an unanswered question says the
+    # investigation is incomplete. Both require the representative and both are reported.
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert set(decision.overrides) == {
-        OverrideReason.EVIDENCE_INCOMPLETE,
+        OverrideReason.ASSESSMENT_FAILED,
         OverrideReason.INVESTIGATION_INCOMPLETE,
     }
     assert "answered no on damage visible" in decision.explanation
@@ -417,10 +445,19 @@ def test_fr_1_15_confidence_below_the_threshold_hands_the_claim_to_a_person() ->
 
     decision = decide(Recommendation.APPROVE, assessments=answers)
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.NOT_CONFIDENT_ENOUGH,)
     assert "0.50" in decision.explanation
     assert "0.70" in decision.explanation
+
+
+def test_fr_1_15_low_overall_confidence_withholds_an_otherwise_clean_approval() -> None:
+    """The confidence reported beside the next action participates in that action."""
+    decision = decide(Recommendation.APPROVE, confidence=0.4)
+
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert decision.overrides == (OverrideReason.NOT_CONFIDENT_ENOUGH,)
+    assert "0.40" in decision.explanation
 
 
 def test_fr_1_15_confidence_landing_exactly_on_the_threshold_is_confident_enough() -> None:
@@ -443,7 +480,7 @@ def test_fr_1_15_the_confidence_threshold_comes_from_the_claim_policy() -> None:
         policy=Policy(min_assessment_confidence=0.95),
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.NOT_CONFIDENT_ENOUGH in decision.overrides
 
 
@@ -451,7 +488,7 @@ def test_fr_1_15_an_investigation_that_assessed_nothing_has_cleared_nothing() ->
     """No confidence to test is not the same as being confident, and must not read as it."""
     decision = decide(Recommendation.APPROVE, assessments=())
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.NOT_CONFIDENT_ENOUGH in decision.overrides
     # A run that answered none of the four questions did not finish, which is a
     # statement about our own investigation rather than about the merchant's evidence.
@@ -470,7 +507,7 @@ def test_fr_1_13_a_product_matching_two_order_lines_is_never_priced_by_choosing_
         Recommendation.APPROVE, line=unmatched_line(MatchOutcome.AMBIGUOUS), amount=None
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.PRODUCT_NOT_PRICEABLE,)
     assert "more than one line on the order" in decision.explanation
 
@@ -481,7 +518,7 @@ def test_fr_1a_2_a_product_that_is_not_on_the_order_cannot_be_reimbursed() -> No
         Recommendation.APPROVE, line=unmatched_line(MatchOutcome.NOT_ON_ORDER), amount=None
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.PRODUCT_NOT_PRICEABLE,)
     assert "not on the order" in decision.explanation
 
@@ -490,7 +527,7 @@ def test_fr_1_21_an_approval_with_no_amount_worked_out_goes_to_a_person() -> Non
     """No figure means nothing to approve, and the gap is never filled by guessing."""
     decision = decide(Recommendation.APPROVE, amount=None)
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.PRODUCT_NOT_PRICEABLE,)
     assert "no amount was worked out" in decision.explanation
 
@@ -499,7 +536,7 @@ def test_fr_1_18_an_approval_with_no_invoice_to_price_from_says_so() -> None:
     """A rep can chase a missing invoice, so the reason has to reach them."""
     decision = decide(Recommendation.APPROVE, amount=amount_of_nothing(priced_from=None))
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (OverrideReason.PRODUCT_NOT_PRICEABLE,)
     assert "no invoice to price it from" in decision.explanation
 
@@ -508,7 +545,7 @@ def test_fr_1_18_an_approval_whose_product_was_not_on_the_invoice_names_the_invo
     """The invoice that was read is named, so a rep can look at the same document."""
     decision = decide(Recommendation.APPROVE, amount=amount_of_nothing(priced_from="INV-342578703"))
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert "nothing could be priced from invoice INV-342578703" in decision.explanation
 
 
@@ -526,7 +563,7 @@ def test_fr_1_20_an_item_the_invoice_prices_at_nothing_goes_to_a_person() -> Non
         amount=amount_of_nothing(priced_from="INV-342578703", components=(free_item,)),
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert "prices the damaged product at nothing" in decision.explanation
 
 
@@ -550,7 +587,7 @@ def test_nfr_4_the_most_cautious_recommendation_wins_when_two_rules_disagree() -
         assessments=answers,
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (
         OverrideReason.EVIDENCE_INCOMPLETE,
         OverrideReason.NOT_CONFIDENT_ENOUGH,
@@ -574,19 +611,20 @@ def test_nfr_3_every_rule_that_stepped_in_is_reported_and_not_only_the_first() -
         budget_exhausted=True,
     )
 
-    assert decision.recommendation is Recommendation.ESCALATE
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (
         OverrideReason.BUDGET_EXHAUSTED,
         OverrideReason.EVIDENCE_UNREADABLE,
         OverrideReason.EVIDENCE_INCOMPLETE,
+        OverrideReason.ASSESSMENT_FAILED,
         OverrideReason.INVESTIGATION_INCOMPLETE,
         OverrideReason.NOT_CONFIDENT_ENOUGH,
         OverrideReason.PRODUCT_NOT_PRICEABLE,
     )
 
 
-def test_nfr_3_a_reason_two_rules_agree_on_is_listed_once_and_explained_twice() -> None:
-    """Both the evidence and the questions were short; one reason, two things to fix."""
+def test_nfr_3_merchant_gaps_and_wrong_assessments_remain_distinct() -> None:
+    """Missing evidence and a negative finding have different people who can resolve them."""
     answers = (
         assessment(AssessmentName.DAMAGE_VISIBLE, passed=False),
         assessment(AssessmentName.PRODUCT_IDENTIFIABLE),
@@ -600,7 +638,11 @@ def test_nfr_3_a_reason_two_rules_agree_on_is_listed_once_and_explained_twice() 
         assessments=answers,
     )
 
-    assert decision.overrides == (OverrideReason.EVIDENCE_INCOMPLETE,)
+    assert decision.overrides == (
+        OverrideReason.EVIDENCE_INCOMPLETE,
+        OverrideReason.ASSESSMENT_FAILED,
+    )
+    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert "the merchant has still to supply the invoice" in decision.explanation
     assert "answered no on damage visible" in decision.explanation
 

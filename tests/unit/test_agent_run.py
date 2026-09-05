@@ -442,7 +442,7 @@ def test_fr_1_20_the_cap_limits_the_whole_claim_and_not_only_each_product() -> N
     assert verdict.total_usd == Decimal("90.00")
     assert verdict.complaint is not None
     for line in verdict.lines:
-        assert line.outcome.recommendation is Recommendation.ESCALATE
+        assert line.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
         assert OverrideReason.CLAIM_CAP_EXCEEDED in line.outcome.overrides
         # What the investigation itself concluded is kept beside the new answer, so a
         # representative can see the product was sound and the claim's total was not.
@@ -489,7 +489,7 @@ def test_fr_1_20_a_claim_of_one_product_is_capped_the_same_way() -> None:
     )
 
     assert verdict.applied is True
-    assert verdict.lines[0].outcome.recommendation is Recommendation.ESCALATE
+    assert verdict.lines[0].outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
 
 
 def test_the_whole_claim_cap_can_be_turned_off() -> None:
@@ -524,7 +524,9 @@ async def test_fr_1b_3_two_products_reach_their_own_answers() -> None:
     conclusions = [
         a_conclusion(name, sku).model_copy(
             update={
-                "recommendation": Recommendation.DENY if index == 0 else Recommendation.REQUEST_INFO
+                "recommendation": Recommendation.REQUEST_REP_CLARIFICATION
+                if index == 0
+                else Recommendation.REQUEST_INFO
             }
         )
         for index, (name, sku) in enumerate(ordered)
@@ -541,7 +543,7 @@ async def test_fr_1b_3_two_products_reach_their_own_answers() -> None:
         for line in claim.lines
         if line.conclusion is not None
     }
-    assert reached[ordered[0][0]] is Recommendation.DENY
+    assert reached[ordered[0][0]] is Recommendation.REQUEST_REP_CLARIFICATION
     assert reached[ordered[1][0]] is Recommendation.REQUEST_INFO
 
 
@@ -565,7 +567,7 @@ def a_closed_claim(precedent_id: str, product: str, sku: str) -> PrecedentRecord
         match=MatchOutcome.MATCHED,
         evidence=(),
         assessments=(),
-        outcome=Recommendation.DENY,
+        outcome=Recommendation.REQUEST_REP_CLARIFICATION,
         amount_usd=None,
         cap_applied=False,
         rep_note="Refused: the crushing happened after delivery.",

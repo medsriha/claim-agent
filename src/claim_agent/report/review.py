@@ -26,8 +26,7 @@ from claim_agent.domain.models import DraftedEmail, UtcDatetime
 from claim_agent.domain.outcome import Recommendation
 from claim_agent.errors import ConflictError
 from claim_agent.policy import Policy
-from claim_agent.report.models import EmailWording, Report, ReportState
-from claim_agent.report.render import render_what_the_representative_decided
+from claim_agent.report.models import EmailWording, Report, ReportReview, ReportState
 
 
 @dataclass(frozen=True)
@@ -119,13 +118,16 @@ def approve(
                 "decided": settled,
                 "decisions_taken": sequence + 1,
                 "drafted_email": _the_email_that_stands(report, edited_email),
-                "markdown": _with_the_decision_on_the_end(
-                    report,
-                    decision=decision,
-                    settled=settled,
-                    edited_email=edited_email,
-                    rep_words=rep_words,
-                    policy=policy,
+                "reviews": (
+                    *report.reviews,
+                    _review_entry(
+                        report,
+                        decision=decision,
+                        settled=settled,
+                        edited_email=edited_email,
+                        rep_words=rep_words,
+                        policy=policy,
+                    ),
                 ),
             }
         ),
@@ -186,13 +188,16 @@ def send_back(
             update={
                 "state": ReportState.CHANGES_REQUESTED,
                 "decisions_taken": sequence + 1,
-                "markdown": _with_the_decision_on_the_end(
-                    report,
-                    decision=decision,
-                    settled=advised,
-                    edited_email=None,
-                    rep_words=feedback,
-                    policy=None,
+                "reviews": (
+                    *report.reviews,
+                    _review_entry(
+                        report,
+                        decision=decision,
+                        settled=advised,
+                        edited_email=None,
+                        rep_words=feedback,
+                        policy=None,
+                    ),
                 ),
             }
         ),
@@ -273,7 +278,7 @@ def _decision_id(report: Report, *, sequence: int) -> str:
     return f"DEC-{about}-{sequence:02d}"
 
 
-def _with_the_decision_on_the_end(
+def _review_entry(
     report: Report,
     *,
     decision: DecisionRecord,
@@ -281,27 +286,20 @@ def _with_the_decision_on_the_end(
     edited_email: EmailWording | None,
     rep_words: str | None,
     policy: Policy | None,
-) -> str:
-    """Add what the representative decided to the end of the report, leaving the rest alone.
-
-    Added rather than woven in, so what the system said and what a person then decided stay told
-    apart. A reader sees both and can see which is which (NFR-3).
+) -> ReportReview:
+    """Keep what the representative decided as fields a UI can render (NFR-3).
 
     `policy` is `None` where no figure was chosen — sending a report back settles no amount, so
     there is nothing that could be over the cap.
     """
-    return (
-        report.markdown
-        + "\n\n"
-        + render_what_the_representative_decided(
-            review_number=report.decisions_taken + 1,
-            action=decision.action,
-            recommended=decision.recommended,
-            decided=settled,
-            edited_email=edited_email,
-            rep_words=rep_words,
-            over_the_cap_by=_over_the_cap_by(settled, policy=policy),
-        )
+    return ReportReview(
+        review_number=report.decisions_taken + 1,
+        action=decision.action,
+        recommended=decision.recommended,
+        decided=settled,
+        edited_email=edited_email,
+        rep_words=rep_words,
+        over_the_cap_by=_over_the_cap_by(settled, policy=policy),
     )
 
 

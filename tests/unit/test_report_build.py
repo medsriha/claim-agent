@@ -15,6 +15,7 @@ from claim_agent.agent.triage import ClaimTriage
 from claim_agent.domain.claim_line import ClaimedProduct, build_claim_lines
 from claim_agent.domain.decision import DecisionStage
 from claim_agent.domain.models import (
+    Attachment,
     Case,
     GateName,
     Order,
@@ -25,7 +26,11 @@ from claim_agent.domain.models import (
 from claim_agent.domain.outcome import Recommendation
 from claim_agent.preflight.models import CaseRecord, GateResult, PreflightResult
 from claim_agent.report.build import build_investigation_reports, build_screening_report
-from claim_agent.report.models import ReportState
+from claim_agent.report.models import (
+    InvestigationReportContent,
+    ReportState,
+    ScreeningReportContent,
+)
 
 CASE = Case.model_validate(CASE_1001)
 ORDER = Order.model_validate(ORDER_1001)
@@ -111,7 +116,7 @@ def test_a_stopped_claim_is_written_up_as_a_report_about_the_whole_claim() -> No
 
 
 def test_a_stopped_claim_recommends_nothing() -> None:
-    """FR-2.1: the four recommendations are about a damaged product, and there is none."""
+    """FR-2.1: the three actions are about a damaged product, and there is none."""
     report = build_screening_report(a_stopped_screening(), at=A_MOMENT)
 
     assert report is not None
@@ -121,12 +126,16 @@ def test_a_stopped_claim_recommends_nothing() -> None:
 
 
 def test_a_stopped_claim_carries_the_reasons_it_was_stopped() -> None:
-    """FR-0.4: the report a rep approves is the explanation the merchant is owed."""
-    report = build_screening_report(a_stopped_screening(), at=A_MOMENT)
+    """FR-0.4: the report exposes the stopped claim's facts for the UI to render."""
+    screening = a_stopped_screening()
+    report = build_screening_report(screening, at=A_MOMENT)
 
     assert report is not None
-    assert "claim too old" in report.markdown
-    assert "## The four checks" in report.markdown
+    assert screening.report is not None
+    assert isinstance(report.content, ScreeningReportContent)
+    assert report.content.reasons == (TerminalReason.CLAIM_TOO_OLD,)
+    assert report.content.findings == screening.report.findings
+    assert report.content.gates == screening.report.gates
 
 
 def test_a_claim_the_checks_let_through_has_no_screening_report() -> None:
@@ -174,6 +183,27 @@ def test_a_report_carries_what_was_recommended_and_for_how_much() -> None:
     assert report.decided is None
 
 
+def test_a_report_embeds_the_claim_image_urls_for_the_representative() -> None:
+    """FR-2.2: the report is self-contained enough to open every image it references."""
+    image = Attachment(
+        attachment_id="ATT-CASE-1001-03",
+        file_name="damaged-collagen.png",
+        content_type="image/png",
+        url="https://images.example.test/damaged-collagen.png",
+    )
+    investigation = ClaimInvestigation(
+        case_id=CASE.case_id,
+        triage=a_triage((COLLAGEN, "COLLAGEN1")).model_copy(update={"attachments": (image,)}),
+        lines=(a_line(),),
+    )
+
+    (report,) = build_investigation_reports(a_passing_screening(), investigation, at=A_MOMENT)
+
+    assert isinstance(report.content, InvestigationReportContent)
+    assert report.content.attachments == (image,)
+    assert report.model_dump(mode="json")["content"]["attachments"][0]["url"] == image.url
+
+
 def test_a_run_that_never_concluded_reports_no_confidence_rather_than_low_confidence() -> None:
     """FR-1.15: nothing was concluded, so there is nothing to be sure about."""
     investigation = ClaimInvestigation(
@@ -187,15 +217,20 @@ def test_a_run_that_never_concluded_reports_no_confidence_rather_than_low_confid
     assert report.confidence is None
 
 
-def test_a_split_that_could_not_be_settled_produces_no_reports() -> None:
-    """FR-1a.4: nothing was established about any product, so there is nothing to approve."""
+def test_a_split_that_could_not_be_settled_produces_a_claim_clarification_report() -> None:
+    """An ambiguous split asks the rep for clarification and never drafts merchant email."""
     investigation = ClaimInvestigation(
         case_id=CASE.case_id,
         triage=a_triage().model_copy(update={"ambiguity": "Two products look alike."}),
         lines=(),
     )
 
-    assert build_investigation_reports(a_passing_screening(), investigation, at=A_MOMENT) == ()
+    (report,) = build_investigation_reports(a_passing_screening(), investigation, at=A_MOMENT)
+
+    assert report.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert report.claim_line_id is None
+    assert report.drafted_email is None
+    assert report.content.kind == "clarification"
 
 
 # --- The same findings always produce the same report (NFR-1) ----------------

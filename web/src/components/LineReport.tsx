@@ -1,76 +1,104 @@
-/**
- * Everything established about one damaged product — the thing a representative decides on.
- *
- * Four parts, in the order somebody reads them: what is recommended, how the money was
- * arrived at, what the evidence showed, and what the four judgements were. The concerns come
- * first among the details, because a representative who cannot see why the system is unsure
- * will either rubber-stamp it or redo the work.
- *
- * **Nothing here is worked out on screen.** Every figure is text the service sent, and the
- * arithmetic between the figures was done in the service — showing the steps is not the same
- * as doing them, and doing them again here would be a second calculation that could disagree
- * with the first.
- *
- * **A recommendation is not a decision.** It says what the system suggests and why. Nothing
- * on this screen can send an email or move money, and there is deliberately no control here
- * that looks as though it could.
- */
-import { formatMoney, humanise } from "../display";
-import type { Assessment, EvidenceFinding, LineInvestigation } from "../api/types";
+/** Render the canonical report data. No report prose is supplied by the backend. */
+import { formatDayCount, formatMoney, humanise } from "../display";
+import type {
+  Assessment,
+  Attachment,
+  ClarificationReportContent,
+  ClaimContext,
+  EvidenceFinding,
+  InvestigationReportContent,
+  Report,
+  ScreeningReportContent,
+} from "../api/types";
 
-interface LineReportProps {
-  report: LineInvestigation;
-  position: number;
-  outOf: number;
+export function StructuredReport({ report }: { report: Report }): React.JSX.Element {
+  if (report.content.kind === "investigation") {
+    return <InvestigationContent content={report.content} />;
+  }
+  if (report.content.kind === "clarification") {
+    return <ClarificationContent content={report.content} />;
+  }
+  return <ScreeningContent content={report.content} />;
 }
 
-export function LineReport({ report, position, outOf }: LineReportProps): React.JSX.Element {
-  const { line, outcome, amount, evidence, assessments, concerns } = report;
+function ClarificationContent({
+  content,
+}: {
+  content: ClarificationReportContent;
+}): React.JSX.Element {
+  return (
+    <div className="structured-report">
+      <p className="line-overruled">
+        Representative clarification is needed. No merchant email was generated.
+      </p>
+      <section className="line-concerns">
+        <h4 className="line-section">What needs clarification</h4>
+        <p>{content.ambiguity}</p>
+        {content.candidate_lines.length > 0 && (
+          <ul className="line-list">
+            {content.candidate_lines.map((line) => (
+              <li key={line.claim_line_id}>{line.claimed.name}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <AttachmentGallery attachments={content.attachments} />
+      <ReportContext context={content.context} correctionsConsidered={[]} />
+    </div>
+  );
+}
+
+function InvestigationContent({
+  content,
+}: {
+  content: InvestigationReportContent;
+}): React.JSX.Element {
+  const { outcome, amount, evidence, assessments, concerns } = content;
   const overruled = outcome.recommendation !== outcome.recommended_by_agent;
 
   return (
-    <div className={`line-report line-${outcome.recommendation}`}>
-      <div className="line-heading">
-        <p className="line-count">
-          Product {String(position)} of {String(outOf)}
-        </p>
-        <h3 className="line-product">{line.claimed.name}</h3>
-        {line.claimed.sku !== null && <p className="line-sku">{line.claimed.sku}</p>}
-      </div>
-
-      <p className="line-recommendation">
-        <span className="line-verdict">{humanise(outcome.recommendation)}</span>
-        {outcome.recommendation === "approve" && (
-          <span className="line-amount">{formatMoney(amount.amount_usd)}</span>
-        )}
-      </p>
-
+    <div className="structured-report">
       <p className="line-explanation">{outcome.explanation}</p>
 
-      {/* Shown whenever the rules did not leave the investigation's own answer standing. A
-          representative should be able to see that a product was sound on its own evidence
-          and that a rule withheld the payment anyway. */}
       {overruled && (
         <p className="line-overruled">
-          The investigation itself recommended{" "}
-          <strong>{humanise(outcome.recommended_by_agent)}</strong>.
+          The investigation recommended <strong>{humanise(outcome.recommended_by_agent)}</strong>.
           {outcome.overrides.length > 0 &&
             ` The rules that stepped in: ${outcome.overrides.map(humanise).join(", ")}.`}
         </p>
       )}
 
-      {concerns.length > 0 && (
-        <div className="line-concerns">
-          <h4 className="line-section">Concerns</h4>
+      {outcome.recommendation === "request_info" && content.requested_details.length > 0 && (
+        <section className="line-concerns">
+          <h4 className="line-section">Additional details needed from the merchant</h4>
+          <ul className="line-list">
+            {content.requested_details.map((detail) => (
+              <li key={detail}>{detail}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="line-concerns">
+        <h4 className="line-section">Concerns</h4>
+        {concerns.length === 0 ? (
+          <p className="line-none">Nothing was flagged as weak, conflicting, or uncertain.</p>
+        ) : (
           <ul className="line-list">
             {concerns.map((concern) => (
               <li key={concern}>{concern}</li>
             ))}
           </ul>
-        </div>
-      )}
+        )}
+      </section>
 
-      <AmountWorking amount={report.amount} />
+      <AttachmentGallery attachments={content.attachments} />
+
+      <ReportContext
+        context={content.context}
+        correctionsConsidered={content.corrections_considered}
+      />
+      <AmountWorking amount={amount} />
 
       <details className="line-details">
         <summary className="line-details-summary">The evidence and the four questions</summary>
@@ -78,7 +106,15 @@ export function LineReport({ report, position, outOf }: LineReportProps): React.
         <h4 className="line-section">Evidence</h4>
         <ul className="line-evidence">
           {evidence.map((item) => (
-            <EvidenceRow key={item.kind} item={item} />
+            <EvidenceRow
+              key={item.kind}
+              item={item}
+              url={
+                content.attachments.find(
+                  (attachment) => attachment.attachment_id === item.attachment_id,
+                )?.url ?? null
+              }
+            />
           ))}
         </ul>
 
@@ -93,8 +129,7 @@ export function LineReport({ report, position, outOf }: LineReportProps): React.
           </>
         ) : (
           <p className="line-none">
-            The four questions were not reached: they are only asked once every piece of
-            evidence is in hand.
+            The four questions were not reached. That is not the same as answering no.
           </p>
         )}
       </details>
@@ -102,20 +137,160 @@ export function LineReport({ report, position, outOf }: LineReportProps): React.
   );
 }
 
-/**
- * How the figure was arrived at (FR-2.4).
- *
- * A bare amount is not reviewable. This shows what the investigation judged the damage to
- * be worth, what those items cost for comparison, whether the cap brought it down, and why
- * it settled on that figure — every one of them sent by the service.
- *
- * The amount is a judgement now rather than a sum, so the reasoning is the part that makes
- * it reviewable at all: there is no arithmetic for a representative to redo.
- *
- * Drawn even where nothing is payable, because "why nothing?" is exactly the question a
- * representative asks of a product that was not approved.
- */
-function AmountWorking({ amount }: { amount: LineInvestigation["amount"] }): React.JSX.Element {
+function AttachmentGallery({
+  attachments,
+}: {
+  attachments: readonly Attachment[];
+}): React.JSX.Element | null {
+  if (attachments.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="report-images">
+      <h4 className="line-section">Claim images</h4>
+      <div className="report-image-grid">
+        {attachments.map((attachment) => {
+          const url = safeWebUrl(attachment.url);
+          const name = attachment.file_name ?? attachment.attachment_id;
+          return (
+            <figure className="report-image-card" key={attachment.attachment_id}>
+              {url === null ? (
+                <div className="report-image-unavailable">Image URL unavailable</div>
+              ) : (
+                <a
+                  className="report-image-link"
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open ${name} at full size`}
+                >
+                  <img
+                    src={url}
+                    alt={`Claim attachment ${name}`}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                </a>
+              )}
+              <figcaption>
+                <span>{name}</span>
+                <code>{attachment.attachment_id}</code>
+                {url !== null && (
+                  <a href={url} target="_blank" rel="noreferrer">
+                    Open full size
+                  </a>
+                )}
+              </figcaption>
+            </figure>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** Only web URLs become image sources or clickable links. */
+function safeWebUrl(raw: string): string | null {
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function ScreeningContent({
+  content,
+}: {
+  content: ScreeningReportContent;
+}): React.JSX.Element {
+  return (
+    <div className="structured-report">
+      {content.requires_rep_clarification && (
+        <p className="line-overruled">The representative must clarify how this claim proceeds.</p>
+      )}
+
+      <section className="line-concerns">
+        <h4 className="line-section">Why the claim was stopped</h4>
+        <ul className="line-list">
+          {content.reasons.map((reason) => (
+            <li key={reason}>{humanise(reason)}</li>
+          ))}
+        </ul>
+        {content.findings.map((finding) => (
+          <p key={finding}>{finding}</p>
+        ))}
+      </section>
+
+      <ReportContext context={content.context} correctionsConsidered={[]} />
+
+      <details className="line-details">
+        <summary className="line-details-summary">The four eligibility checks</summary>
+        <ul className="line-assessments">
+          {content.gates.map((gate) => (
+            <li
+              className={gate.passed ? "judgement judgement-yes" : "judgement judgement-no"}
+              key={gate.gate}
+            >
+              <span className="judgement-name">{humanise(gate.gate)}</span>
+              <span className="judgement-answer">{gate.passed ? "Passed" : "Stopped"}</span>
+              <span className="judgement-reasoning">{gate.explanation}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </div>
+  );
+}
+
+function ReportContext({
+  context,
+  correctionsConsidered,
+}: {
+  context: ClaimContext;
+  correctionsConsidered: readonly string[];
+}): React.JSX.Element {
+  return (
+    <details className="line-details">
+      <summary className="line-details-summary">The claim in context</summary>
+      <dl className="amount-steps">
+        <div className="amount-step">
+          <dt>Order value</dt>
+          <dd>{formatMoney(context.order_value_usd)}</dd>
+        </div>
+        <div className="amount-step">
+          <dt>Filed after delivery</dt>
+          <dd>{formatDayCount(context.days_since_delivery)}</dd>
+        </div>
+        <div className="amount-step">
+          <dt>High-value order</dt>
+          <dd>{context.is_high_value ? "Yes" : "No"}</dd>
+        </div>
+      </dl>
+
+      <h4 className="line-section">Past corrections for this merchant</h4>
+      {context.merchant_corrections.length === 0 ? (
+        <p className="line-none">None on file.</p>
+      ) : (
+        <ul className="line-list">
+          {context.merchant_corrections.map((correction) => (
+            <li key={`${correction.case_id}-${correction.recorded_at}`}>
+              {correction.case_id}: {correction.summary}
+              {correctionsConsidered.includes(correction.case_id) && " (changed this conclusion)"}
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  );
+}
+
+function AmountWorking({
+  amount,
+}: {
+  amount: InvestigationReportContent["amount"];
+}): React.JSX.Element {
   return (
     <details className="amount-working">
       <summary className="amount-summary">How the amount was worked out</summary>
@@ -124,74 +299,74 @@ function AmountWorking({ amount }: { amount: LineInvestigation["amount"] }): Rea
         <p className="line-none">
           Nothing could be priced for this product
           {amount.priced_from === null
-            ? ", because no invoice could be had."
-            : `, from invoice ${amount.priced_from}.`}
+            ? ", because no invoice could be obtained."
+            : ` from invoice ${amount.priced_from}.`}
         </p>
       ) : (
-        <>
-          <ul className="amount-items">
-            {amount.components.map((item) => (
-              <li key={`${item.product_name}-${item.sku ?? ""}`} className="amount-item">
-                <span className="amount-item-name">
-                  {String(item.quantity)} × {item.product_name}
-                </span>
-                <span className="amount-item-price">{formatMoney(item.unit_price)} each</span>
-              </li>
-            ))}
-          </ul>
+        <ul className="amount-items">
+          {amount.components.map((item) => (
+            <li key={`${item.product_name}-${item.sku ?? ""}`} className="amount-item">
+              <span className="amount-item-name">
+                {String(item.quantity)} × {item.product_name}
+              </span>
+              <span className="amount-item-price">{formatMoney(item.unit_price)} each</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
-          <dl className="amount-steps">
-            <div className="amount-step">
-              <dt>What the investigation judged it worth</dt>
-              <dd>{formatMoney(amount.proposed_usd)}</dd>
-            </div>
-            <div className="amount-step">
-              <dt>What those items cost</dt>
-              <dd>{formatMoney(amount.items_total_usd)}</dd>
-            </div>
-            <div className="amount-step">
-              <dt>{amount.cap_applied ? "Brought down to the cap" : "Under the cap of"}</dt>
-              <dd>{formatMoney(amount.cap_applied ? amount.amount_usd : amount.cap_usd)}</dd>
-            </div>
-          </dl>
+      <dl className="amount-steps">
+        <div className="amount-step">
+          <dt>What the investigation judged it worth</dt>
+          <dd>{formatMoney(amount.proposed_usd)}</dd>
+        </div>
+        <div className="amount-step">
+          <dt>What those items cost</dt>
+          <dd>{formatMoney(amount.items_total_usd)}</dd>
+        </div>
+        <div className="amount-step">
+          <dt>{amount.cap_applied ? "Brought down to the cap" : "Recommended amount"}</dt>
+          <dd>{formatMoney(amount.amount_usd)}</dd>
+        </div>
+      </dl>
 
-          {/* The whole justification for the figure, now that it is a judgement rather
-              than a sum a representative could redo. */}
-          {amount.reasoning !== "" && <p className="amount-reasoning">{amount.reasoning}</p>}
-
-          {amount.priced_from !== null && (
-            <p className="amount-source">Priced from invoice {amount.priced_from}.</p>
-          )}
-        </>
+      {amount.reasoning !== "" && <p className="amount-reasoning">{amount.reasoning}</p>}
+      {amount.priced_from !== null && (
+        <p className="amount-source">Priced from invoice {amount.priced_from}.</p>
       )}
     </details>
   );
 }
 
-/** One piece of evidence: whether it can be relied on, and what was seen. */
-function EvidenceRow({ item }: { item: EvidenceFinding }): React.JSX.Element {
+function EvidenceRow({
+  item,
+  url,
+}: {
+  item: EvidenceFinding;
+  url: string | null;
+}): React.JSX.Element {
+  const sourceUrl = url === null ? null : safeWebUrl(url);
   return (
     <li className={`evidence evidence-${item.state}`}>
       <span className="evidence-kind">{humanise(item.kind)}</span>
       <span className="evidence-state">{humanise(item.state)}</span>
       <span className="evidence-observed">{item.observed}</span>
-      {/* Only ever set where the evidence cannot be relied on, and it is the sentence a
-          merchant would be asked to act on — so it is shown rather than tucked away. */}
       {item.problem !== null && <span className="evidence-problem">{item.problem}</span>}
       {item.attachment_id !== null && (
-        <span className="evidence-source">{item.attachment_id}</span>
+        <span className="evidence-source">
+          {sourceUrl === null ? (
+            item.attachment_id
+          ) : (
+            <a href={sourceUrl} target="_blank" rel="noreferrer">
+              {item.attachment_id}
+            </a>
+          )}
+        </span>
       )}
     </li>
   );
 }
 
-/**
- * One of the four judgements, with its reasoning and how sure it was.
- *
- * The confidence is shown rather than only being compared against a threshold: a number a
- * representative can see is worth more than a gate they cannot. It is the system's own
- * opinion of itself and nothing has checked it against what turned out to be true.
- */
 function AssessmentRow({ judgement }: { judgement: Assessment }): React.JSX.Element {
   return (
     <li className={judgement.passed ? "judgement judgement-yes" : "judgement judgement-no"}>

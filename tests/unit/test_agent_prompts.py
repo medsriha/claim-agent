@@ -221,10 +221,10 @@ def test_every_one_of_the_four_questions_is_named_the_way_the_code_names_it(
 
 @pytest.mark.parametrize("outcome", list(Recommendation))
 def test_every_outcome_is_named_the_way_the_code_names_it(outcome: Recommendation) -> None:
-    """FR-1.14: exactly four outcomes, spelled as the code spells them."""
+    """FR-1.14: exactly three next actions, spelled as the code spells them."""
     assert outcome.value in SYSTEM_PROMPT
     assert outcome.value in INVESTIGATION_PROMPT
-    assert len(list(Recommendation)) == 4
+    assert len(list(Recommendation)) == 3
 
 
 def test_the_investigation_names_the_three_states_the_model_may_choose() -> None:

@@ -855,7 +855,7 @@ async def test_every_tool_call_is_written_into_the_run_record(
 async def test_a_tool_call_that_failed_stays_in_the_record(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """NFR-3, NFR-4: leaving a failure out would hide the reason a claim was escalated."""
+    """NFR-3, NFR-4: leaving a failure out would hide why clarification is needed."""
     serve_the_claim(api)
     api.get(f"{IMAGES}/01.png").respond(500)
     run = build_run(shipbob_http, images_http)

@@ -5,21 +5,16 @@
  * no rules of its own — every value it passes on came from the service, and the labels it
  * draws were settled when the conversation was laid out.
  */
-import { EmailComposer } from "./EmailComposer";
-import { EscalationAction } from "./EscalationAction";
 import type { MessageState } from "./useReveal";
 import { ClaimRead, OrderRead, ParcelRead } from "../components/CaseReads";
 import { ClaimNumbers } from "../components/ClaimNumbers";
-import { ClaimTotal } from "../components/ClaimTotal";
-import { EvaluatedAt, Findings } from "../components/Findings";
+import { Findings } from "../components/Findings";
 import { FailureNotice } from "../components/FailureNotice";
 import { GateCard } from "../components/GateCard";
 import { InvestigationStep } from "../components/InvestigationStep";
-import { LineReport } from "../components/LineReport";
 import { ReportCard } from "../components/ReportCard";
 import { SimilarClaims } from "../components/SimilarClaims";
 import { Spinner } from "../components/Spinner";
-import { VerdictBanner } from "../components/VerdictBanner";
 import type { TranscriptMessage } from "./transcript";
 
 interface MessageProps {
@@ -111,14 +106,6 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
       // the edge, and nesting that inside another box reads as two things, not one.
       return <GateCard gate={body.gate} working={working} />;
 
-    case "verdict":
-      return (
-        <>
-          <VerdictBanner caseId={body.caseId} verdict={body.verdict} reasons={body.reasons} />
-          <EvaluatedAt moment={body.evaluatedAt} />
-        </>
-      );
-
     case "findings":
       return (
         <div className="bubble">
@@ -126,18 +113,13 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
         </div>
       );
 
-    case "email":
+    case "step":
       return (
-        <div className="bubble">
-          <EmailComposer email={body.email} />
-        </div>
-      );
-
-    case "escalation":
-      return (
-        <div className="bubble">
-          <EscalationAction />
-        </div>
+        <InvestigationStep
+          eventKind={body.eventKind}
+          summary={body.summary}
+          history={body.history}
+        />
       );
 
     case "precedent":
@@ -155,36 +137,9 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
         </p>
       );
 
-    case "step":
-      // No bubble: a step is a line of narration rather than a finding, and boxing it
-      // would give it the same weight as the report it is leading up to.
-      return (
-        <InvestigationStep
-          eventKind={body.eventKind}
-          summary={body.summary}
-          detail={body.detail}
-        />
-      );
-
-    case "lineReport":
-      // Carries its own frame and its own colour down the edge, like a check card.
-      return <LineReport report={body.report} position={body.position} outOf={body.outOf} />;
-
-    case "claimTotal":
-      return (
-        <div className="bubble">
-          <ClaimTotal
-            total={body.total}
-            capApplied={body.capApplied}
-            concerns={body.concerns}
-          />
-        </div>
-      );
-
     case "report":
-      // Carries its own frame, like a line report: it is the thing being acted on rather
-      // than something said in passing.
-      return <ReportCard report={body.report} />;
+      // Carries its own frame: it is the one thing being acted on.
+      return <ReportCard report={body.report} unavailableReason={body.unavailableReason} />;
 
     case "failure":
       return <FailureNotice kind={body.failure} message={body.message} onRetry={onRetry} />;

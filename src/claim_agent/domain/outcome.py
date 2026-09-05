@@ -1,13 +1,13 @@
-"""The four things that can be recommended for a claim line, and who gets to choose.
+"""The three next actions that can be proposed for a claim line, and who gets to choose.
 
-Every claim line ends in one of four recommendations and nothing else (FR-1.14):
-pay it, ask the merchant for something, refuse it, or hand it to a person. Each is
+Every claim line ends in one of three actions and nothing else (FR-1.14): approve it,
+ask the merchant for a specific detail, or ask the representative for clarification. Each is
 a **proposal to a rep**. None of them takes effect on its own, and no amount of
 confidence changes that (FR-1.17, FR-3.1).
 
-The choice is the agent's. It weighs the evidence and the assessments and says what
-it would do, including refusing a claim outright — that is a judgement, and
-judgement is what the agent is for.
+The choice is the agent's. It weighs the evidence, the assessments, and its confidence,
+then proposes the appropriate next action. Refusal and escalation are not alternate
+outcomes hidden behind this contract.
 
 There is one narrow exception, and its direction is the whole point: **code can
 withhold a recommendation of payment that the requirements forbid, and can never
@@ -53,23 +53,22 @@ from claim_agent.policy import Policy
 
 
 class Recommendation(StrEnum):
-    """What the system proposes doing about one claim line (FR-1.14).
+    """The next action the system proposes for one claim line (FR-1.14).
 
     `APPROVE` proposes paying the merchant, and is the only one that carries an
     amount. `REQUEST_INFO` proposes going back to them for something specific — the
     outcome whenever a piece of evidence is missing or unusable (FR-1.6).
-    `DENY` proposes refusing the claim. `ESCALATE` proposes handing it to a person
-    without a suggested answer, which is where every uncertainty and every failure
-    ends up (FR-1.15, FR-1.16, NFR-4).
+    `REQUEST_REP_CLARIFICATION` asks the representative to resolve something incorrect,
+    ambiguous, or insufficiently reliable. It is where uncertainty and internal failures
+    end up (FR-1.15, FR-1.16, NFR-4), and it never produces a merchant email.
 
-    There is deliberately no fifth value. A run that cannot reach one of these four
-    has failed, and failing means escalating.
+    There is deliberately no denial or escalation value. A run that cannot safely approve
+    or ask the merchant for a specific detail asks the representative for clarification.
     """
 
     APPROVE = "approve"
     REQUEST_INFO = "request_info"
-    DENY = "deny"
-    ESCALATE = "escalate"
+    REQUEST_REP_CLARIFICATION = "request_rep_clarification"
 
 
 class OverrideReason(StrEnum):
@@ -88,8 +87,9 @@ class OverrideReason(StrEnum):
     did not finish looking at the one they sent, is a request they cannot act on —
     the pre-flight screen has one label that makes this mistake already, and
     DESIGN.md records it as a fault rather than a pattern to copy.
-    `NOT_CONFIDENT_ENOUGH` means the weakest assessment fell below the threshold in
-    the policy file (FR-1.15). `BUDGET_EXHAUSTED` means the run ran out of steps
+    `NOT_CONFIDENT_ENOUGH` means the overall action confidence or the weakest supporting
+    assessment fell below the threshold in the policy file (FR-1.15).
+    `BUDGET_EXHAUSTED` means the run ran out of steps
     before it could finish, and whatever it established is carried forward rather
     than being thrown away (FR-1.16). `PRODUCT_NOT_PRICEABLE` means the damaged
     product could not be tied to exactly one line on the order, so there is no
@@ -109,6 +109,8 @@ class OverrideReason(StrEnum):
     """
 
     EVIDENCE_INCOMPLETE = "evidence_incomplete"
+    ASSESSMENT_FAILED = "assessment_failed"
+    MERCHANT_DETAILS_UNSPECIFIED = "merchant_details_unspecified"
     EVIDENCE_UNREADABLE = "evidence_unreadable"
     INVESTIGATION_INCOMPLETE = "investigation_incomplete"
     CLAIM_CAP_EXCEEDED = "claim_cap_exceeded"
@@ -142,7 +144,7 @@ class OutcomeDecision(BaseModel):
 
         Not the same as the recommendation having changed, and the difference is
         real: an investigation that already recommended handing the line to a
-        person, on a line a rule would also have escalated, has a rule recorded
+        representative, on a line a rule would also have sent for clarification, has a rule recorded
         here while `recommendation` and `recommended_by_agent` are identical. The
         rule did apply; it simply agreed. Compare the two fields directly if what
         you want to know is whether the answer moved.
@@ -151,18 +153,20 @@ class OutcomeDecision(BaseModel):
 
 
 _WITHHELD_RECOMMENDATION: dict[OverrideReason, Recommendation] = {
-    OverrideReason.BUDGET_EXHAUSTED: Recommendation.ESCALATE,
-    OverrideReason.EVIDENCE_UNREADABLE: Recommendation.ESCALATE,
-    OverrideReason.INVESTIGATION_INCOMPLETE: Recommendation.ESCALATE,
-    OverrideReason.CLAIM_CAP_EXCEEDED: Recommendation.ESCALATE,
+    OverrideReason.BUDGET_EXHAUSTED: Recommendation.REQUEST_REP_CLARIFICATION,
+    OverrideReason.EVIDENCE_UNREADABLE: Recommendation.REQUEST_REP_CLARIFICATION,
+    OverrideReason.INVESTIGATION_INCOMPLETE: Recommendation.REQUEST_REP_CLARIFICATION,
+    OverrideReason.CLAIM_CAP_EXCEEDED: Recommendation.REQUEST_REP_CLARIFICATION,
     OverrideReason.EVIDENCE_INCOMPLETE: Recommendation.REQUEST_INFO,
-    OverrideReason.NOT_CONFIDENT_ENOUGH: Recommendation.ESCALATE,
-    OverrideReason.PRODUCT_NOT_PRICEABLE: Recommendation.ESCALATE,
+    OverrideReason.ASSESSMENT_FAILED: Recommendation.REQUEST_REP_CLARIFICATION,
+    OverrideReason.MERCHANT_DETAILS_UNSPECIFIED: Recommendation.REQUEST_REP_CLARIFICATION,
+    OverrideReason.NOT_CONFIDENT_ENOUGH: Recommendation.REQUEST_REP_CLARIFICATION,
+    OverrideReason.PRODUCT_NOT_PRICEABLE: Recommendation.REQUEST_REP_CLARIFICATION,
 }
 """What each rule leaves in place of the payment it withheld.
 
-Only two of the four recommendations can be reached this way. A rule can send the
-claim back to the merchant for something specific, or hand it to a person; no rule
+Only two of the three actions can be reached this way. A rule can send the
+claim back to the merchant for something specific, or ask the representative; no rule
 can pay, and no rule refuses a claim outright, because refusing is a judgement
 about the merits and these are not judgements (FR-1.14).
 """
@@ -170,8 +174,7 @@ about the merits and these are not judgements (FR-1.14).
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
     Recommendation.APPROVE: "paying this line",
     Recommendation.REQUEST_INFO: "going back to the merchant",
-    Recommendation.DENY: "refusing this line",
-    Recommendation.ESCALATE: "handing this line to a person",
+    Recommendation.REQUEST_REP_CLARIFICATION: "asking the representative for clarification",
 }
 """Each recommendation as a rep would say it, for the sentence that explains the outcome."""
 
@@ -185,18 +188,21 @@ def decide_outcome(
     amount: AmountDerivation | None,
     policy: Policy,
     budget_exhausted: bool = False,
+    requested_details: Sequence[str] = (),
+    confidence: float = 1.0,
 ) -> OutcomeDecision:
     """Settle what is recommended for one claim line, after the rules have had their say.
 
     The investigation has already decided what it would do. This applies the handful of
     requirements that are written as rules rather than judgements, and it can only ever
     push in one direction: **it can withhold a payment the requirements forbid, and it
-    can never move a recommendation towards paying.** A refusal and a hand-off to a
-    person are the investigation's own to make and are left alone (FR-1.14).
+    can never move a recommendation towards paying.** A merchant information request
+    and a representative clarification request are left alone unless their own contract
+    is invalid (FR-1.14).
 
     Two rules apply whatever was recommended, because neither is about the merits of the
     claim. A run that used up its step budget did not finish, so it has not established a
-    payment *or* a refusal, and it goes to a person with whatever it did establish
+    safe final action, and it goes to a person with whatever it did establish
     (FR-1.16). Evidence we could not read ourselves is our failure, and it goes to a
     person too — never back to the merchant, who can do nothing about our download
     (FR-1.7, NFR-4).
@@ -206,10 +212,10 @@ def decide_outcome(
     confidence under the threshold in the claim policy (FR-1.15), and a product that
     cannot be tied to one price (FR-1.13, FR-1a.2).
 
-    Those middle two look alike and are not. A question answered no is a finding about
-    the claim, and the merchant is the one who can act on it. A question left unanswered
-    is a finding about *us* — the run stopped early, or lost its way — and it goes to a
-    person, because there is nothing to ask the merchant for.
+    Those middle two look alike and are not. A question answered no means something
+    appears incorrect in the claim. A question left unanswered is a finding about *us* —
+    the run stopped early, or lost its way. Both need representative clarification and
+    neither generates merchant wording, but the report preserves which one happened.
 
     **Every rule that applies is reported, not just the first.** A rep should see
     everything that was wrong with the line rather than fixing one thing and discovering
@@ -238,6 +244,11 @@ def decide_outcome(
         policy: Read for the lowest confidence a payment may be recommended on
             (FR-0.7, NFR-7).
         budget_exhausted: True when the run ran out of steps before it could finish.
+        requested_details: Specific additional information the agent says the merchant
+            can provide. A request without this or a merchant-fillable evidence gap is
+            incomplete and goes to the representative instead.
+        confidence: The agent's confidence in its overall next action. Approval must
+            clear the same threshold as each supporting assessment.
 
     Returns:
         The recommendation that stands, what the investigation had said, every rule that
@@ -262,6 +273,19 @@ def decide_outcome(
             )
         )
 
+    merchant_details_named = any(detail.strip() for detail in requested_details)
+    if (
+        recommended_by_agent is Recommendation.REQUEST_INFO
+        and not gaps_the_merchant_can_fill(evidence)
+        and not merchant_details_named
+    ):
+        withheld.append(
+            (
+                OverrideReason.MERCHANT_DETAILS_UNSPECIFIED,
+                "it did not identify a specific missing detail the merchant can provide",
+            )
+        )
+
     if recommended_by_agent is Recommendation.APPROVE:
         withheld.extend(
             _reasons_to_withhold_approval(
@@ -270,6 +294,7 @@ def decide_outcome(
                 line=line,
                 amount=amount,
                 policy=policy,
+                confidence=confidence,
             )
         )
 
@@ -329,6 +354,7 @@ def _reasons_to_withhold_approval(
     line: ClaimLine,
     amount: AmountDerivation | None,
     policy: Policy,
+    confidence: float,
 ) -> list[tuple[OverrideReason, str]]:
     """Collect every rule that forbids the payment the investigation recommended.
 
@@ -349,7 +375,7 @@ def _reasons_to_withhold_approval(
     if answered_no:
         withheld.append(
             (
-                OverrideReason.EVIDENCE_INCOMPLETE,
+                OverrideReason.ASSESSMENT_FAILED,
                 f"it answered no on {_written_list(_in_words(answered_no))}",
             )
         )
@@ -362,7 +388,8 @@ def _reasons_to_withhold_approval(
             )
         )
 
-    weakest = lowest_confidence(assessments)
+    assessment_confidence = lowest_confidence(assessments)
+    weakest = None if assessment_confidence is None else min(confidence, assessment_confidence)
     if weakest is None or weakest < policy.min_assessment_confidence:
         withheld.append((OverrideReason.NOT_CONFIDENT_ENOUGH, _confidence_clause(weakest, policy)))
 
@@ -388,7 +415,7 @@ def _evidence_clause(evidence: Sequence[EvidenceFinding]) -> str:
 
 
 def _confidence_clause(weakest: float | None, policy: Policy) -> str:
-    """Say how sure the investigation's weakest answer was, against how sure it had to be.
+    """Compare the lowest assessment or overall-action confidence with the threshold.
 
     Both figures are written to two decimal places, so the same claim reads identically
     every time rather than depending on how a fraction happens to print (NFR-1).
@@ -400,7 +427,7 @@ def _confidence_clause(weakest: float | None, policy: Policy) -> str:
     required = f"{policy.min_assessment_confidence:.2f}"
     if weakest is None:
         return f"nothing was assessed and so nothing met the {required} confidence needed"
-    return f"its least confident answer was {weakest:.2f} against the {required} needed"
+    return f"its lowest reported confidence was {weakest:.2f} against the {required} needed"
 
 
 def _why_not_priceable(line: ClaimLine, amount: AmountDerivation | None) -> str | None:
@@ -460,8 +487,8 @@ def _most_cautious(overrides: Sequence[OverrideReason]) -> Recommendation:
     merchant cannot quietly stand in for "no rule applied".
     """
     left_standing = {_WITHHELD_RECOMMENDATION[override] for override in overrides}
-    if Recommendation.ESCALATE in left_standing:
-        return Recommendation.ESCALATE
+    if Recommendation.REQUEST_REP_CLARIFICATION in left_standing:
+        return Recommendation.REQUEST_REP_CLARIFICATION
     return Recommendation.REQUEST_INFO
 
 

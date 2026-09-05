@@ -9,7 +9,7 @@ Three things are counted, because three things can run away:
 
 * **Steps** — one turn of the investigation: pick a tool, use it, look at the
   result. Reaching the step limit is not a fault to crash on. It is an answer:
-  the run stops and is escalated to a support representative, carrying whatever
+  the run stops and is sent for representative clarification to a support representative, carrying whatever
   it had already established, so nobody is handed an empty result (FR-1.16).
 * **Retries** — how many more times one individual tool call may be tried after
   it fails. Counted per call rather than per run, so a flaky read early on cannot
@@ -27,7 +27,7 @@ budget, so a used one cannot be recycled into a second run. Build a fresh
 `RunBudget` as the first act of every run.
 
 **Asking is separate from spending, on purpose.** A run *asks* whether it has
-budget left and treats "no" as a reason to wrap up and escalate — that is what
+budget left and treats "no" as a reason to wrap up and request representative clarification — that is what
 FR-1.16 describes, and it is why exhaustion is polled rather than thrown.
 *Spending* past a limit, on the other hand, means the loop forgot to ask, which
 is a bug in our code rather than an outcome for the claim, so it raises loudly
@@ -61,7 +61,7 @@ class BudgetLimit(StrEnum):
 class BudgetSnapshot(BaseModel):
     """What one run spent, in a form that can go straight into its report (NFR-3).
 
-    A representative asked to accept an escalation needs to see why it stopped,
+    A representative asked to accept an representative clarification request needs to see why it stopped,
     and "9 of 12 steps used" answers that without anyone reading logs. Every
     figure here is a count, so this is safe to send back over the API: it holds
     nothing a caller should not see.
@@ -72,7 +72,7 @@ class BudgetSnapshot(BaseModel):
     `limits_reached` is worked out from the counts at the moment the snapshot was
     taken. It is written down beside them rather than left to the reader to
     infer, because the whole point of the record is that nobody has to do
-    arithmetic to find out why a claim was escalated. It is empty while the run
+    arithmetic to find out why a claim was sent for representative clarification. It is empty while the run
     still had room, and can name both bounds when a run reached both.
     """
 
@@ -123,7 +123,7 @@ class RunBudget:
         """Say whether the run may take another turn.
 
         This is the investigation's carry-on-or-stop question, asked before every
-        step. A `False` here is the signal to wrap up and escalate with what has
+        step. A `False` here is the signal to wrap up and request representative clarification with what has
         been established so far, not to raise anything (FR-1.16).
         """
         return self._steps_used < self._steps_allowed
@@ -154,7 +154,7 @@ class RunBudget:
         """Name every whole-run bound this budget has reached, in a fixed order.
 
         Empty while the run still has room everywhere. Used to explain an
-        escalation, so the order is fixed rather than dependent on which bound
+        representative clarification request, so the order is fixed rather than dependent on which bound
         was hit first — the same pair of exhausted limits always reads the same
         way (NFR-1).
         """
@@ -208,7 +208,7 @@ class RunBudget:
         self._image_analyses_used += 1
         # Once per run at most, for the same reason as the step allowance: a run
         # that keeps hitting this ceiling is being asked to look at more evidence
-        # than we let it, and a representative will see an escalation without
+        # than we let it, and a representative will see an representative clarification request without
         # knowing why unless it is recorded.
         if not self.has_image_analysis_left():
             logger.info(

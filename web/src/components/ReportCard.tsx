@@ -1,31 +1,23 @@
-/**
- * One report a representative reads and decides on.
- *
- * The report itself is a written document the service produced, drawn as it was written. This
- * screen adds no sentences of its own to it and takes nothing out of it: the wording of the
- * merchant's email is offered for rewording as a field the service sent separately, never by
- * reading it back out of the writing.
- *
- * **Three things a representative can do**, and all three reach the service (FR-2.8):
- * approve it as it stands, reword the email first and then approve, or send it back with a note.
- * None of them sends an email or moves money — the stage that would act on an approval does not
- * exist, and this screen says so in the one sentence it owns.
- *
- * **No money is worked out here.** Every figure is text the service sent, shown as it arrived.
- */
+/** One structured report a representative reads and decides on. */
 import { useState } from "react";
 
 import { approveReport, sendReportBack } from "../api/reportsClient";
 import { ApiFailure } from "../api/failure";
-import type { Report } from "../api/types";
+import type { DraftedEmail, Report, ReportReview } from "../api/types";
+import { formatMoney, humanise } from "../display";
 import { PAGE_WORDS } from "../chat/pageWords";
-import { Markdown } from "./Markdown";
+import { StructuredReport } from "./LineReport";
 import { Spinner } from "./Spinner";
 
-/** What a review action is doing, so a button cannot be pressed twice while it works. */
 type Busy = "approving" | "sending back" | null;
 
-export function ReportCard({ report }: { report: Report }): React.JSX.Element {
+interface ReportCardProps {
+  report: Report;
+  /** Set when the structured findings arrived but could not be persisted. */
+  unavailableReason: string | null;
+}
+
+export function ReportCard({ report, unavailableReason }: ReportCardProps): React.JSX.Element {
   const [current, setCurrent] = useState(report);
   const [subject, setSubject] = useState(report.drafted_email?.subject ?? "");
   const [body, setBody] = useState(report.drafted_email?.body ?? "");
@@ -35,8 +27,7 @@ export function ReportCard({ report }: { report: Report }): React.JSX.Element {
 
   const settled = current.state === "approved";
   const email = current.drafted_email;
-  const reworded =
-    email !== null && (subject !== email.subject || body !== email.body);
+  const reworded = email !== null && (subject !== email.subject || body !== email.body);
 
   const act = async (what: Busy, run: () => Promise<Report>): Promise<void> => {
     setBusy(what);
@@ -62,47 +53,33 @@ export function ReportCard({ report }: { report: Report }): React.JSX.Element {
     <article className="report-card">
       <ReportHeading report={current} />
       <div className="report-document">
-        <Markdown text={current.markdown} />
+        <StructuredReport report={current} />
       </div>
 
-      {settled ? (
+      <ReviewHistory reviews={current.reviews} />
+
+      {email === null ? (
+        <p className="report-note">No merchant email was produced for this report.</p>
+      ) : settled || unavailableReason !== null ? (
+        <ReadOnlyEmail email={email} />
+      ) : (
+        <EditableEmail
+          email={email}
+          subject={subject}
+          body={body}
+          onSubject={setSubject}
+          onBody={setBody}
+        />
+      )}
+
+      {unavailableReason !== null ? (
+        <p className="report-problem">{unavailableReason}</p>
+      ) : settled ? (
         <p className="report-settled">
           Approved. {PAGE_WORDS.nothingActsOnAnApproval}
         </p>
       ) : (
         <div className="report-actions">
-          {email !== null && (
-            <fieldset className="report-email">
-              <legend>The merchant&rsquo;s email</legend>
-              <label className="report-field">
-                <span>To</span>
-                {/* Not editable: who hears about a claim comes from the claim itself. */}
-                <output>{email.to ?? "no address on this claim"}</output>
-              </label>
-              <label className="report-field">
-                <span>Subject</span>
-                <input
-                  className="lookup-input"
-                  value={subject}
-                  onChange={(event) => {
-                    setSubject(event.target.value);
-                  }}
-                />
-              </label>
-              <label className="report-field">
-                <span>Wording</span>
-                <textarea
-                  className="report-body"
-                  rows={8}
-                  value={body}
-                  onChange={(event) => {
-                    setBody(event.target.value);
-                  }}
-                />
-              </label>
-            </fieldset>
-          )}
-
           <label className="report-field">
             <span>A note, if you are sending this back</span>
             <textarea
@@ -110,8 +87,8 @@ export function ReportCard({ report }: { report: Report }): React.JSX.Element {
               rows={3}
               value={feedback}
               onChange={(event) => {
-                    setFeedback(event.target.value);
-                  }}
+                setFeedback(event.target.value);
+              }}
             />
           </label>
 
@@ -153,40 +130,123 @@ export function ReportCard({ report }: { report: Report }): React.JSX.Element {
   );
 }
 
-/**
- * The line above a report: which product it covers, what is recommended, and where it has got to.
- *
- * Every value is the service's own, reshaped to read — `request_info` becomes "request info" —
- * never swapped for wording of ours.
- */
+function EditableEmail({
+  email,
+  subject,
+  body,
+  onSubject,
+  onBody,
+}: {
+  email: DraftedEmail;
+  subject: string;
+  body: string;
+  onSubject: (value: string) => void;
+  onBody: (value: string) => void;
+}): React.JSX.Element {
+  return (
+    <fieldset className="report-email">
+      <legend>The merchant&rsquo;s email</legend>
+      <label className="report-field">
+        <span>To</span>
+        <output>{email.to ?? "no address on this claim"}</output>
+      </label>
+      <label className="report-field">
+        <span>Subject</span>
+        <input
+          className="lookup-input"
+          value={subject}
+          onChange={(event) => {
+            onSubject(event.target.value);
+          }}
+        />
+      </label>
+      <label className="report-field">
+        <span>Wording</span>
+        <textarea
+          className="report-body"
+          rows={8}
+          value={body}
+          onChange={(event) => {
+            onBody(event.target.value);
+          }}
+        />
+      </label>
+    </fieldset>
+  );
+}
+
+function ReadOnlyEmail({ email }: { email: DraftedEmail }): React.JSX.Element {
+  return (
+    <section className="report-email">
+      <h4>The merchant&rsquo;s email</h4>
+      <p className="report-field">
+        <span>To</span>
+        <output>{email.to ?? "no address on this claim"}</output>
+      </p>
+      <p className="report-field">
+        <span>Subject</span>
+        <output>{email.subject}</output>
+      </p>
+      <p className="report-field">
+        <span>Wording</span>
+        <output className="email-body">{email.body}</output>
+      </p>
+    </section>
+  );
+}
+
+function ReviewHistory({ reviews }: { reviews: readonly ReportReview[] }): React.JSX.Element | null {
+  if (reviews.length === 0) {
+    return null;
+  }
+  return (
+    <section className="report-reviews">
+      <h4>Review history</h4>
+      <ol>
+        {reviews.map((review) => (
+          <li key={review.review_number}>
+            <strong>{humanise(review.action)}</strong>
+            {review.rep_words !== null && ` — ${review.rep_words}`}
+            {review.over_the_cap_by !== null &&
+              ` — ${formatMoney(review.over_the_cap_by)} over the recommendation cap`}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function ReportHeading({ report }: { report: Report }): React.JSX.Element {
   return (
     <header className="report-heading">
+      <p className="line-count">
+        Claim {report.case_id}
+        {report.account_name === null ? "" : ` · ${report.account_name}`}
+      </p>
       <h3>{report.product_name ?? "This claim"}</h3>
       <p>
         {report.recommendation === null ? (
           <span>Stopped before investigation</span>
         ) : (
           <span className={`report-recommendation is-${report.recommendation}`}>
-            {inWords(report.recommendation)}
+            {humanise(report.recommendation)}
           </span>
         )}
         {report.amount_usd !== null && report.recommendation === "approve" && (
-          <span className="report-amount">${report.amount_usd}</span>
+          <span className="report-amount">{formatMoney(report.amount_usd)}</span>
         )}
-        <span className={`report-state is-${report.state}`}>{inWords(report.state)}</span>
+        {report.confidence !== null && (
+          <span className="report-confidence">
+            {String(Math.round(report.confidence * 100))}% confidence
+          </span>
+        )}
+        <span className={`report-state is-${report.state}`}>{humanise(report.state)}</span>
       </p>
       {report.decided !== null && report.decided.amount_usd !== report.amount_usd && (
         <p className="report-decided">
-          Approved at ${report.decided.amount_usd ?? "no amount"}, which is not what was advised.
+          Approved at {formatMoney(report.decided.amount_usd)}, which is not what was advised.
         </p>
       )}
     </header>
   );
-}
-
-/** Write a stored name as words: `request_info` as "request info". Nothing is reworded. */
-function inWords(name: string): string {
-  const spaced = name.replace(/_/g, " ");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }

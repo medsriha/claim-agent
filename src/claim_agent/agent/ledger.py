@@ -2,7 +2,7 @@
 
 A support representative is the one who decides what happens to a claim, so she
 has to be able to audit what she is being asked to decide on. That means "why
-this amount?" and "why was this escalated?" have to be answerable from the result
+this amount?" and "why was this sent for representative clarification?" have to be answerable from the result
 she is handed — not by opening a log file, and not by running the investigation
 again and hoping it does the same thing. This file is the record that makes that
 possible: one entry per thing the run did, in the order it did them, each saying
@@ -88,7 +88,7 @@ class LedgerEntry(BaseModel):
             says what went wrong, in words rather than an exception.
         succeeded: Whether the step did what it set out to do. A failed step stays
             in the record; leaving it out would make a run look tidier than it was
-            and would hide the reason it escalated (NFR-4).
+            and would hide the reason it sent for representative clarification (NFR-4).
         reference: The identifier of the thing the step was about — an attachment
             id, a shipment id — so a representative can look at the same thing the
             system did. `None` when the step was not about one particular thing.
@@ -197,7 +197,7 @@ class RunLedger:
     def failures(self) -> tuple[LedgerEntry, ...]:
         """Hand back only the steps that did not work, in order.
 
-        This is the short answer to "why was this escalated?": a run that could
+        This is the short answer to "why was this sent for representative clarification?": a run that could
         not read an attachment or could not get a usable answer from the model has
         that written here, and the explanation a representative is given can be
         built from it rather than from prose someone wrote by hand (NFR-3, NFR-4).

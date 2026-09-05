@@ -14,19 +14,20 @@
  * a list of what the investigation is weighing up, and shown as one line it stops reading as
  * one. Nothing is added or dropped in the reading — see `Markdown.tsx`.
  *
- * Every step is a collapsed activity banner. Its first line says what the agent is doing
- * now; opening it reveals the complete message and its structured details. The stream
- * replaces this component for every new action, so each new action starts collapsed.
+ * The collapsed activity banner says what the agent is doing now. Opening it reveals every
+ * event received so far, in stream order, including each event's complete message and
+ * structured details.
  */
 import { Markdown } from "./Markdown";
 import { humanise } from "../display";
 import type { RunEventKind } from "../api/types";
+import type { ActivityStep } from "../chat/transcript";
 
 interface InvestigationStepProps {
   eventKind: RunEventKind;
   summary: string;
-  /** The same facts in named parts. Shown only where there is something to show. */
-  detail: Record<string, string>;
+  /** Every event received for this run, in SSE sequence order. */
+  history: readonly ActivityStep[];
 }
 
 /**
@@ -42,9 +43,8 @@ const WORTH_NOTICING: ReadonlySet<string> = new Set(["tool_called", "precedent_g
 export function InvestigationStep({
   eventKind,
   summary,
-  detail,
+  history,
 }: InvestigationStepProps): React.JSX.Element {
-  const shown = Object.entries(detail).filter(([, value]) => value !== "");
   const noticeable = WORTH_NOTICING.has(eventKind);
 
   return (
@@ -52,23 +52,43 @@ export function InvestigationStep({
       <summary className="step-summary">
         <span className="step-kind">{humanise(eventKind)}</span>
         <span className="step-peek">{firstLine(summary)}</span>
+        <span className="step-count">
+          {history.length} {history.length === 1 ? "step" : "steps"}
+        </span>
       </summary>
 
       <div className="step-content">
-        <Markdown text={summary} className="step-wrote" />
-
-        {shown.length > 0 && (
-          <dl className="step-detail">
-            {shown.map(([key, value]) => (
-              <div key={key} className="step-detail-row">
-                <dt className="step-detail-key">{humanise(key)}</dt>
-                <dd className="step-detail-value">{value}</dd>
+        <ol className="step-history" aria-label="Agent activity log">
+          {history.map((step) => (
+            <li className="step-history-entry" key={step.sequence}>
+              <div className="step-history-heading">
+                <span className="step-kind">{humanise(step.eventKind)}</span>
+                {step.label !== null && <span className="step-line-label">{step.label}</span>}
               </div>
-            ))}
-          </dl>
-        )}
+              <Markdown text={step.summary} className="step-wrote" />
+              <StepDetail detail={step.detail} />
+            </li>
+          ))}
+        </ol>
       </div>
     </details>
+  );
+}
+
+function StepDetail({ detail }: { detail: Record<string, string> }): React.JSX.Element | null {
+  const shown = Object.entries(detail).filter(([, value]) => value !== "");
+  if (shown.length === 0) {
+    return null;
+  }
+  return (
+    <dl className="step-detail">
+      {shown.map(([key, value]) => (
+        <div key={key} className="step-detail-row">
+          <dt className="step-detail-key">{humanise(key)}</dt>
+          <dd className="step-detail-value">{value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

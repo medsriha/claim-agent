@@ -218,64 +218,56 @@ def test_a_stopped_claim_with_no_reason_at_all_is_refused() -> None:
         build(reasons=())
 
 
-def test_an_insured_claim_is_escalated_and_carries_no_merchant_email() -> None:
+def test_an_insured_claim_asks_for_rep_clarification_and_carries_no_merchant_email() -> None:
     """FR-0.2: an insured claim is routed out, not answered, so there is nothing to send.
 
     Insured shipments are claimed on their insurance, through a process that is not
     ours. Nobody writes to the merchant about that, so the write-up hands a
-    representative an escalation instead of an email.
+    representative a clarification request instead of an email.
     """
     report = build(reasons=(TerminalReason.SHIPMENT_INSURED,), gates=ONLY_INSURED_GATES)
 
-    assert report.requires_escalation is True
+    assert report.requires_rep_clarification is True
     assert report.drafted_email is None
     assert report.findings == (INSURANCE_FAILED.explanation,)
 
 
-def test_a_claim_both_insured_and_too_old_carries_the_email_and_the_escalation() -> None:
-    """FR-0.2, FR-0.4: the representative chooses, and is given both things to choose from.
+def test_a_claim_both_insured_and_too_old_only_asks_for_rep_clarification() -> None:
+    """FR-0.2, FR-0.4: representative clarification takes priority over merchant wording.
 
-    Being too old is something a merchant can be told. Being insured is not. A claim
-    that is both therefore produces an email about its age *and* an escalation, and
-    nothing here decides which of the two a representative acts on.
+    Being too old is something a merchant can usually be told. Being insured routes the
+    claim out, so a claim that is both carries no email and has one clear next action.
     """
     report = build(
         reasons=(TerminalReason.SHIPMENT_INSURED, TerminalReason.CLAIM_TOO_OLD),
         gates=INSURED_AND_TOO_OLD_GATES,
     )
 
-    assert report.requires_escalation is True
-    assert report.drafted_email is not None
-    assert "73 days" in report.drafted_email.body
+    assert report.requires_rep_clarification is True
+    assert report.drafted_email is None
 
 
-def test_the_merchant_email_never_mentions_the_insurance() -> None:
-    """FR-0.2: whichever else fails, the insurance is not the merchant's business here.
-
-    The subject line is the interesting half. It is taken from the first reason a
-    merchant can be told about, so on a claim led by being insured it has to skip past
-    that one rather than announce it.
-    """
+def test_rep_clarification_keeps_every_finding_while_suppressing_the_email() -> None:
+    """FR-0.2: the rep sees every failed check even though no merchant wording is made."""
     report = build(
         reasons=(TerminalReason.SHIPMENT_INSURED, TerminalReason.CLAIM_TOO_OLD),
         gates=INSURED_AND_TOO_OLD_GATES,
     )
 
-    assert report.drafted_email is not None
-    assert "insur" not in report.drafted_email.subject.lower()
-    assert "insur" not in report.drafted_email.body.lower()
+    assert report.drafted_email is None
+    assert report.findings == (AGE_FAILED.explanation, INSURANCE_FAILED.explanation)
 
 
-def test_a_claim_stopped_by_anything_else_needs_no_escalation() -> None:
+def test_a_claim_stopped_by_anything_else_needs_no_rep_clarification() -> None:
     """FR-0.4: an ordinary stopped claim is closed with an explanation, and that is all."""
     report = build()
 
-    assert report.requires_escalation is False
+    assert report.requires_rep_clarification is False
     assert report.drafted_email is not None
 
 
 def test_the_insurance_finding_still_reaches_the_representative() -> None:
-    """NFR-3: the reason it was routed out has to be readable, or the escalation is a shrug.
+    """NFR-3: the reason it was routed out has to make the clarification request useful.
 
     The sentence a representative reads is the insurance check's own. It is the only
     place that reason is written down now that no email carries it.

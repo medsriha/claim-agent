@@ -215,8 +215,8 @@ class InvestigationConclusion(BaseModel):
     Everything a rep is shown about a claim line traces back to a field here, apart
     from the amount and the results of the rules, which code supplies.
 
-    `recommendation` is the model's own choice of one of the four outcomes
-    (FR-1.14), including refusing a claim. Code may afterwards withhold a
+    `recommendation` is the model's own choice of one of the three next actions
+    (FR-1.14). Code may afterwards withhold a
     recommendation of payment that the requirements forbid, and can never move one
     towards paying; what was recommended here is kept either way, so a rep can see
     where the rules disagreed.
@@ -232,12 +232,15 @@ class InvestigationConclusion(BaseModel):
     rather than a clean result, because a rep who cannot tell why the system is
     unsure will either rubber-stamp it or redo the work (FR-2.5).
 
-    `email_subject` and `email_body` are the exact wording that would be sent to
-    the merchant if a rep approved it (FR-2.7). Write `{{amount}}` where a figure
-    belongs and nowhere else — the figure is substituted afterwards, and any other
-    money-shaped text is rejected. The words "draft", "unsent" and the like must
-    not appear: that the email is a draft is recorded beside it, not inside it, so
-    no such marker can ever reach a merchant (FR-1.17).
+    `requested_details` lists exactly what the merchant can supply for `request_info`.
+    `email_subject` and `email_body` are the exact wording that would be sent to the
+    merchant if a rep approved an approval or information request (FR-2.7), and the
+    email must ask for each listed detail. Both email fields are null when representative
+    clarification is needed. Write `{{amount}}` where a figure belongs and nowhere else —
+    the figure is substituted afterwards, and any other money-shaped text is rejected.
+    The words "draft", "unsent" and the like must not appear: that the email is a draft
+    is recorded beside it, not inside it, so no such marker can ever reach a merchant
+    (FR-1.17).
 
     `corrections_considered` names the earlier cases whose rep corrections actually
     influenced this conclusion, so a report can say which past correction changed
@@ -297,10 +300,26 @@ class InvestigationConclusion(BaseModel):
         default=(),
         description="Case ids of past rep corrections that changed your conclusion.",
     )
-    email_subject: str = Field(description="Subject line of the email to the merchant.")
-    email_body: str = Field(
+    requested_details: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Every specific additional detail the merchant must provide for request_info. "
+            "Empty for approve and request_rep_clarification."
+        ),
+    )
+    email_subject: str | None = Field(
+        default=None,
+        description=(
+            "Subject line of the email to the merchant. Null when the next action is "
+            "request_rep_clarification."
+        ),
+    )
+    email_body: str | None = Field(
+        default=None,
         description=(
             "The email to the merchant, in the exact wording that would be sent. "
-            "Write {{amount}} where a figure belongs; never write a figure yourself."
-        )
+            "For request_info, name every specific detail the merchant needs to provide. "
+            "For approve, write {{amount}} where the approved amount belongs; never write "
+            "a figure yourself. Null when the next action is request_rep_clarification."
+        ),
     )

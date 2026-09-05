@@ -1,11 +1,11 @@
 /**
- * The one screen: pick a claim, watch the screening report back, act on the email.
+ * The one screen: pick a claim, watch the screening and investigation, then review the report.
  *
  * **Two halves, and they work differently.** The quick checks are a replay: the whole
  * answer is fetched first, and only then are the findings played out one at a time, because
  * starting earlier could put "read the parcel ✓" on screen for a read that had not finished
- * or had just failed. The investigation is not a replay — it genuinely reports as it works,
- * and its latest action replaces the previous one in a compact activity banner.
+ * or had just failed. The investigation is not a replay — each progress event arrives live. One
+ * compact bar previews the latest event and keeps the complete stream in its expandable log.
  *
  * What that leaves invented is worth being exact about, because it used to be everything.
  * The steps are real, their order is real, and their wording is the service's. What is
@@ -36,8 +36,6 @@ import { CasePicker } from "../components/CasePicker";
 import { Thread } from "../chat/Thread";
 import {
   failureTranscript,
-  investigationMessages,
-  noteMessage,
   pickedMessage,
   reportMessages,
   stepMessage,
@@ -102,9 +100,8 @@ async function lookUpPrecedent(result: PreflightResult): Promise<PrecedentLookup
 /**
  * Ask for the claim to be investigated, and show what the service says as it says it.
  *
- * This is the one place on the screen where a message changes in place rather than being
- * laid out from a finished answer. Only the newest progress action is retained, so the
- * stream cannot fill the conversation with narration while the useful report is arriving.
+ * This is the one place where a message changes in place. Only the newest progress action is
+ * retained in the existing activity panel, so live narration never pushes the report away.
  *
  * **A failure never throws away what already arrived.** The screening is on screen and a
  * representative can use it, so a stream that breaks part-way adds what went wrong and
@@ -121,9 +118,6 @@ async function investigate(
   caseId: string,
   setConversation: React.Dispatch<React.SetStateAction<Conversation | null>>,
 ): Promise<void> {
-  // Product names arrive with the split, part-way through, and every later message about a
-  // product carries only its id. Kept here so a step can be headed with the product it is
-  // about rather than an identifier nobody reads.
   const productNames = new Map<string, string>();
 
   const add = (messages: TranscriptMessage[], stillWorking: boolean): void => {
@@ -135,49 +129,48 @@ async function investigate(
   };
 
   const showLatestAction = (message: TranscriptMessage): void => {
-    setConversation((current) =>
-      current === null || current.caseId !== caseId
-        ? current
-        : {
-            ...current,
-            // The activity banner is the one step message in the conversation. Replacing
-            // it also gives the new action a new key, so it starts collapsed each time.
-            messages: [
-              ...current.messages.filter((one) => one.body.kind !== "step"),
-              message,
-            ],
-            working: true,
-          },
-    );
+    setConversation((current) => {
+      if (current === null || current.caseId !== caseId || message.body.kind !== "step") {
+        return current;
+      }
+      const previous = current.messages.find((one) => one.body.kind === "step");
+      const history =
+        previous?.body.kind === "step"
+          ? [...previous.body.history, ...message.body.history]
+          : message.body.history;
+      return {
+        ...current,
+        messages: [
+          ...current.messages.filter((one) => one.body.kind !== "step"),
+          { ...message, body: { ...message.body, history } },
+        ],
+        working: true,
+      };
+    });
   };
 
   try {
     await investigateCase(caseId, (message) => {
       switch (message.kind) {
         case "progress":
-          // The screening was already said, at the top of the conversation, from the
-          // request that fetched it. Saying it again would read as it having happened twice.
+          if (
+            message.event.claim_line_id !== null &&
+            message.event.detail.product !== undefined
+          ) {
+            productNames.set(message.event.claim_line_id, message.event.detail.product);
+          }
+          // Screening was already replayed above. Every later SSE action, including model
+          // thinking, tool calls, and image analysis, updates the activity bar and is kept
+          // in the log revealed when the representative expands it.
           if (message.event.kind !== "screened") {
-            showLatestAction(stepMessage(message.event, (id) => productNames.get(id) ?? null));
+            showLatestAction(
+              stepMessage(message.event, (id) => productNames.get(id) ?? null),
+            );
           }
           return;
 
         case "result":
-          if (message.investigation !== null) {
-            message.investigation.triage.claim_lines.forEach((line) => {
-              productNames.set(line.claim_line_id, line.claimed.name);
-            });
-            add(investigationMessages(message.investigation), true);
-          }
-          // The reports come last, because they are what a representative acts on and
-          // everything above them is how they were reached. A claim whose findings could
-          // not be kept says so in the service's own words rather than showing nothing.
-          add(
-            message.reportsUnavailable !== null
-              ? [noteMessage(message.reportsUnavailable)]
-              : reportMessages(message.reports),
-            true,
-          );
+          add(reportMessages(message.reports, message.reportsUnavailable), true);
           return;
 
         case "failed":
@@ -245,15 +238,13 @@ export function PreflightScreen(): React.JSX.Element {
             : {
                 ...current,
                 messages: screened,
-                // A claim that passes is still working: the investigation follows. A
-                // stopped one is finished, because nothing more is going to be asked.
-                working: result.verdict === "proceed",
+                // Every path finishes in the same structured report, including claims that the
+                // cheap checks stopped before the agent ran.
+                working: true,
               },
         );
 
-        if (result.verdict === "proceed") {
-          await investigate(caseId, setConversation);
-        }
+        await investigate(caseId, setConversation);
       })
       .catch((error: unknown) => {
         // The client promises to throw only its own failure type. Anything else would be a

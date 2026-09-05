@@ -98,6 +98,14 @@ export interface CaseRecord {
   order: Order | null;
 }
 
+/** One image attached to the claim, including the URL the report links to. */
+export interface Attachment {
+  attachment_id: string;
+  url: string;
+  file_name: string | null;
+  content_type: string | null;
+}
+
 /** Something a rep changed on an earlier claim from the same merchant. */
 export interface MerchantCorrection {
   user_id: string;
@@ -141,7 +149,7 @@ export interface DraftedEmail {
  * - **`drafted_email`**, for every reason the merchant can be told about. `null` when
  *   there is nothing to tell them, which today means a claim stopped only by being
  *   insured.
- * - **`requires_escalation`**, true when the claim has to leave this process entirely.
+ * - **`requires_rep_clarification`**, true when the rep must resolve the internal path.
  *   Insured shipments are claimed on their insurance somewhere else, so they are routed
  *   out rather than answered, and no email is written about it.
  *
@@ -160,7 +168,7 @@ export interface TerminalReport {
   gates: GateResult[];
   context: ClaimContext;
   drafted_email: DraftedEmail | null;
-  requires_escalation: boolean;
+  requires_rep_clarification: boolean;
   requires_rep_approval: true;
 }
 
@@ -183,7 +191,7 @@ export interface PreflightResult {
 export type MatchOutcome = "matched" | "not_on_order" | "ambiguous";
 
 /** What a claim line closed on. */
-export type Recommendation = "approve" | "request_info" | "deny" | "escalate";
+export type Recommendation = "approve" | "request_info" | "request_rep_clarification";
 
 /**
  * One damaged product whose claim was closed.
@@ -325,8 +333,8 @@ export interface Assessment {
  * that a rule withheld the payment anyway.
  */
 export interface OutcomeDecision {
-  recommendation: "approve" | "request_info" | "deny" | "escalate";
-  recommended_by_agent: "approve" | "request_info" | "deny" | "escalate";
+  recommendation: Recommendation;
+  recommended_by_agent: Recommendation;
   overrides: string[];
   explanation: string;
 }
@@ -373,66 +381,6 @@ export interface AmountDerivation {
   priced_from: string | null;
 }
 
-/** How many steps a run was allowed and how many it used. */
-export interface BudgetSnapshot {
-  steps_used: number;
-  steps_allowed: number;
-  image_analyses_used: number;
-  image_analyses_allowed: number;
-  tool_retries_used: number;
-  tool_retries_allowed_per_call: number;
-  limits_reached: string[];
-}
-
-/**
- * Everything established about one damaged product.
- *
- * `drafted_email` is `null` when there is nothing that could be sent — a product whose
- * wording was refused, or one held back by the cap after its email had been written.
- * `concerns` is where anything that did not sit right goes, and silence there is treated
- * as a defect rather than a clean result (FR-2.5).
- */
-export interface LineInvestigation {
-  line: ClaimLine;
-  evidence: EvidenceFinding[];
-  assessments: Assessment[];
-  outcome: OutcomeDecision;
-  amount: AmountDerivation;
-  concerns: string[];
-  drafted_email: DraftedEmail | null;
-  budget: BudgetSnapshot;
-}
-
-/**
- * How a claim was split, and what was settled about the evidence covering the whole parcel.
- *
- * `ambiguity` carries what was unclear when the split could not be established. While it
- * says anything at all, no product was investigated — nothing may be looked into until
- * somebody has said which products are being claimed for (FR-1a.4).
- */
-export interface ClaimTriage {
-  case_id: string;
-  claim_lines: ClaimLine[];
-  shared_evidence: EvidenceFinding[];
-  ambiguity: string | null;
-}
-
-/**
- * Everything an investigation established about one claim, product by product.
- *
- * `lines` is empty when the split was never settled. `recommended_total_usd` is what the
- * products recommended for payment come to between them — text, and worked out in the
- * service like every other figure.
- */
-export interface ClaimInvestigation {
-  case_id: string;
-  triage: ClaimTriage;
-  lines: LineInvestigation[];
-  claim_concerns: string[];
-  recommended_total_usd: string;
-  claim_cap_applied: boolean;
-}
-
 /** Where a report has got to in its review. Approved is final (FR-2.9). */
 export type ReportState = "awaiting_review" | "changes_requested" | "approved";
 
@@ -445,13 +393,64 @@ export interface Proposal {
   readonly amount_usd: string | null;
 }
 
+/** Settled per-product findings. The UI, rather than the backend, lays these fields out. */
+export interface InvestigationReportContent {
+  readonly kind: "investigation";
+  readonly line: ClaimLine;
+  readonly context: ClaimContext;
+  readonly attachments: readonly Attachment[];
+  readonly evidence: readonly EvidenceFinding[];
+  readonly assessments: readonly Assessment[];
+  readonly outcome: OutcomeDecision;
+  readonly amount: AmountDerivation;
+  readonly concerns: readonly string[];
+  readonly requested_details: readonly string[];
+  readonly corrections_considered: readonly string[];
+}
+
+/** Findings for a claim stopped by the deterministic checks. */
+export interface ScreeningReportContent {
+  readonly kind: "screening";
+  readonly context: ClaimContext;
+  readonly reasons: readonly TerminalReason[];
+  readonly findings: readonly string[];
+  readonly gates: readonly GateResult[];
+  readonly requires_rep_clarification: boolean;
+}
+
+/** Claim-level findings that need the representative, never the merchant, to clarify them. */
+export interface ClarificationReportContent {
+  readonly kind: "clarification";
+  readonly context: ClaimContext;
+  readonly attachments: readonly Attachment[];
+  readonly candidate_lines: readonly ClaimLine[];
+  readonly ambiguity: string;
+  readonly concerns: readonly string[];
+}
+
+export type ReportContent =
+  | InvestigationReportContent
+  | ScreeningReportContent
+  | ClarificationReportContent;
+
+export type RepAction = "approved" | "approved_with_override" | "sent_back";
+
+/** One review action, kept as fields rather than appended to a prose document. */
+export interface ReportReview {
+  readonly review_number: number;
+  readonly action: RepAction;
+  readonly recommended: Proposal;
+  readonly decided: Proposal;
+  readonly edited_email: { readonly subject: string; readonly body: string } | null;
+  readonly rep_words: string | null;
+  readonly over_the_cap_by: string | null;
+}
+
 /**
  * One report a representative decides on (FR-2.1).
  *
- * Almost everything they read is in `markdown`. The fields beside it are the ones this screen
- * has to work with rather than read: a row in a claim's list, and the wording of an email it
- * can offer for rewording. Reading any of that back out of the writing would be the screen
- * taking data out of prose.
+ * `content` is the canonical report data. The UI constructs its presentation directly from
+ * those fields; it never receives or parses a backend-authored prose document.
  *
  * `amount_usd` is **text**, like every other figure the service sends. Nothing here parses it.
  */
@@ -461,6 +460,7 @@ export interface Report {
   readonly case_id: string;
   readonly claim_line_id: string | null;
   readonly product_name: string | null;
+  readonly account_name: string | null;
   readonly user_id: string | null;
   readonly stage: ReportStage;
   readonly state: ReportState;
@@ -474,7 +474,8 @@ export interface Report {
   readonly decided: Proposal | null;
   readonly decisions_taken: number;
   readonly drafted_email: DraftedEmail | null;
-  readonly markdown: string;
+  readonly content: ReportContent;
+  readonly reviews: readonly ReportReview[];
   readonly created_at: string;
 }
 

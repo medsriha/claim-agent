@@ -20,8 +20,9 @@ the subject — and never which of them the merchant gets to hear about.
 **Being insured is not one of those reasons, and never reaches this file.** An
 insured shipment is claimed on its insurance, through a process that is not ours, so
 it is routed out for someone else to pick up rather than answered by us (FR-0.2).
-The write-up marks it for escalation; nobody writes to the merchant about it. A claim
-that is both insured and too old still gets this email about its age.
+The write-up marks it for representative clarification; nobody writes to the merchant about it.
+That action takes precedence even when another gate also failed, so an insured claim never
+reaches this email builder.
 
 The word "draft" never appears in the text. A representative has to read the exact
 wording that would be sent (FR-2.7), so a marker inside the body is a marker that
@@ -64,7 +65,7 @@ string.
 """
 
 _INSURED_NEVER_EMAILED = (
-    "An insured shipment is escalated to the insurance process, never explained to the "
+    "An insured shipment is sent for representative clarification to the insurance process, never explained to the "
     "merchant, so it must not reach the email."
 )
 """Why both branches below refuse rather than write anything.

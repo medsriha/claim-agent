@@ -106,7 +106,7 @@ class InvoiceUnavailableError(ClaimAgentError):
     could not ask about is a fault that may well pass (FR-1.18, NFR-4).
 
     The status is the one a caller would get if this ever travelled out of the API,
-    which it should not: an investigation turns it into an escalation long before
+    which it should not: an investigation turns it into an representative clarification request long before
     then. `502` rather than ShipBob's own `422`, because `422` is what FastAPI
     itself returns for a malformed request and the two would be confused.
     """

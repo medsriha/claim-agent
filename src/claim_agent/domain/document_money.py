@@ -272,7 +272,7 @@ def parse_money_text(raw: str) -> MoneyReading | None:
     Returns:
         The figure, its currency mark if it had one, and the exact number. `None` when
         the text is not a single readable figure, which is a real answer and not an
-        error: the caller escalates or asks for a clearer photograph rather than
+        error: the caller requests representative clarification or asks for a clearer photograph rather than
         proceeding on a guess (NFR-4).
     """
     text = raw.strip()

@@ -211,14 +211,11 @@ async def _narrate(
         # Stopped before anything expensive. The explanation a representative has to
         # approve is the whole result, and no image was ever looked at (FR-0.4, NFR-8).
         stopped = build_screening_report(screening, at=asked_at)
-        kept, could_not_keep = _keep(reports, (stopped,) if stopped else ())
-        yield _frame("progress", (await _say_they_are_ready(events, kept, could_not_keep)))
+        ready, could_not_keep = _keep(reports, (stopped,) if stopped else ())
+        yield _frame("progress", (await _say_they_are_ready(events, ready, could_not_keep)))
         yield _frame(
             "result",
-            {
-                "screening": screening.model_dump(mode="json"),
-                **_reports_message(kept, could_not_keep),
-            },
+            _reports_message(ready, could_not_keep),
         )
         yield _frame("done", {"case_id": screening.case_id})
         return
@@ -264,11 +261,11 @@ async def _narrate(
         yield _frame("done", {"case_id": screening.case_id})
         return
 
-    kept, could_not_keep = _keep(
+    ready, could_not_keep = _keep(
         reports, build_investigation_reports(screening, investigated, at=asked_at)
     )
-    yield _frame("progress", (await _say_they_are_ready(events, kept, could_not_keep)))
-    yield _frame("result", _result_message(screening, investigated, kept, could_not_keep))
+    yield _frame("progress", (await _say_they_are_ready(events, ready, could_not_keep)))
+    yield _frame("result", _reports_message(ready, could_not_keep))
     yield _frame("done", {"case_id": screening.case_id})
 
 
@@ -329,26 +326,6 @@ def _screening_message(screening: PreflightResult) -> RunEvent:
     )
 
 
-def _result_message(
-    screening: PreflightResult,
-    investigated: ClaimInvestigation,
-    kept: tuple[Report, ...],
-    could_not_keep: str | None,
-) -> dict[str, Any]:
-    """Assemble the one message a representative actually decides from.
-
-    Carries the screening as well as the investigation, so that everything behind a
-    recommendation is in one place and nothing has to be fetched again to check it
-    (NFR-3). Sent whole rather than in pieces because a report read half-arrived is
-    worse than one that arrives a moment later.
-    """
-    return {
-        "screening": screening.model_dump(mode="json"),
-        "investigation": investigated.model_dump(mode="json"),
-        **_reports_message(kept, could_not_keep),
-    }
-
-
 def _keep(
     reports: ReportStore, built: tuple[Report | None, ...] | tuple[Report, ...]
 ) -> tuple[tuple[Report, ...], str | None]:
@@ -365,19 +342,16 @@ def _keep(
     because there is nothing to approve *against*. A representative told only that
     something failed would go looking for them.
 
-    Each report is written on its own, so one that fails does not take the others
-    with it. Whatever was kept comes back, and the reason comes back beside it.
+    Each report is written on its own. All canonical report data still comes back when keeping
+    one fails, and the reason beside it prevents the UI from offering review actions.
 
     Returns:
-        The reports that were kept, and one plain sentence if any were not.
+        The reports that are ready to display, and one plain sentence if any were not kept.
     """
-    kept: list[Report] = []
-    for report in built:
-        if report is None:
-            continue
+    ready = tuple(report for report in built if report is not None)
+    for report in ready:
         try:
             reports.record(report)
-            kept.append(report)
         except StorageError as failure:
             logger.error(
                 "report_not_kept",
@@ -387,17 +361,17 @@ def _keep(
                 failure=type(failure).__name__,
             )
             return (
-                tuple(kept),
+                ready,
                 "These findings could not be kept, so they cannot be approved yet. "
                 "Asking for this claim again will try to keep them.",
             )
-    return tuple(kept), None
+    return ready, None
 
 
-def _reports_message(kept: tuple[Report, ...], could_not_keep: str | None) -> dict[str, Any]:
+def _reports_message(reports: tuple[Report, ...], could_not_keep: str | None) -> dict[str, Any]:
     """The part of the result that says what a representative can now decide on."""
     return {
-        "reports": [report.model_dump(mode="json") for report in kept],
+        "reports": [report.model_dump(mode="json") for report in reports],
         "reports_unavailable_reason": could_not_keep,
     }
 

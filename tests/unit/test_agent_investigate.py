@@ -227,8 +227,7 @@ def a_conclusion(**overrides: object) -> InvestigationConclusion:
 def an_email_with_no_figure(**overrides: object) -> dict[str, object]:
     """Email wording that mentions no amount at all, for a conclusion nobody will pay out.
 
-    An approval whose wording never mentions a figure is accepted as a thinner email
-    rather than refused, which is what lets a test change one thing at a time.
+    Non-approval wording names no figure, which lets a test change one thing at a time.
     """
     fields: dict[str, object] = {
         "email_subject": "About your damaged shipment",
@@ -382,6 +381,22 @@ async def test_a_missing_piece_of_evidence_sends_the_claim_back_to_the_merchant(
     assert result.drafted_email is not None
 
 
+async def test_a_specific_identification_detail_can_be_requested_from_the_merchant() -> None:
+    """The request-info path supports actionable gaps beyond the four evidence items."""
+    detail = "a clear photograph showing the full product label and SKU"
+    conclusion = a_conclusion(
+        recommendation=Recommendation.REQUEST_INFO,
+        requested_details=(detail,),
+        **an_email_with_no_figure(),
+    )
+
+    result = await investigate(a_run_that_concludes(conclusion))
+
+    assert result.outcome.recommendation is Recommendation.REQUEST_INFO
+    assert result.drafted_email is not None
+    assert detail in result.drafted_email.body
+
+
 async def test_an_image_we_could_not_read_goes_to_a_person_and_not_to_the_merchant() -> None:
     """NFR-4, FR-1.7: our own failure is never turned into a request the merchant cannot act on.
 
@@ -396,14 +411,14 @@ async def test_an_image_we_could_not_read_goes_to_a_person_and_not_to_the_mercha
         shared_evidence=(settled(EvidenceKind.INVOICE, EvidenceState.UNREADABLE),),
     )
 
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.EVIDENCE_UNREADABLE in result.outcome.overrides
     assert state_of(result, EvidenceKind.INVOICE) is EvidenceState.UNREADABLE
     assert EvidenceKind.INVOICE not in gaps_the_merchant_can_fill(result.evidence)
 
 
 async def test_a_question_answered_no_is_not_the_same_as_one_never_answered() -> None:
-    """FR-1.12: a failed judgement sends the claim back to the merchant with that reason.
+    """FR-1.12: a failed judgement asks the representative to clarify what is wrong.
 
     A question nobody answered is the other thing entirely — an unfinished investigation
     — so an answer of no is kept as an answer rather than being dropped.
@@ -415,8 +430,9 @@ async def test_a_question_answered_no_is_not_the_same_as_one_never_answered() ->
 
     result = await investigate(a_run_that_concludes(conclusion))
 
-    assert result.outcome.recommendation is Recommendation.REQUEST_INFO
-    assert OverrideReason.EVIDENCE_INCOMPLETE in result.outcome.overrides
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert OverrideReason.ASSESSMENT_FAILED in result.outcome.overrides
+    assert result.drafted_email is None
     answered = {answer.name: answer.passed for answer in result.assessments}
     assert answered[AssessmentName.DAMAGE_VISIBLE] is False
     assert len(result.assessments) == 4
@@ -437,7 +453,7 @@ async def test_a_question_the_run_never_answered_is_not_written_down_as_an_answe
     result = await investigate(a_run_that_concludes(conclusion))
 
     assert tuple(answer.name for answer in result.assessments) == REQUIRED_ASSESSMENTS[:3]
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.INVESTIGATION_INCOMPLETE in result.outcome.overrides
 
 
@@ -451,7 +467,7 @@ async def test_a_shaky_investigation_is_never_allowed_to_recommend_paying() -> N
     the number written into it.
     """
     conclusion = a_conclusion(
-        assessments=all_four_answered(confidence=0.4),
+        confidence=0.4,
         **an_email_with_no_figure(),
     )
 
@@ -460,12 +476,12 @@ async def test_a_shaky_investigation_is_never_allowed_to_recommend_paying() -> N
         policy=Policy(min_assessment_confidence=0.7),
     )
 
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.NOT_CONFIDENT_ENOUGH in result.outcome.overrides
     assert "0.40" in result.outcome.explanation
 
 
-async def test_a_run_that_used_up_its_steps_escalates_carrying_what_it_established() -> None:
+async def test_a_run_that_used_up_its_steps_asks_the_rep_with_findings_intact() -> None:
     """FR-1.16: a representative is handed the work, not an empty result.
 
     The run is given one step, spends it asking for the images, and has nothing left. The
@@ -489,7 +505,7 @@ async def test_a_run_that_used_up_its_steps_escalates_carrying_what_it_establish
             shared_evidence=(settled(EvidenceKind.CUSTOMER_CONFIRMATION, EvidenceState.PRESENT),),
         )
 
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.BUDGET_EXHAUSTED in result.outcome.overrides
     assert result.conclusion is None
     assert result.confidence is None
@@ -512,7 +528,7 @@ async def test_a_model_that_cannot_be_reached_produces_a_write_up_rather_than_an
     """
     result = await investigate(scripted(ModelConnectionError("the socket closed")))
 
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert result.conclusion is None
     assert result.drafted_email is None
     assert BudgetLimit.STEPS not in result.budget.limits_reached
@@ -581,7 +597,8 @@ async def test_a_product_that_could_be_either_of_two_order_lines_is_never_priced
         invoice=Invoice(invoice_id="INV-342578703", line_items=order.line_items),
     )
 
-    assert result.outcome.recommendation is Recommendation.REQUEST_INFO
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert result.drafted_email is None
     # The figure the investigation named is still shown; the rules withhold the payment,
     # which is what stops it being made. Zeroing it would hide what was proposed.
     assert result.amount.components == ()
@@ -608,7 +625,7 @@ async def test_an_ambiguous_product_is_judged_against_the_order_and_not_against_
         invoice=Invoice(invoice_id="INV-342578703", line_items=order.line_items),
     )
 
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.PRODUCT_NOT_PRICEABLE in result.outcome.overrides
     assert "more than one line on the order" in result.outcome.explanation
 
@@ -629,7 +646,7 @@ async def test_a_product_that_is_not_on_the_order_cannot_be_paid_for() -> None:
 
     result = await investigate(a_run_that_concludes(conclusion), line=line)
 
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.PRODUCT_NOT_PRICEABLE in result.outcome.overrides
     assert "not on the order" in result.outcome.explanation
     # The figure the investigation named is still shown, and nothing is paid on it. Zeroing
@@ -728,7 +745,7 @@ async def test_an_email_carrying_a_figure_the_model_wrote_is_refused_and_goes_to
 
     result = await investigate(a_run_that_concludes(conclusion))
 
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert result.drafted_email is None
     assert result.conclusion is not None
     assert result.conclusion.recommendation is Recommendation.APPROVE
@@ -749,7 +766,7 @@ async def test_an_approval_the_rules_withheld_never_promises_the_merchant_money(
 
     result = await investigate(a_run_that_concludes(conclusion))
 
-    assert result.outcome.recommendation is Recommendation.ESCALATE
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert result.drafted_email is None
     assert result.concerns != ()
 
@@ -945,7 +962,7 @@ def a_closed_claim(**overrides: object) -> PrecedentRecord:
         "match": MatchOutcome.MATCHED,
         "evidence": (),
         "assessments": (),
-        "outcome": Recommendation.DENY,
+        "outcome": Recommendation.REQUEST_REP_CLARIFICATION,
         "amount_usd": None,
         "cap_applied": False,
         "rep_note": "Refused: the crushing happened after delivery.",
@@ -991,7 +1008,7 @@ async def test_fr_s_6_a_run_is_handed_the_closed_claims_most_like_its_product() 
     asked = what_the_model_was_asked(model)
     assert "## SIMILAR CLAIMS HANDLED BEFORE" in asked
     assert "CASE-0900" in asked
-    assert "closed as: deny" in asked
+    assert "closed as: request_rep_clarification" in asked
     assert "the crushing happened after delivery" in asked
 
 

@@ -173,7 +173,9 @@ async def test_a_stopped_claim_is_explained_and_never_reaches_the_agent(
     assert names(messages) == ["progress", "progress", "result", "done"]
     assert "cannot be processed" in messages[0][1]
     assert "report(s) ready for review" in messages[1][1]
-    assert "claim_too_old" in messages[2][1]
+    result = json.loads(messages[2][1])
+    assert set(result) == {"reports", "reports_unavailable_reason"}
+    assert result["reports"][0]["content"]["reasons"] == ["claim_too_old"]
     # The whole point: its photographs were never touched, and no invoice was priced.
     assert images.call_count == 0
     assert invoicing.call_count == 0
@@ -268,11 +270,18 @@ async def test_the_stream_carries_the_claim_split_and_says_what_was_unclear(
 
     response = await client.post("/cases/CASE-1001/investigate")
 
-    result = next(data for name, data in read_stream(response.text) if name == "result")
-    assert "which of the two products broke" in result
-    # Nothing may be investigated while the split is unsettled, so there are no
-    # per-product findings to report.
-    assert '"lines":[]' in result.replace(" ", "")
+    messages = read_stream(response.text)
+    assert any(
+        "which of the two products broke" in data for name, data in messages if name == "progress"
+    )
+    # Nothing is guessed while the split is unsettled. A claim-level report asks the rep
+    # for clarification and deliberately carries no merchant email.
+    result = json.loads(next(data for name, data in messages if name == "result"))
+    (report,) = result["reports"]
+    assert report["recommendation"] == "request_rep_clarification"
+    assert report["confidence"] == 0.3
+    assert report["drafted_email"] is None
+    assert "which of the two products broke" in report["content"]["ambiguity"]
 
 
 async def test_a_claim_that_needs_a_model_and_has_no_key_is_told_so_on_the_stream(
@@ -335,6 +344,7 @@ async def test_a_stopped_claim_keeps_its_write_up_so_it_can_be_approved_later(
         response = await http.post("/cases/CASE-1004/investigate")
 
     result = json.loads(dict(read_stream(response.text))["result"])
+    assert set(result) == {"reports", "reports_unavailable_reason"}
     assert result["reports_unavailable_reason"] is None
     (kept,) = result["reports"]
     assert kept["stage"] == "screening"
@@ -382,14 +392,13 @@ async def test_a_store_that_cannot_be_written_still_reports_what_was_found(
     assert response.status_code == 200
     messages = dict(read_stream(response.text))
     result = json.loads(messages["result"])
-    # The findings still arrived. What is missing is only the keeping of them, and the
-    # reply says which — a rep told merely that something failed would go looking for them.
-    assert result["screening"]["report"]["reasons"] == ["claim_too_old"]
-    assert result["reports"] == []
+    # The canonical structured report still arrived. What is missing is only the keeping of
+    # it, and the reply says which — a rep told merely that something failed would go looking.
+    assert result["reports"][0]["content"]["reasons"] == ["claim_too_old"]
     assert "cannot be approved yet" in result["reports_unavailable_reason"]
 
 
-async def test_a_split_nobody_could_settle_keeps_nothing_and_says_so(
+async def test_a_split_nobody_could_settle_keeps_a_clarification_report(
     settings: Settings, shipbob: respx.Router
 ) -> None:
     """FR-1a.4: nothing was established about any product, so there is nothing to approve."""
@@ -406,9 +415,13 @@ async def test_a_split_nobody_could_settle_keeps_nothing_and_says_so(
         response = await http.post("/cases/CASE-1001/investigate")
 
     result = json.loads(dict(read_stream(response.text))["result"])
-    assert result["reports"] == []
+    (report,) = result["reports"]
+    assert report["recommendation"] == "request_rep_clarification"
+    assert report["drafted_email"] is None
     assert result["reports_unavailable_reason"] is None
-    assert reports.for_case("CASE-1001").reports == ()
+    (kept,) = reports.for_case("CASE-1001").reports
+    assert kept.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert kept.drafted_email is None
 
 
 def a_settled_investigation() -> tuple[object, StructuredModel]:
@@ -451,9 +464,21 @@ def a_settled_investigation() -> tuple[object, StructuredModel]:
                     evidence=tuple(
                         EvidenceJudgement(
                             kind=kind,
-                            state=EvidenceState.PRESENT,
-                            observed=f"The {kind.value.replace('_', ' ')} is there and readable.",
-                            attachment_id="ATT-CASE-1001-02",
+                            state=(
+                                EvidenceState.MISSING
+                                if kind is EvidenceKind.OUTER_PACKAGING_PHOTO
+                                else EvidenceState.PRESENT
+                            ),
+                            observed=(
+                                "No outer packaging photo was attached."
+                                if kind is EvidenceKind.OUTER_PACKAGING_PHOTO
+                                else f"The {kind.value.replace('_', ' ')} is there and readable."
+                            ),
+                            attachment_id=(
+                                None
+                                if kind is EvidenceKind.OUTER_PACKAGING_PHOTO
+                                else "ATT-CASE-1001-02"
+                            ),
                         )
                         for kind in EvidenceKind
                     ),
@@ -509,8 +534,16 @@ async def test_a_claim_that_reaches_a_recommendation_keeps_a_report_per_product(
     assert report["stage"] == "investigation"
     assert report["product_name"] == "Liposomal Tripeptide Collagen"
     assert report["recommendation"] == "request_info"
-    # Money is text all the way out, never a JSON number (FR-1.21).
-    assert isinstance(report["amount_usd"], str)
+    requested_details = report["content"]["requested_details"]
+    assert "a photo of the outer shipping box the order arrived in, damaged or not" in (
+        requested_details
+    )
+    assert report["drafted_email"] is not None
+    assert all(detail in report["drafted_email"]["body"] for detail in requested_details)
+    assert report["content"]["attachments"][0]["url"].startswith("https://")
+    # Only an approval exposes an approved amount at report level.
+    assert report["amount_usd"] is None
+    assert isinstance(report["content"]["amount"]["proposed_usd"], str)
     # And it is really there afterwards, reachable by the routes a rep would use.
     assert len(kept["reports"]) == 1
 

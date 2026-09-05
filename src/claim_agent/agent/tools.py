@@ -467,10 +467,10 @@ class PriceComparison(ToolOutcome):
 class EvidenceSufficiency(ToolOutcome):
     """Whether the evidence on this claim can support a recommendation.
 
-    `needs_escalation` and `requests` answer different people. A kind of evidence the
+    `needs_rep_clarification` and `requests` answer different people. A kind of evidence the
     merchant never sent is something they can fix, and `requests` holds the sentence to
     ask them. A kind *we* could not read is something they can do nothing about and must
-    never be asked about; that sets `needs_escalation` instead (FR-1.5, NFR-4).
+    never be asked about; that sets `needs_rep_clarification` instead (FR-1.5, NFR-4).
     """
 
     tool: str = CHECK_EVIDENCE_IS_ENOUGH
@@ -478,7 +478,7 @@ class EvidenceSufficiency(ToolOutcome):
     missing: tuple[str, ...] = ()
     requests: tuple[str, ...] = ()
     unreadable: tuple[str, ...] = ()
-    needs_escalation: bool = False
+    needs_rep_clarification: bool = False
     repeated_images: tuple[str, ...] = ()
 
 
@@ -1526,7 +1526,7 @@ async def _evidence_is_enough(
 
     **What the merchant can fix and what only we can fix are kept apart.** Evidence they
     never sent goes into `requests`, ready to send. Evidence we could not read is nothing
-    they can act on, must not be asked about, and escalates instead (FR-1.5, NFR-4).
+    they can act on, must not be asked about, and requests representative clarification instead (FR-1.5, NFR-4).
 
     The same photograph attached twice is reported alongside, because two copies of one
     image make a claim look better evidenced than it is. It is **not** treated as proof of
@@ -1564,7 +1564,7 @@ async def _evidence_is_enough(
             missing=tuple(one.value for one in assessment.missing_or_unusable),
             requests=assessment.requests,
             unreadable=tuple(one.value for one in assessment.unreadable),
-            needs_escalation=assessment.needs_escalation,
+            needs_rep_clarification=assessment.needs_rep_clarification,
             repeated_images=repeated,
         ),
         asked=asked,
@@ -1859,7 +1859,7 @@ async def _finish(
 
     Every call goes through here, and every call is recorded whether it worked or not.
     The ledger entry is what a representative reads when she asks why a claim was
-    escalated (NFR-3), and the event is what somebody watching sees while the run is
+    sent for representative clarification (NFR-3), and the event is what somebody watching sees while the run is
     still going — a tool being called is the investigation choosing what to look at
     next, which is the whole reason this is an agent rather than a fixed sequence of
     steps (FR-1.1).

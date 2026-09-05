@@ -214,7 +214,7 @@ These follow from the requirements and are not negotiable without changing them:
 - **Deterministic layers use no AI.** Layers 0 and 3 must be pure rules (FR-0.6).
 - **Constrain every model response to a schema** — Pydantic models, never free text (NFR-2).
 - **Fail toward the human.** Timeouts, malformed responses, exhausted budgets all end in
-  escalation, never in a silent approval or a dropped case (NFR-4).
+  representative clarification request, never in a silent approval or a dropped case (NFR-4).
 - **Business logic goes in `domain/`**, testable without a network, a model, or a database.
 
 ## The UI
@@ -507,9 +507,9 @@ Decided:
   included, each shown with the service's own explanation of it. A value whose layer does not
   exist yet is kept off it: a control that changes nothing observable is worse than no control.
   Marking one is a single note beside the value in `policy.py`.
-- **An insured claim is escalated, not explained.** FR-0.2 says insured shipments are "routed out,
+- **An insured claim is sent for representative clarification, not explained.** FR-0.2 says insured shipments are "routed out,
   never processed here", so no merchant email is written about one, and the write-up is marked for
-  escalation instead. A claim that is *also* too old still gets the email about its age, and the
+  representative clarification request instead. A claim that is *also* too old still gets the email about its age, and the
   rep chooses. FR-0.4 says every ineligible claim is closed with an explanation to the merchant
   and does not except this case, so the two requirements can be read as conflicting; this is our
   reading, and DESIGN.md lists it among the questions for whoever owns them.

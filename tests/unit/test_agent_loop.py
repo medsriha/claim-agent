@@ -50,7 +50,7 @@ def a_conclusion() -> InvestigationConclusion:
     """A filled-in investigation form, for the pass that ends on the other shape."""
     return InvestigationConclusion(
         evidence=(),
-        recommendation=Recommendation.ESCALATE,
+        recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
         reasoning="Nothing was established.",
         confidence=0.4,
         email_subject="About your claim",
@@ -235,7 +235,7 @@ async def test_a_model_that_asks_for_tools_for_ever_stops_at_the_step_budget() -
 
 
 async def test_a_pass_that_runs_out_of_steps_hands_back_what_it_established() -> None:
-    """FR-1.16: exhaustion escalates carrying the findings, never an empty result."""
+    """FR-1.16: exhaustion requests clarification with findings, never an empty result."""
     model = scripted(
         asks_for("inspect_image", attachment_id="ATT-01"),
         *[asks_for("list_attachments", case_id="CASE-1003") for _ in range(5)],
@@ -270,7 +270,7 @@ async def test_a_conclusion_that_does_not_fit_the_form_ends_the_pass_rather_than
 
 
 async def test_a_provider_that_fails_at_the_conclusion_ends_the_pass_rather_than_raising() -> None:
-    """NFR-4: a model that cannot be reached escalates the claim, it does not crash."""
+    """NFR-4: a model that cannot be reached returns a rep action, not a crash."""
     model = scripted("done", ModelConnectionError("the socket closed"))
 
     outcome = await run_triage(model)
@@ -288,7 +288,7 @@ async def test_a_model_that_fails_mid_pass_ends_the_pass_rather_than_raising() -
 
     assert outcome.gave_up is True
     assert outcome.reason == "The model provider could not be reached."
-    # Written down as well as returned, so "why was this escalated?" is answerable
+    # Written down as well as returned, so "why is clarification needed?" is answerable
     # from the record alone (NFR-3).
     assert [entry.observed for entry in outcome.ledger] == [
         "The model provider could not be reached."
@@ -337,7 +337,7 @@ async def test_a_broken_tool_is_tried_again_within_its_retry_allowance() -> None
 
 
 async def test_a_tool_that_keeps_breaking_is_reported_to_the_model_in_words() -> None:
-    """FR-1.3, NFR-4: a broken tool escalates through the run, it does not end the request."""
+    """FR-1.3, NFR-4: a broken tool is reported through the run, not raised."""
     always_breaks = a_tool_that_fails(times=99)
     model = scripted(
         asks_for("read_case", case_id="CASE-1003"),
@@ -537,7 +537,7 @@ async def test_a_budget_that_another_pass_already_spent_is_refused() -> None:
     """FR-1.3: sharing one budget between passes is a mistake in our code, so it is loud.
 
     A shared budget would leave the last product a fraction of the allowance the first
-    one had, and the only sign of it would be claims escalating for no visible reason.
+    one had, and the only sign would be unexplained representative clarification requests.
     """
     already_used = budget_of(steps=4)
     await run_triage(scripted("done", a_split()), budget=already_used)

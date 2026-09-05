@@ -87,7 +87,12 @@ def test_approving_at_a_different_figure_is_recorded_as_an_override() -> None:
 
 def test_approving_a_different_outcome_is_recorded_as_an_override() -> None:
     """FR-C.2: not "the wording was clumsy" but "the answer was wrong"."""
-    outcome = approve(a_report(), decided_outcome=Recommendation.DENY, policy=POLICY, at=A_MOMENT)
+    outcome = approve(
+        a_report(),
+        decided_outcome=Recommendation.REQUEST_REP_CLARIFICATION,
+        policy=POLICY,
+        at=A_MOMENT,
+    )
 
     assert outcome.decision is not None
     assert outcome.decision.action is RepAction.APPROVED_WITH_OVERRIDE
@@ -101,7 +106,7 @@ def test_what_was_settled_on_is_kept_beside_what_was_advised() -> None:
     assert outcome.report.amount_usd == Decimal("52.00")
     assert outcome.report.decided is not None
     assert outcome.report.decided.amount_usd == Decimal("31.20")
-    assert "$31.20" in outcome.report.markdown
+    assert outcome.report.reviews[-1].decided.amount_usd == Decimal("31.20")
 
 
 def test_rewording_the_email_is_a_flag_on_the_approval_rather_than_an_action_of_its_own() -> None:
@@ -111,7 +116,9 @@ def test_rewording_the_email_is_a_flag_on_the_approval_rather_than_an_action_of_
     assert outcome.decision is not None
     assert outcome.decision.action is RepAction.APPROVED
     assert outcome.decision.email_edited
-    assert "We are refunding you for the damaged collagen." in outcome.report.markdown
+    assert outcome.report.drafted_email is not None
+    assert outcome.report.drafted_email.body == A_REWORDING.body
+    assert outcome.report.reviews[-1].edited_email == A_REWORDING
 
 
 def test_the_report_keeps_everything_it_said_before_the_decision() -> None:
@@ -120,8 +127,8 @@ def test_the_report_keeps_everything_it_said_before_the_decision() -> None:
 
     outcome = approve(report, decided_amount_usd=Decimal("31.20"), policy=POLICY, at=A_MOMENT)
 
-    assert outcome.report.markdown.startswith(report.markdown)
-    assert "## Review 1 — what the representative decided" in outcome.report.markdown
+    assert outcome.report.content == report.content
+    assert outcome.report.reviews[-1].review_number == 1
 
 
 # --- A figure over the cap (FR-1.20, FR-R.8, FR-C.4) -------------------------
@@ -140,14 +147,14 @@ def test_a_figure_over_the_cap_is_flagged_in_the_report() -> None:
     """FR-R.8: say so plainly rather than silently complying or silently ignoring it."""
     outcome = approve(a_report(), decided_amount_usd=Decimal("150.00"), policy=POLICY, at=A_MOMENT)
 
-    assert "$50.00 over the most the system may recommend" in outcome.report.markdown
+    assert outcome.report.reviews[-1].over_the_cap_by == Decimal("50.00")
 
 
 def test_a_figure_within_the_cap_is_not_flagged() -> None:
     """FR-1.20: a note about a limit nobody crossed is noise in front of the findings."""
     outcome = approve(a_report(), policy=POLICY, at=A_MOMENT)
 
-    assert "over the most the system may recommend" not in outcome.report.markdown
+    assert outcome.report.reviews[-1].over_the_cap_by is None
 
 
 # --- Approving twice (FR-C.4, FR-3.5) ----------------------------------------
@@ -265,9 +272,7 @@ def test_each_round_of_review_is_numbered_in_the_report() -> None:
     parked = send_back(parked, feedback="Two.", at=A_MOMENT).report
     approved = approve(parked, policy=POLICY, at=A_MOMENT).report
 
-    assert "## Review 1 — what the representative decided" in approved.markdown
-    assert "## Review 2 — what the representative decided" in approved.markdown
-    assert "## Review 3 — what the representative decided" in approved.markdown
+    assert [review.review_number for review in approved.reviews] == [1, 2, 3]
 
 
 def test_a_rewording_replaces_the_wording_and_never_the_recipient() -> None:
@@ -281,9 +286,16 @@ def test_a_rewording_replaces_the_wording_and_never_the_recipient() -> None:
 
 
 def test_a_report_with_nothing_to_send_stays_with_nothing_to_send() -> None:
-    """FR-2.7: there is no address to reword an email to, so a rewording changes nothing."""
+    """FR-2.7: a rep-clarification report cannot gain a merchant email during review."""
     outcome = approve(
-        a_report(drafted_email=None), edited_email=A_REWORDING, policy=POLICY, at=A_MOMENT
+        a_report(
+            recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
+            amount_usd=None,
+            drafted_email=None,
+        ),
+        edited_email=A_REWORDING,
+        policy=POLICY,
+        at=A_MOMENT,
     )
 
     assert outcome.report.drafted_email is None

@@ -136,8 +136,6 @@ p {
 .gate-summary:focus-visible,
 .observed-summary:focus-visible,
 .step-summary:focus-visible,
-.composer-subject:focus-visible,
-.composer-body:focus-visible,
 .chart-focus:focus-visible {
   outline: 2px solid var(--sb-brand);
   outline-offset: 2px;
@@ -299,73 +297,6 @@ p {
   margin-bottom: 14px;
   max-width: 68ch;
   font-weight: 600;
-}
-
-/* --- Verdict ------------------------------------------------------------ */
-
-.verdict {
-  padding: 20px;
-  border-radius: var(--sb-radius);
-  border: 1px solid;
-  box-shadow: var(--sb-shadow);
-}
-
-.verdict-proceed {
-  background: var(--sb-pass-tint);
-  border-color: var(--sb-pass);
-}
-
-.verdict-stopped {
-  background: var(--sb-stop-tint);
-  border-color: var(--sb-stop);
-}
-
-.verdict-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.verdict-badge {
-  padding: 5px 14px;
-  border-radius: 999px;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--sb-on-brand);
-}
-
-.verdict-proceed .verdict-badge {
-  background: var(--sb-pass);
-}
-
-.verdict-stopped .verdict-badge {
-  background: var(--sb-stop);
-}
-
-.verdict-case {
-  margin-left: auto;
-  font-family: var(--sb-font-mono);
-  font-size: 13px;
-  color: var(--sb-ink-soft);
-}
-
-.reason-list {
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.reason {
-  padding: 8px 12px;
-  font-weight: 600;
-  background: var(--sb-surface);
-  border-radius: var(--sb-radius-small);
 }
 
 /* --- Panels ------------------------------------------------------------- */
@@ -629,46 +560,6 @@ p {
   margin-top: 6px;
 }
 
-.email {
-  margin-top: 12px;
-  border: 1px solid var(--sb-line);
-  border-radius: var(--sb-radius-small);
-  overflow: hidden;
-}
-
-.email-headers {
-  padding: 12px 16px;
-  background: var(--sb-canvas);
-  border-bottom: 1px solid var(--sb-line);
-}
-
-.email-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.email-header + .email-header {
-  margin-top: 4px;
-}
-
-.email-header-label {
-  flex: 0 0 70px;
-  font-weight: 600;
-  color: var(--sb-ink-faint);
-}
-
-.email-header-value {
-  flex: 1;
-  min-width: 200px;
-}
-
-.email-missing {
-  color: var(--sb-stop);
-  font-style: italic;
-}
-
 .email-body {
   padding: 16px;
   white-space: pre-wrap;
@@ -720,12 +611,6 @@ p {
 .lines .mono,
 .lines td.numeric {
   font-family: var(--sb-font-mono);
-}
-
-.evaluated {
-  font-size: 12.5px;
-  color: var(--sb-ink-faint);
-  text-align: right;
 }
 
 /* --- The conversation --------------------------------------------------- */
@@ -880,85 +765,6 @@ p {
   }
 }
 
-/*
- * Shown once an email has been sent. Carries a word as well as a colour and a tick, so the
- * state does not rest on colour alone.
- */
-.sent {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--sb-pass-tint);
-  border: 1px solid var(--sb-pass);
-  border-radius: var(--sb-radius-small);
-  color: var(--sb-pass);
-  font-weight: 600;
-  max-width: 72ch;
-}
-
-.sent-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--sb-pass);
-  color: var(--sb-on-brand);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-/* --- Writing the email -------------------------------------------------- */
-
-.composer-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--sb-line);
-}
-
-.composer-label {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--sb-ink-faint);
-}
-
-.composer-subject,
-.composer-body {
-  width: 100%;
-  padding: 8px 10px;
-  font: inherit;
-  color: var(--sb-ink);
-  background: var(--sb-surface);
-  border: 1px solid var(--sb-line);
-  border-radius: var(--sb-radius-small);
-}
-
-.composer-body {
-  /* Only upwards: a wider box would break the reading measure the wording is set to. */
-  resize: vertical;
-  line-height: 1.55;
-}
-
-.composer-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin-top: 14px;
-}
-
-.composer-blocked {
-  font-size: 13px;
-  color: var(--sb-stop);
-}
-
 /* --- Narrow screens ----------------------------------------------------- */
 
 @media (width <= 620px) {
@@ -967,10 +773,6 @@ p {
     flex-basis: 100%;
   }
 
-  .verdict-case {
-    margin-left: 0;
-    flex-basis: 100%;
-  }
 }
 
 /* --- Policy panel -------------------------------------------------------- */
@@ -1214,9 +1016,8 @@ p {
   color: var(--sb-ink-soft);
 }
 
-/* --- The investigation's latest action --------------------------------- */
-/* One compact banner replaces the previous one whenever a new SSE action arrives. Its
-   summary remains useful while closed; the full service message and facts live inside. */
+/* --- The investigation's live activity --------------------------------- */
+/* The bar shows the latest action; opening it reveals the complete SSE history. */
 
 .step {
   overflow: hidden;
@@ -1276,8 +1077,8 @@ p {
   letter-spacing: 0.04em;
 }
 
-/* One line of the current action, cut off where it runs out of room. */
 .step-peek {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -1285,16 +1086,54 @@ p {
   color: var(--sb-ink-faint);
 }
 
+.step-count {
+  flex: none;
+  color: var(--sb-ink-faint);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 .step-content {
+  max-height: 28rem;
   padding: 0.65rem 0.85rem 0.75rem;
+  overflow-y: auto;
   border-top: 1px solid var(--sb-line);
 }
 
+.step-history {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-history-entry {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--sb-line);
+}
+
+.step-history-entry:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.step-history-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.step-line-label {
+  color: var(--sb-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .step-wrote {
-  max-height: 9.5rem;
   margin: 0;
   padding: 0.45rem 0.6rem;
-  overflow-y: auto;
   color: var(--sb-ink-soft);
   background: var(--sb-canvas);
   border-radius: var(--sb-radius-small);
@@ -1325,37 +1164,68 @@ p {
   font-family: var(--sb-font-mono);
 }
 
-/* --- One damaged product's report --------------------------------------- */
-/* The thing a representative decides on, so it carries its own frame and a colour down the
-   edge saying what is recommended — the same shape as a check card, for the same reason. */
+/* Markdown used only inside the live activity panel. */
 
-.line-report {
-  padding: 0.9rem 1rem;
-  background: var(--sb-surface);
+.md-paragraph {
+  margin: 0 0 0.4rem;
+}
+
+.md-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.md-heading {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 1em;
+}
+
+.md-list {
+  margin: 0.3rem 0;
+  padding-left: 1.2rem;
+}
+
+.md-list li {
+  margin: 0.1rem 0;
+}
+
+.md-code {
+  margin: 0.4rem 0;
+  padding: 0.45rem 0.55rem;
+  overflow-x: auto;
+  background: var(--sb-canvas);
   border: 1px solid var(--sb-line);
-  border-left: 4px solid var(--sb-ink-faint);
-  border-radius: var(--sb-radius);
-  box-shadow: var(--sb-shadow);
+  border-radius: var(--sb-radius-small);
 }
 
-.line-approve {
-  border-left-color: var(--sb-pass);
+.md-code code,
+.md-inline-code {
+  font-family: var(--sb-font-mono);
+  font-size: 0.88em;
 }
 
-.line-request_info {
-  border-left-color: var(--sb-flag);
+.md-table-frame {
+  overflow-x: auto;
+  margin: 0.6rem 0;
 }
 
-.line-escalate {
-  border-left-color: var(--sb-flag);
+.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
 }
 
-.line-deny {
-  border-left-color: var(--sb-stop);
+.md-table th,
+.md-table td {
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--sb-line);
 }
 
-.line-heading {
-  margin-bottom: 0.6rem;
+.md-table th {
+  color: var(--sb-ink-soft);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .line-count {
@@ -1364,37 +1234,6 @@ p {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-.line-product {
-  margin: 0.15rem 0 0;
-  font-size: 1rem;
-}
-
-.line-sku {
-  margin: 0.1rem 0 0;
-  color: var(--sb-ink-faint);
-  font-family: var(--sb-font-mono);
-  font-size: 0.8rem;
-}
-
-.line-recommendation {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  margin: 0 0 0.4rem;
-}
-
-.line-verdict {
-  font-size: 1.05rem;
-  font-weight: 650;
-}
-
-.line-amount {
-  color: var(--sb-pass);
-  font-family: var(--sb-font-mono);
-  font-size: 1.05rem;
-  font-weight: 650;
 }
 
 .line-explanation,
@@ -1432,6 +1271,64 @@ p {
 
 .line-concerns .line-list {
   color: var(--sb-ink);
+}
+
+.report-images {
+  margin-top: 0.7rem;
+}
+
+.report-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.7rem;
+}
+
+.report-image-card {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  background: var(--sb-surface);
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius-small);
+}
+
+.report-image-link,
+.report-image-unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--sb-canvas);
+}
+
+.report-image-link img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.report-image-unavailable {
+  padding: 0.7rem;
+  color: var(--sb-ink-faint);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.report-image-card figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.6rem;
+  color: var(--sb-ink-soft);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.report-image-card code {
+  color: var(--sb-ink-faint);
+  font-family: var(--sb-font-mono);
 }
 
 .line-none {
@@ -1475,14 +1372,9 @@ p {
   flex: 1 1 12rem;
 }
 
-.amount-item-price,
-.amount-item-refund {
+.amount-item-price {
   font-family: var(--sb-font-mono);
   color: var(--sb-ink-soft);
-}
-
-.amount-item-refund {
-  color: var(--sb-ink);
 }
 
 .amount-steps {
@@ -1573,79 +1465,6 @@ p {
 
 .judgement-confidence {
   color: var(--sb-ink-faint);
-}
-
-/* --- What the claim comes to altogether --------------------------------- */
-
-.claim-total-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 0;
-}
-
-.claim-total-label {
-  color: var(--sb-ink-soft);
-}
-
-.claim-total-figure {
-  font-family: var(--sb-font-mono);
-  font-size: 1.05rem;
-  font-weight: 650;
-}
-
-.claim-total-capped .claim-total-figure {
-  color: var(--sb-flag);
-}
-
-.claim-total-concern {
-  margin: 0.5rem 0 0;
-  color: var(--sb-ink);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-/* --- Text the investigation wrote itself -------------------------------- */
-/* Deliberately plain. This is the service's own writing, so it takes the size and colour
-   of whatever it appears inside rather than being given a look of ours; all these rules do
-   is give a list, a heading or a piece of code the shape that makes it readable as one. */
-
-.md-paragraph {
-  margin: 0 0 0.4rem;
-}
-
-.md-paragraph:last-child {
-  margin-bottom: 0;
-}
-
-.md-heading {
-  margin: 0.5rem 0 0.2rem;
-  font-size: 1em;
-}
-
-.md-list {
-  margin: 0.3rem 0;
-  padding-left: 1.2rem;
-}
-
-.md-list li {
-  margin: 0.1rem 0;
-}
-
-.md-code {
-  margin: 0.4rem 0;
-  padding: 0.45rem 0.55rem;
-  overflow-x: auto;
-  background: var(--sb-canvas);
-  border: 1px solid var(--sb-line);
-  border-radius: var(--sb-radius-small);
-}
-
-.md-code code,
-.md-inline-code {
-  font-family: var(--sb-font-mono);
-  font-size: 0.88em;
 }
 
 /* The account of why a figure, which is the whole of what makes it reviewable. */
@@ -1961,9 +1780,8 @@ p {
 
 /* --- A report a representative decides on (FR-2.1, FR-2.8) ---------------- */
 /*
- * The frame follows a line report's: a card with a coloured edge saying what is recommended,
- * so the two read as the same kind of thing. The document inside it is the service's own
- * writing and is deliberately given room, because it is what a representative actually reads.
+ * One framed review surface. The document inside is constructed from the service's structured
+ * fields and given room because it is what a representative actually reads.
  */
 .report-card {
   padding: 0.9rem 1rem;
@@ -2002,13 +1820,12 @@ p {
   color: var(--sb-pass);
 }
 
-.report-recommendation.is-deny {
+.report-recommendation.is-request_rep_clarification {
   background: var(--sb-stop-tint);
   color: var(--sb-stop);
 }
 
-.report-recommendation.is-request_info,
-.report-recommendation.is-escalate {
+.report-recommendation.is-request_info {
   background: var(--sb-flag-tint);
   color: var(--sb-flag);
 }
@@ -2033,8 +1850,7 @@ p {
   color: var(--sb-flag);
 }
 
-/* The report's own writing, held apart from the controls under it and capped in height so a
- * long report does not push the buttons off the screen. */
+/* The report, held apart from the controls and capped so it does not push the buttons away. */
 .report-document {
   max-height: 26rem;
   overflow-y: auto;
@@ -2119,30 +1935,4 @@ p {
   border-radius: var(--sb-radius-small);
   color: var(--sb-stop);
   font-size: 0.85rem;
-}
-
-/* A table inside a report. Scrolls inside its own frame so the page never scrolls sideways. */
-.md-table-frame {
-  overflow-x: auto;
-  margin: 0.6rem 0;
-}
-
-.md-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 0.85rem;
-}
-
-.md-table th,
-.md-table td {
-  padding: 0.35rem 0.6rem;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--sb-line);
-}
-
-.md-table th {
-  color: var(--sb-ink-soft);
-  font-weight: 600;
-  white-space: nowrap;
 }

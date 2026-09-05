@@ -10,10 +10,10 @@ from pathlib import Path
 import pytest
 from tests.unit.test_report_models import a_report, a_screening_report
 
-from claim_agent.domain.decision import Proposal
-from claim_agent.domain.outcome import Recommendation
 from claim_agent.errors import StorageError
+from claim_agent.policy import Policy
 from claim_agent.report.models import ReportState
+from claim_agent.report.review import approve
 from claim_agent.storage.database import initialise
 from claim_agent.storage.report_store import ReportStore
 
@@ -102,18 +102,17 @@ def test_moving_a_review_on_writes_the_row_again_rather_than_editing_the_report(
     report = a_report()
     store.record(report)
 
-    approved = report.model_copy(
-        update={
-            "state": ReportState.APPROVED,
-            "decided": Proposal(outcome=Recommendation.APPROVE, amount_usd=Decimal("52.00")),
-        }
-    )
+    approved = approve(
+        report,
+        policy=Policy(),
+        at=report.created_at,
+    ).report
     store.record(approved)
 
     read_back = store.get(report.report_id)
     assert read_back is not None
     assert read_back.state is ReportState.APPROVED
-    assert read_back.markdown == report.markdown
+    assert read_back.content == report.content
 
 
 # --- Every version is kept (FR-R.13) -----------------------------------------
@@ -121,19 +120,18 @@ def test_moving_a_review_on_writes_the_row_again_rather_than_editing_the_report(
 
 def test_every_version_of_a_report_is_kept(store: ReportStore) -> None:
     """FR-R.13: the record of how a decision was reached is the versions it went through."""
-    store.record(a_report(version=1, markdown="first"))
-    store.record(a_report(version=2, markdown="second"))
+    store.record(a_report(version=1))
+    store.record(a_report(version=2))
 
     versions = store.versions_of("RPT-CASE-1001-L01")
 
     assert [version.version for version in versions] == [1, 2]
-    assert [version.markdown for version in versions] == ["first", "second"]
 
 
 def test_the_version_in_force_is_the_one_that_comes_back_by_default(store: ReportStore) -> None:
     """FR-R.13: a rep decides on the newest telling, not on whichever row was found first."""
-    store.record(a_report(version=1, markdown="first"))
-    store.record(a_report(version=2, markdown="second"))
+    store.record(a_report(version=1))
+    store.record(a_report(version=2))
 
     latest = store.get("RPT-CASE-1001-L01")
 
@@ -143,13 +141,13 @@ def test_the_version_in_force_is_the_one_that_comes_back_by_default(store: Repor
 
 def test_an_earlier_version_can_still_be_read_back(store: ReportStore) -> None:
     """FR-R.13: the version a rep was looking at has to survive being superseded."""
-    store.record(a_report(version=1, markdown="first"))
-    store.record(a_report(version=2, markdown="second"))
+    store.record(a_report(version=1))
+    store.record(a_report(version=2))
 
     earlier = store.get("RPT-CASE-1001-L01", version=1)
 
     assert earlier is not None
-    assert earlier.markdown == "first"
+    assert earlier.version == 1
 
 
 def test_a_version_that_was_never_written_comes_back_as_nothing(store: ReportStore) -> None:
@@ -185,8 +183,8 @@ def test_a_claim_shows_each_product_once_however_many_versions_it_has(
     store: ReportStore,
 ) -> None:
     """FR-2.9b: a product reworked twice is still one product on the claim."""
-    store.record(a_report(version=1, markdown="first"))
-    store.record(a_report(version=2, markdown="second"))
+    store.record(a_report(version=1))
+    store.record(a_report(version=2))
 
     view = store.for_case("CASE-1001")
 

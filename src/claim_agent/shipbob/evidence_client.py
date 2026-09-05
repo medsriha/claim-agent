@@ -213,7 +213,7 @@ class EvidenceClient:
         # invoice for the shipment we asked about. REQUIREMENTS.md is explicit that a
         # well-formed reply from this API is not evidence of correctness — the
         # reimbursement endpoint approves every request put to it, including claims the
-        # system decided to deny — so a reply is checked against what was asked for
+        # system did not approve — so a reply is checked against what was asked for
         # rather than trusted for having arrived. Without this, a mismatched invoice
         # would quietly price a claim from another shipment's products.
         if invoice.shipment_id is not None and invoice.shipment_id != shipment_id:

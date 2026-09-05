@@ -64,7 +64,7 @@ def test_a_run_may_take_exactly_as_many_steps_as_it_is_allowed() -> None:
 
 
 def test_running_out_of_steps_is_an_answer_rather_than_a_failure() -> None:
-    """FR-1.16: exhaustion is something the run asks about, so it can escalate with what it has."""
+    """FR-1.16: exhaustion is something the run asks about, so it can request representative clarification with what it has."""
     budget = budget_of(steps=1)
 
     budget.spend_step()

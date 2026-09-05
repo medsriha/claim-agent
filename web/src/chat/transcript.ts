@@ -9,28 +9,21 @@
  * value the service sent, in the order the service sent it. This is the file in the whole
  * screen most likely to drift into deciding something, so it is worth keeping dull.
  *
- * The order follows the order the service does the work in: read the claim, the parcel and
- * the order; work out the numbers; run the four checks; reach a verdict; and — only on a
- * stopped claim — write up what was found and draft the email. A reader watching the
- * conversation is watching the real running order, not one of ours.
+ * The order follows the deterministic screening: read the claim, parcel, and order; work out
+ * the numbers; run the four checks; then show the canonical report returned by investigation.
  */
 import type { FailureKind } from "../api/failure";
 import type {
   Report,
   Case,
   ClaimContext,
-  ClaimInvestigation,
-  DraftedEmail,
   GateResult,
-  LineInvestigation,
   Order,
   PrecedentSet,
   PreflightResult,
   RunEvent,
   RunEventKind,
   Shipment,
-  TerminalReason,
-  Verdict,
 } from "../api/types";
 
 /**
@@ -41,6 +34,15 @@ import type {
  */
 export type MessageSpeaker = "rep" | "system" | "page";
 
+/** One event retained inside the expandable live activity log. */
+export interface ActivityStep {
+  readonly sequence: number;
+  readonly eventKind: RunEventKind;
+  readonly summary: string;
+  readonly detail: Record<string, string>;
+  readonly label: string | null;
+}
+
 /** What a message holds. The `kind` says which component draws it. */
 export type MessageBody =
   | { readonly kind: "picked"; readonly caseId: string }
@@ -49,16 +51,15 @@ export type MessageBody =
   | { readonly kind: "order"; readonly order: Order | null }
   | { readonly kind: "context"; readonly context: ClaimContext }
   | { readonly kind: "gate"; readonly gate: GateResult }
-  | {
-      readonly kind: "verdict";
-      readonly caseId: string;
-      readonly verdict: Verdict;
-      readonly reasons: TerminalReason[];
-      readonly evaluatedAt: string;
-    }
   | { readonly kind: "findings"; readonly findings: string[] }
-  | { readonly kind: "email"; readonly email: DraftedEmail }
-  | { readonly kind: "escalation" }
+  | {
+      /** The live SSE activity bar: latest action outside, complete history inside. */
+      readonly kind: "step";
+      readonly eventKind: RunEventKind;
+      readonly summary: string;
+      readonly detail: Record<string, string>;
+      readonly history: readonly ActivityStep[];
+    }
   | {
       readonly kind: "precedent";
       /** What the search found. `null` when the request itself never got an answer. */
@@ -67,39 +68,10 @@ export type MessageBody =
       readonly failureMessage: string | null;
     }
   | {
-      /**
-       * Something the investigation did, said as it happened.
-       *
-       * Unlike every other message here, this one arrives while the work is going on
-       * rather than being laid out from a finished answer. `summary` is the service's own
-       * sentence and is shown unchanged.
-       */
-      readonly kind: "step";
-      readonly eventKind: RunEventKind;
-      readonly summary: string;
-      readonly detail: Record<string, string>;
+      readonly kind: "report";
+      readonly report: Report;
+      readonly unavailableReason: string | null;
     }
-  | {
-      /** Everything established about one damaged product. */
-      readonly kind: "lineReport";
-      readonly report: LineInvestigation;
-      /** Which of how many, for a heading. Counted by the service's own ordering. */
-      readonly position: number;
-      readonly outOf: number;
-    }
-  | {
-      /**
-       * What the claim came to across all its products.
-       *
-       * Only the cap can make a claim-level judgement, so this is where it appears. The
-       * total is the service's figure, shown as text and never added up here.
-       */
-      readonly kind: "claimTotal";
-      readonly total: string;
-      readonly capApplied: boolean;
-      readonly concerns: string[];
-    }
-  | { readonly kind: "report"; readonly report: Report }
   | { readonly kind: "note"; readonly text: string }
   | { readonly kind: "failure"; readonly failure: FailureKind; readonly message: string };
 
@@ -200,25 +172,6 @@ export function transcriptFor(
     });
   });
 
-  // A passing claim moves straight from its checks to the next useful information. Only a
-  // stopped claim needs a decision banner calling attention to the terminal outcome.
-  if (result.verdict === "terminal") {
-    messages.push({
-      id: "verdict",
-      speaker: "system",
-      label: "The decision",
-      body: {
-        kind: "verdict",
-        caseId: result.case_id,
-        verdict: result.verdict,
-        // Handed on exactly as they arrived. The first reason names the merchant email's
-        // subject line, so sorting these would misrepresent which one it leads with.
-        reasons: [...result.terminal_reasons],
-        evaluatedAt: result.evaluated_at,
-      },
-    });
-  }
-
   // A stopped claim is owed an explanation, so the service writes one up and drafts the
   // email. A claim that passes carries neither, because there is nothing to explain yet.
   if (result.report === null) {
@@ -240,34 +193,8 @@ export function transcriptFor(
     return messages;
   }
 
-  messages.push({
-    id: "findings",
-    speaker: "system",
-    label: "What was found",
-    body: { kind: "findings", findings: [...result.report.findings] },
-  });
-  // Two things a stopped claim can end in, and it may end in both. The escalation comes
-  // first because being insured leads the reasons: it is what routes the claim out.
-  if (result.report.requires_escalation) {
-    messages.push({
-      id: "escalation",
-      speaker: "system",
-      label: "Not ours to answer",
-      body: { kind: "escalation" },
-    });
-  }
-
-  // Absent when there is nothing the merchant can be told — a claim stopped only by
-  // being insured. The service decides that; the screen just shows what it was given.
-  if (result.report.drafted_email !== null) {
-    messages.push({
-      id: "email",
-      speaker: "system",
-      label: "Email to the merchant",
-      body: { kind: "email", email: result.report.drafted_email },
-    });
-  }
-
+  // The report is fetched through the investigation endpoint for both outcomes, so the
+  // screening transcript does not render a second findings or email surface here.
   return messages;
 }
 
@@ -294,30 +221,23 @@ export function failureTranscript(
   ];
 }
 
-
-/**
- * One thing the investigation said, as a message.
- *
- * **This is the only message in the conversation that is not a replay.** Every other one
- * is laid out from an answer that had already arrived; this one is made when the service
- * says it, in the order it said it. The sentence is the service's own and is shown
- * unchanged — the screen adds the heading and nothing else.
- *
- * The heading names the product where the service said which product it was about, so a
- * representative watching two investigations at once can tell them apart.
- *
- * @param event - What the service said.
- * @param labelFor - Turns a claim line id into a product name, where one is known.
- */
+/** Turn one live SSE event into the activity panel the next event will update. */
 export function stepMessage(
   event: RunEvent,
   labelFor: (claimLineId: string) => string | null,
 ): TranscriptMessage {
   const product = event.claim_line_id === null ? null : labelFor(event.claim_line_id);
+  const step: ActivityStep = {
+    sequence: event.sequence,
+    eventKind: event.kind,
+    summary: event.summary,
+    detail: event.detail,
+    label: product,
+  };
   return {
-    // The service numbers what it says, so two messages can never share a position and a
-    // message redrawn does not restart its entrance.
-    id: `step-${String(event.sequence)}`,
+    // The activity bar is one persistent message. A stable key keeps it open while later
+    // SSE events extend its log instead of remounting and collapsing it.
+    id: "activity",
     speaker: "system",
     label: product,
     body: {
@@ -325,104 +245,38 @@ export function stepMessage(
       eventKind: event.kind,
       summary: event.summary,
       detail: event.detail,
+      history: [step],
     },
   };
 }
 
+
 /**
- * The finished investigation, product by product.
+ * One message per canonical report the service sent, in its original order (FR-2.9b).
  *
- * Comes after everything the investigation said while it worked, and after the similar
- * claims, because it is the thing a representative decides from and belongs at the end of
- * the reading rather than the middle.
- *
- * A claim whose split was never settled has no products to report on, and says what was
- * unclear instead — nothing may be investigated until somebody has said which products are
- * being claimed for (FR-1a.4).
- *
- * The claim total is shown only where there is more than one product, or where the cap
- * changed the answer. On a single product it would just be that product's figure again.
+ * A claim the checks stopped has one; an investigated claim has one per damaged product.
  */
-export function investigationMessages(
-  investigation: ClaimInvestigation,
+export function reportMessages(
+  reports: readonly Report[],
+  unavailableReason: string | null,
 ): TranscriptMessage[] {
-  if (investigation.triage.ambiguity !== null) {
+  if (reports.length === 0) {
     return [
-      {
-        id: "split-unsettled",
-        speaker: "system",
-        label: "Which product was damaged is unclear",
-        // A finding and not a note: the words are the service's own, and a note is drawn
-        // with a mark saying the screen wrote it.
-        body: { kind: "findings", findings: [investigation.triage.ambiguity] },
-      },
+      noteMessage(
+        unavailableReason ?? "The investigation did not produce a report to review.",
+      ),
     ];
   }
-
-  const messages: TranscriptMessage[] = investigation.lines.map((report, index) => ({
-    id: `line-${report.line.claim_line_id}`,
-    speaker: "system",
-    label: null,
-    body: {
-      kind: "lineReport",
-      report,
-      position: index + 1,
-      outOf: investigation.lines.length,
-    },
-  }));
-
-  if (investigation.lines.length > 1 || investigation.claim_cap_applied) {
-    messages.push({
-      id: "claim-total",
-      speaker: "system",
-      label: "The claim altogether",
-      body: {
-        kind: "claimTotal",
-        total: investigation.recommended_total_usd,
-        capApplied: investigation.claim_cap_applied,
-        concerns: [...investigation.claim_concerns],
-      },
-    });
-  }
-
-  // One draft per product that has one, after the reports, so the reading ends on the
-  // words that would go to the merchant.
-  investigation.lines.forEach((report) => {
-    if (report.drafted_email !== null) {
-      messages.push({
-        id: `line-email-${report.line.claim_line_id}`,
-        speaker: "system",
-        label: `Email about ${report.line.claimed.name}`,
-        body: { kind: "email", email: report.drafted_email },
-      });
-    }
-  });
-
-  return messages;
-}
-
-/**
- * One message per report the service kept, in the order it sent them (FR-2.9b).
- *
- * Added at the end of a conversation, because a report is the thing a representative acts on and
- * everything above it is how it was reached. A claim the checks stopped has one; an investigated
- * claim has one per damaged product.
- */
-export function reportMessages(reports: readonly Report[]): TranscriptMessage[] {
   return reports.map((report) => ({
     id: `report-${report.report_id}`,
     speaker: "system",
     label: "For your decision",
-    body: { kind: "report", report },
+    body: { kind: "report", report, unavailableReason },
   }));
 }
 
 /**
- * One sentence the service said, on its own, where a report would otherwise be.
- *
- * Used when the findings arrived and could not be kept: they are on screen above, and this
- * says plainly that there is nothing to approve. The wording is the service's, not ours —
- * only the service knows what failed.
+ * One sentence where a report would otherwise be, used when none was produced.
  */
 export function noteMessage(text: string): TranscriptMessage {
   return { id: "reports-note", speaker: "system", label: null, body: { kind: "note", text } };

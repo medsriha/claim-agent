@@ -78,7 +78,7 @@ def make_report() -> TerminalReport:
         gates=ALL_FOUR_GATES,
         context=make_context(),
         drafted_email=DraftedEmail(to="sakukreja@shipbob.com", subject="Your claim", body="..."),
-        requires_escalation=False,
+        requires_rep_clarification=False,
     )
 
 
@@ -197,10 +197,10 @@ def test_a_claim_allowed_through_while_carrying_a_stop_report_is_refused() -> No
         make_result(report=make_report())
 
 
-def test_an_insured_claim_that_is_not_marked_for_escalation_is_refused() -> None:
+def test_an_insured_claim_that_is_not_marked_for_rep_clarification_is_refused() -> None:
     """FR-0.2: the flag and the reason have to agree, or a claim is routed by one and
     explained by the other."""
-    with pytest.raises(ValidationError, match="requires_escalation"):
+    with pytest.raises(ValidationError, match="requires_rep_clarification"):
         TerminalReport(
             case_id="CASE-9001",
             account_name="Constructed Insured Merchant",
@@ -210,7 +210,7 @@ def test_an_insured_claim_that_is_not_marked_for_escalation_is_refused() -> None
             gates=ALL_FOUR_GATES,
             context=make_context(),
             drafted_email=None,
-            requires_escalation=False,
+            requires_rep_clarification=False,
         )
 
 
@@ -227,7 +227,7 @@ def test_a_claim_with_nothing_to_tell_the_merchant_must_not_carry_an_email() -> 
             gates=ALL_FOUR_GATES,
             context=make_context(),
             drafted_email=DraftedEmail(to="someone@example.com", subject="s", body="b"),
-            requires_escalation=True,
+            requires_rep_clarification=True,
         )
 
 
@@ -243,5 +243,5 @@ def test_a_reason_the_merchant_could_be_told_needs_an_email() -> None:
             gates=ALL_FOUR_GATES,
             context=make_context(),
             drafted_email=None,
-            requires_escalation=False,
+            requires_rep_clarification=False,
         )

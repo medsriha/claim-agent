@@ -645,7 +645,7 @@ async def test_the_claim_stops_when_its_images_cannot_even_be_listed(
         EvidenceState.UNREADABLE,
         EvidenceState.UNREADABLE,
     ]
-    # The failure is written into the record, so "why was this escalated?" is
+    # The failure is written into the record, so "why is clarification needed?" is
     # answerable from what the representative is handed (NFR-3).
     assert [entry.succeeded for entry in run.triage.ledger] == [False]
     # Nothing was asked of the model, because there was nothing to ask about.
@@ -717,7 +717,7 @@ async def test_one_image_asked_about_twice_is_analysed_once(
 async def test_a_pass_that_runs_out_of_steps_hands_over_what_it_found(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.16, NFR-4: an exhausted allowance escalates the claim rather than raising.
+    """FR-1.16, NFR-4: an exhausted allowance requests clarification rather than raising.
 
     Nothing is invented to fill the gap: there are no claim lines, the reason the pass
     stopped is what a representative is told, and the one image it did manage to read
@@ -745,7 +745,7 @@ async def test_a_pass_that_runs_out_of_steps_hands_over_what_it_found(
     assert run.triage.budget.steps_used == 1
 
 
-async def test_a_model_that_cannot_be_reached_escalates_the_claim(
+async def test_a_model_that_cannot_be_reached_requests_rep_clarification(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
     """NFR-4: a provider failure ends in front of a person, never as an exception.

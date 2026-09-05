@@ -227,7 +227,7 @@ class ConfidenceBandStats(BaseModel):
 
 
 class OutcomeStats(BaseModel):
-    """How often people disagreed with one of the four recommendations."""
+    """How often people disagreed with one of the three proposed actions."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -412,7 +412,7 @@ def _confidence_bands(decisions: Sequence[DecisionRecord]) -> tuple[ConfidenceBa
 
 
 def _outcomes(decisions: Sequence[DecisionRecord]) -> tuple[OutcomeStats, ...]:
-    """Count disagreement against each of the four recommendations.
+    """Count disagreement against each of the three proposed actions.
 
     All four are always reported, including any nobody recommended, so a reader sees what did not
     happen rather than inferring it from a missing row.

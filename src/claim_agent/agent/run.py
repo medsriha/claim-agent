@@ -306,7 +306,7 @@ class ClaimCapVerdict(BaseModel):
     """What the cap makes of a whole claim, once each product has been judged alone.
 
     `lines` are the products as they now stand: unchanged when the total is within the
-    cap, and with every recommended payment turned into an escalation when it is not.
+    cap, and with every recommended payment turned into an representative clarification request when it is not.
     `total_usd` is what those payments came to between them, and `complaint` is the one
     plain sentence explaining a breach — `None` when there was none.
     """
@@ -412,7 +412,7 @@ async def _check_the_claim_total(
 
 
 def _held_back_by_the_claim_cap(line: LineInvestigation, complaint: str) -> LineInvestigation:
-    """Turn one product's recommended payment into an escalation, keeping everything else.
+    """Turn one product's recommended payment into an representative clarification request, keeping everything else.
 
     Only a product recommended for payment changes. A product already going back to
     the merchant or already going to a person is untouched: the cap is a reason not to
@@ -428,7 +428,7 @@ def _held_back_by_the_claim_cap(line: LineInvestigation, complaint: str) -> Line
     return line.model_copy(
         update={
             "outcome": OutcomeDecision(
-                recommendation=Recommendation.ESCALATE,
+                recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
                 recommended_by_agent=line.outcome.recommended_by_agent,
                 overrides=(*line.outcome.overrides, OverrideReason.CLAIM_CAP_EXCEEDED),
                 explanation=complaint,
@@ -449,7 +449,7 @@ async def _invoice_if_one_can_be_had(
     Every product is priced from the same invoice, so it is fetched once here rather
     than once per product (NFR-8). `None` means it could not be had — ShipBob would not
     price this shipment, or the case names no shipment or no merchant — and the products
-    that needed a price then escalate with that as the stated reason rather than being
+    that needed a price then request representative clarification with that as the stated reason rather than being
     priced from somewhere else (FR-1.18).
     """
     shipment_id = record.case.shipment_id

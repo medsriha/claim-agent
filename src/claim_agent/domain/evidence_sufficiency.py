@@ -23,7 +23,7 @@ things to ask the merchant for.
 
 `(no requirement covers this exact shape; see DESIGN.md)`. Assembling a rep-facing
 verdict from `evidence.py`'s findings is new; FR-1.6 and FR-1.7 are the requirements it
-serves, and NFR-4 ("fail toward the human") is why unreadable evidence escalates instead
+serves, and NFR-4 ("fail toward the human") is why unreadable evidence requests representative clarification instead
 of being asked for again.
 
 Nothing here reaches out to anything or reads a clock. The same findings always produce
@@ -93,7 +93,7 @@ class SufficiencyAssessment(BaseModel):
         unreadable: The kinds of evidence we could not read ourselves, in the fixed
             reporting order. Any entry here means a person has to look at this claim
             regardless of how good everything else is (NFR-4).
-        needs_escalation: True whenever `unreadable` is not empty. Kept as its own field
+        needs_rep_clarification: True whenever `unreadable` is not empty. Kept as its own field
             rather than asking a caller to check `unreadable` for emptiness, since missing
             this check is exactly how a merchant would end up asked to fix our mistake.
         reason: One or two plain sentences summarising the verdict for a representative.
@@ -105,7 +105,7 @@ class SufficiencyAssessment(BaseModel):
     missing_or_unusable: tuple[EvidenceKind, ...] = ()
     requests: tuple[str, ...] = ()
     unreadable: tuple[EvidenceKind, ...] = ()
-    needs_escalation: bool = False
+    needs_rep_clarification: bool = False
     reason: str
 
 
@@ -139,7 +139,7 @@ def assess_evidence_sufficiency(findings: Sequence[EvidenceFinding]) -> Sufficie
         missing_or_unusable=to_ask,
         requests=requests,
         unreadable=unreadable,
-        needs_escalation=bool(unreadable),
+        needs_rep_clarification=bool(unreadable),
         reason=_reason_for(findings, to_ask, unreadable),
     )
 

@@ -233,7 +233,7 @@ the ways a person actually writes it: "not sent", "not yet sent", "not been sent
 **"For review" is the entry most likely to refuse a perfectly good email**, because
 "your claim is with our team for review" is a reasonable thing to tell a merchant. It
 is here anyway: refusing hands the claim to a person, which costs a few minutes, and
-the alternative is an email describing itself. If reps start seeing claims escalated
+the alternative is an email describing itself. If reps start seeing claims sent for representative clarification
 for no visible reason, this is the first entry to look at.
 
 **"Under review", "pending approval" and "awaiting approval" are deliberately not
@@ -255,6 +255,7 @@ def finish_email(
     recommendation: Recommendation,
     amount: AmountDerivation | None,
     contact_email: str | None,
+    requested_details: Sequence[str] = (),
 ) -> DraftedEmail:
     """Turn the wording the model wrote into the finished draft a representative reviews.
 
@@ -277,9 +278,8 @@ def finish_email(
     something upstream went wrong, and going to a person is the right answer to that
     (NFR-4).
 
-    An approval whose wording never mentions a figure at all is accepted. That is a
-    thinner email, not a dangerous one, and refusing it would send a good claim to a
-    person over wording.
+    An approval whose wording never mentions the figure is refused: the approval email's
+    purpose is to communicate the exact amount the report proposes.
 
     Args:
         conclusion: The investigation's whole answer. Only the subject and body are read
@@ -292,6 +292,8 @@ def finish_email(
         contact_email: The merchant's address from the case. `None` is allowed and
             still produces a draft: the wording is worth having, and the later sending
             stage is what refuses to send without a recipient.
+        requested_details: The specific merchant-fillable gaps. Required for
+            `request_info`; any detail omitted from the model's wording is appended explicitly.
 
     Returns:
         The finished draft, with the real figure in it and `is_draft` fixed at true.
@@ -300,20 +302,49 @@ def finish_email(
         ModelOutputRejectedError: the model wrote money itself, described the email as a draft,
             left the marker where no figure can go, or an approval arrived with nothing
             payable. Every one of these is refused rather than repaired, and the caller
-            turns the refusal into an escalation to a person (FR-1.21, FR-1.17, NFR-4).
+            turns the refusal into an representative clarification request to a person (FR-1.21, FR-1.17, NFR-4).
     """
+    subject = conclusion.email_subject
+    body = conclusion.email_body
+    if subject is None or body is None:
+        raise ModelOutputRejectedError(
+            "The action needs a merchant email, but the investigation did not draft both its "
+            "subject and body."
+        )
+
     _refuse_money_the_model_wrote(conclusion)
     _refuse_wording_that_calls_itself_a_draft(conclusion)
 
-    subject = conclusion.email_subject
-    body = conclusion.email_body
-
     if recommendation is Recommendation.APPROVE:
+        if AMOUNT_PLACEHOLDER not in subject and AMOUNT_PLACEHOLDER not in body:
+            raise ModelOutputRejectedError(
+                "The approval email does not communicate the approved amount. It must include "
+                "the amount marker so the exact approved figure can be inserted."
+            )
         # Substituting last is deliberate: the figure is money-shaped, so the checks
         # above have to see the model's own words and nothing else.
         figure = _as_money(_payable(amount))
         subject = subject.replace(AMOUNT_PLACEHOLDER, figure)
         body = body.replace(AMOUNT_PLACEHOLDER, figure)
+    elif recommendation is Recommendation.REQUEST_INFO:
+        if AMOUNT_PLACEHOLDER in subject or AMOUNT_PLACEHOLDER in body:
+            raise ModelOutputRejectedError(
+                "The drafted email leaves a place for an amount on a claim line that is not "
+                "recommended for payment, so there is no figure to put there.",
+                details={"recommendation": recommendation.value},
+            )
+        details = tuple(
+            dict.fromkeys(detail.strip() for detail in requested_details if detail.strip())
+        )
+        if not details:
+            raise ModelOutputRejectedError(
+                "The investigation proposed asking the merchant for information but did not "
+                "identify any specific detail the merchant can provide."
+            )
+        missing_from_body = [detail for detail in details if detail.lower() not in body.lower()]
+        if missing_from_body:
+            requested = "\n".join(f"- {detail}" for detail in missing_from_body)
+            body = f"{body.rstrip()}\n\nPlease provide:\n{requested}"
     elif AMOUNT_PLACEHOLDER in subject or AMOUNT_PLACEHOLDER in body:
         raise ModelOutputRejectedError(
             "The drafted email leaves a place for an amount on a claim line that is not "
@@ -399,8 +430,8 @@ def _refuse_money_the_model_wrote(conclusion: InvestigationConclusion) -> None:
     to. They are the model's invention and are labelled as such, never repeated as if
     they were a real amount.
     """
-    in_subject = money_the_model_wrote(conclusion.email_subject)
-    in_body = money_the_model_wrote(conclusion.email_body)
+    in_subject = money_the_model_wrote(conclusion.email_subject or "")
+    in_body = money_the_model_wrote(conclusion.email_body or "")
     if not in_subject and not in_body:
         return
     raise ModelOutputRejectedError(
@@ -412,8 +443,8 @@ def _refuse_money_the_model_wrote(conclusion: InvestigationConclusion) -> None:
 
 def _refuse_wording_that_calls_itself_a_draft(conclusion: InvestigationConclusion) -> None:
     """Refuse the email if its own words say it is a draft (FR-1.17, FR-2.7)."""
-    in_subject = draft_markers_the_model_wrote(conclusion.email_subject)
-    in_body = draft_markers_the_model_wrote(conclusion.email_body)
+    in_subject = draft_markers_the_model_wrote(conclusion.email_subject or "")
+    in_body = draft_markers_the_model_wrote(conclusion.email_body or "")
     if not in_subject and not in_body:
         return
     raise ModelOutputRejectedError(

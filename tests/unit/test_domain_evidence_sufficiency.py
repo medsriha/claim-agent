@@ -57,7 +57,7 @@ def test_case_1005_zero_attachments_asks_for_all_four_kinds_specifically() -> No
     assert set(result.missing_or_unusable) == set(EvidenceKind)
     assert len(result.requests) == 4
     assert result.unreadable == ()
-    assert result.needs_escalation is False
+    assert result.needs_rep_clarification is False
     assert "outer box" in " ".join(result.requests)
     assert "damaged product itself" in " ".join(result.requests)
 
@@ -83,14 +83,14 @@ def test_a_request_names_the_thing_specifically_not_more_evidence() -> None:
 
 
 def test_all_four_present_and_usable_is_supportable() -> None:
-    """The ordinary, complete case: nothing to ask for, nothing to escalate."""
+    """The ordinary, complete case: nothing to ask for, nothing to request representative clarification."""
     result = assess_evidence_sufficiency(ALL_FOUR_PRESENT)
 
     assert result.is_supportable is True
     assert result.missing_or_unusable == ()
     assert result.requests == ()
     assert result.unreadable == ()
-    assert result.needs_escalation is False
+    assert result.needs_rep_clarification is False
     assert "supportable" in result.reason.lower()
 
 
@@ -130,7 +130,7 @@ def test_unusable_evidence_blocks_a_recommendation_and_names_the_actual_problem(
     assert result.is_supportable is False
     assert result.missing_or_unusable == (EvidenceKind.DAMAGED_PRODUCT_PHOTO,)
     assert "too dark to make out any damage" in result.requests[0]
-    assert result.needs_escalation is False
+    assert result.needs_rep_clarification is False
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +138,9 @@ def test_unusable_evidence_blocks_a_recommendation_and_names_the_actual_problem(
 # ---------------------------------------------------------------------------
 
 
-def test_unreadable_evidence_escalates_and_is_never_added_to_the_merchant_request() -> None:
+def test_unreadable_evidence_requests_rep_clarification_and_not_the_merchant() -> None:
     """The distinction this module exists to protect: an image *we* could not read is not
-    the merchant's problem to fix, so it must appear in `unreadable` and escalate, and
+    the merchant's problem to fix, so it must appear in `unreadable` and request representative clarification, and
     must never show up in `missing_or_unusable` or `requests`.
     """
     findings = (
@@ -153,7 +153,7 @@ def test_unreadable_evidence_escalates_and_is_never_added_to_the_merchant_reques
     result = assess_evidence_sufficiency(findings)
 
     assert result.is_supportable is False
-    assert result.needs_escalation is True
+    assert result.needs_rep_clarification is True
     assert result.unreadable == (EvidenceKind.DAMAGED_PRODUCT_PHOTO,)
     assert result.missing_or_unusable == ()
     assert result.requests == ()
@@ -175,7 +175,7 @@ def test_unusable_and_unreadable_together_are_never_mixed_into_one_list() -> Non
 
     assert result.missing_or_unusable == (EvidenceKind.INVOICE,)
     assert result.unreadable == (EvidenceKind.OUTER_PACKAGING_PHOTO,)
-    assert result.needs_escalation is True
+    assert result.needs_rep_clarification is True
     assert len(result.requests) == 1
     assert "prices" in result.requests[0]
 

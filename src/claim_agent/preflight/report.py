@@ -43,9 +43,9 @@ def build_terminal_report(
     An insured claim is the one that comes out differently. Being insured is not
     something we write to a merchant about — those claims are routed out to the
     insurance process instead (FR-0.2) — so it is left out of the email and the
-    write-up is marked as needing escalation. A claim that is only insured therefore
-    carries no email at all; a claim that is insured *and* too old carries both the
-    escalation and an email about its age, and the representative chooses.
+    write-up is marked as needing representative clarification. Any insured claim therefore
+    carries no email at all, even when another gate also failed: clarification is the single
+    next action, and no merchant wording should be generated for it.
 
     Args:
         case: The claim's support case, which names the merchant and the case id.
@@ -64,7 +64,7 @@ def build_terminal_report(
         The write-up, marked as needing a representative's approval. Its summary holds
         one sentence for each check that failed, in the order the checks were handed
         over; a claim stopped by two checks therefore has two sentences. The drafted
-        email is absent when the only thing stopping the claim is that it was insured.
+        email is absent whenever the claim requires representative clarification.
 
     Raises:
         ValueError: if `reasons` is empty. A claim stopped for nothing anyone can name
@@ -76,8 +76,8 @@ def build_terminal_report(
 
     insured = TerminalReason.SHIPMENT_INSURED in reasons
     # What is left once being insured is taken out: the reasons a merchant can
-    # actually be written to about. An insured claim with nothing else wrong with it
-    # leaves none, and gets no email.
+    # actually be written to about. Representative clarification takes precedence,
+    # so an insured claim gets no email even when this tuple is not empty.
     tellable = tuple(reason for reason in reasons if reason is not TerminalReason.SHIPMENT_INSURED)
 
     return TerminalReport(
@@ -89,7 +89,9 @@ def build_terminal_report(
         gates=tuple(gates),
         context=context,
         drafted_email=(
-            draft_terminal_email(case, tellable, gates, context, policy) if tellable else None
+            draft_terminal_email(case, tellable, gates, context, policy)
+            if tellable and not insured
+            else None
         ),
-        requires_escalation=insured,
+        requires_rep_clarification=insured,
     )

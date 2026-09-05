@@ -28,8 +28,14 @@ slow, and — the bigger problem — two representatives can reach two different
 same facts.
 
 This system does the slow part. For each damaged product it gathers the evidence, checks it
-against the rules, works out what it would suggest, and writes a draft email to the merchant.
-Then it stops.
+against the rules, and returns two distinct outputs: a structured claim report and, only when
+the next action is merchant-facing, a draft email. Then it stops.
+
+There are three next actions. An approval report carries the confidence and approved amount,
+and its email communicates that amount. A request for merchant information names the exact
+details needed in both the report and email. Anything incorrect, ambiguous, internally failed,
+or insufficiently confident asks the representative for clarification and produces no email.
+Escalation and denial are not outcomes in this contract.
 
 **The system never decides, and never sends anything.** A representative reads what it found and
 either approves it or sends it back with a note saying what is wrong. Only after a person
@@ -99,9 +105,9 @@ representative and a draft email to the merchant listing every reason.
 **There is a screen to see it on.** A web page offers the sample claims, and lays the answer out
 as a conversation: what was read, what the claim is worth, each of the four checks in turn, the
 decision, and — on a stopped claim — the write-up, the draft email where there is one, and an
-escalation where the parcel was insured. The email can be reworded on the spot. It is a
+representative clarification request where the parcel was insured. The email can be reworded on the spot. It is a
 demonstration: anyone who opens it can screen any claim, and it decides nothing itself. It has a
-send button and an escalate button, and neither reaches anything — nothing leaves the browser,
+send button and an request representative clarification button, and neither reaches anything — nothing leaves the browser,
 because the stages that would send an email or route a claim out do not exist, though the screen
 reports both as done.
 Alongside it there is a stand-in for ShipBob, so the whole thing can be run on a laptop without
@@ -430,9 +436,9 @@ directly so a claim can be screened and inspected on its own.
   our judgement, not a stated rule, and it is one of the things worth confirming.
 - **An insured parcel is not answered at all — it is handed on.** Insured shipments are claimed
   on their insurance, through a process that is not this one, so nobody here writes to the
-  merchant about it. The claim is marked for escalation and left for someone else to pick up
+  merchant about it. The claim is marked as requiring representative clarification and left for someone else to pick up
   (FR-0.2). This is the one reason a merchant is never told about.
-- **When several checks fail, the merchant is told about every one of them, in a set order.**
+- **When several merchant-facing checks fail, the merchant is told about every one, in a set order.**
   Age, then wrong type, then missing information. Each reason gets its own paragraph, so the order
   decides emphasis and nothing else: which paragraph is read first, and which reason goes in the
   subject line. Missing information comes last because inviting someone to send photographs reads
@@ -440,8 +446,9 @@ directly so a claim can be screened and inspected on its own.
   is deliberately not in that list, because no email explains it. The order is fixed in the code
   rather than being a setting: nobody has asked to tune which reason a merchant reads first, and
   a fixed order is what keeps two screenings of the same claim identical.
-- **A claim can be both.** One that is insured *and* too old produces the escalation *and* the
-  email about its age, and a representative chooses which to act on. Nothing decides for them.
+- **Representative clarification takes priority.** A claim that is insured *and* too old asks the
+  representative for clarification and produces no merchant email. This keeps one next action per
+  report and prevents merchant wording from being generated for a representative-facing outcome.
 - **Every debatable value is a setting.** The age limit and whether the last day counts, the
   high-value figure and whether landing exactly on it counts, the complaint-type wording and the
   shortest acceptable description all live together as claim policy values. Several of them are
@@ -470,7 +477,7 @@ keeping a record of the attempt, and nothing is kept yet.
 every sample parcel is uninsured, every sample complaint is the right type, and no sample order
 comes close to the high-value figure. Each is proven only by a made-up case, so the real data has
 never exercised them. The age limit and the high-value figure are invented numbers awaiting
-ShipBob's confirmation, and so is the decision that an insured claim is escalated rather than
+ShipBob's confirmation, and so is the decision that an insured claim is sent for representative clarification rather than
 explained to the merchant.
 
 **Where the code is** — `src/claim_agent/preflight/`, and
@@ -482,7 +489,7 @@ explained to the merchant.
 
 **What it does** — When the checks stop a claim, this writes up why: a summary for the
 representative, and — for every reason a merchant can be told about — a draft email listing them.
-An insured claim is the exception: it is marked for escalation and gets no email, because insured
+An insured claim is the exception: it requires representative clarification and gets no email, because insured
 shipments are claimed on their insurance somewhere else entirely.
 
 **Why we need it** — A claim that cannot be processed is not simply dropped. The merchant is owed
@@ -500,16 +507,15 @@ of them states — see the questions at the end of this document.
 
 1. Take the verdict, the reasons, and all four check results.
 2. Turn each failed check into one plain sentence a representative can read.
-3. Set the insurance aside. If the parcel was insured, the write-up is marked for escalation and
-   that reason is taken out of everything the merchant will be shown — insured claims go to the
-   insurance process, not to us, so nobody writes to a merchant about one. A claim with nothing
-   else wrong with it therefore has no email at all.
-4. Write the email, if there is anything left to say. The subject names the first remaining
+3. If the parcel was insured, the write-up requires representative clarification and no merchant
+   email is generated, even if another check also failed. Insured claims go to the insurance
+   process, not to us.
+4. Otherwise, write the email if there is anything to say. The subject names the first remaining
    reason. The body explains every reason the claim was declined, in that same order, with the
    actual numbers in it — the delivery date, the day count, the limit, or exactly which pieces of
    information were missing.
-5. Hand over the summary, the escalation if there is one, the email if there is one, and the facts
-   already worked out — all of it marked as needing a person's approval.
+5. Hand over the summary, exactly one next-action output, and the facts already worked out — all
+   of it marked as needing a person's approval.
 
 **What it connects to** — It reads the verdict and check results from the pre-flight checks and
 produces the report a representative reviews. Nothing sends the email; sending is a later stage
@@ -649,10 +655,10 @@ instead of competing with five others for attention.
    and then the turning is replaced by a tick or a cross in the same place, so the answer lands
    where the eye is already looking. Each one opens up to reveal the values it looked at.
 5. On a stopped claim, the write-up is followed by whichever of two things the system produced.
-   An insured parcel gives an escalation, with a button to hand the claim on — there is nothing
-   to send, because no email is written about insurance. Every other reason gives the drafted
-   email, whose subject and wording the representative can change before pressing send. A claim
-   that is insured *and*, say, too old gives both, and they choose.
+   An insured parcel requires representative clarification — there is nothing
+   to send, because no email is generated for a representative-facing action. Every other reason
+   gives the drafted email, whose subject and wording the representative can change before
+   pressing send. If an insured claim also fails another check, clarification still takes priority.
 6. On a claim that passes, there is no email, because the system only writes one to explain a
    stop. The page says so, and says the stage that would investigate the claim does not exist yet.
 7. If the claim cannot be screened, the page says which of the four things went wrong and offers
@@ -945,7 +951,7 @@ and what was seen in each image — which is exactly what the per-product invest
 **When things go wrong** — Every failure ends with a person, never with a decision (NFR-4). If
 ShipBob will not give up the attachment list, if an image cannot be downloaded, if the AI is
 unreachable or replies with something unusable, or if the step budget runs out, the claim is
-escalated with whatever was learned so far attached. There is a difference the system is careful
+sent for representative clarification with whatever was learned so far attached. There is a difference the system is careful
 about: an image the merchant sent that is too blurry to use is *their* problem and they can be
 asked for a better one, whereas an image *we* could not fetch is *ours*, and asking the merchant
 to send it again would be dishonest. The two are recorded separately and lead to different places.
@@ -1012,10 +1018,10 @@ arrived at, and the draft email. Nothing is sent and nothing is stored.
 
 **Choices we made**
 
-- **The AI recommends; it does not decide.** All four outcomes are its own judgement, including
-  refusing a claim. There is one narrow exception, in one direction only: where the rules say an
+- **The AI recommends; it does not decide.** It proposes one of three next actions and supplies
+  its confidence. Where the rules say an
   approval is not available — a piece of evidence is missing, it is not sure enough, or it ran out
-  of steps — the recommendation is moved to asking the merchant or handing it to a person, and what
+  of steps — the recommendation is moved to asking the merchant or requesting rep clarification, and what
   the AI originally said is recorded next to it. Nothing can move a recommendation *towards* paying.
 - **The AI decides what the damage is worth, and one limit holds it.** This was the other way
   round until recently, and the change is worth understanding. A fixed rule used to work the
@@ -1065,7 +1071,7 @@ arrived at, and the draft email. Nothing is sent and nothing is stored.
 cannot be reached, a reply that does not fit its form, an image that cannot be fetched, and
 ShipBob refusing to produce an invoice all lead to the same place: the claim is handed over with
 whatever was established, and never to a payment or a silently dropped case. Where an invoice
-cannot be produced, the claim is escalated rather than the price being taken from the order
+cannot be produced, the claim is sent for representative clarification rather than the price being taken from the order
 instead — the two happen to be identical in the sample data, and quietly swapping one for the
 other would put a number in front of a representative that did not come from where the report says
 it came from.
@@ -1394,91 +1400,19 @@ investigation: it runs to the end and its findings are discarded.
 
 ---
 
-### Reading the investigation's own words
+### Investigation progress versus the report
 
-**What it does** — Passes on everything the investigation writes about itself, whole, and lays
-it out on screen the way it was written. A list of things it is weighing up appears as a list,
-an emphasised word appears emphasised, and a sentence that runs long is not cut off part-way.
+The investigation emits ordered progress events. The UI's existing compact activity bar previews
+the latest event and retains the ordered stream in its expandable log, so model commentary, tool
+calls, and image analysis are visible live without growing into a second report. The final SSE
+result contains only canonical structured reports and their persistence status—never a second
+raw-investigation report. Each report contains
+the settled evidence, assessments, outcome, amount, context, concerns, attachment image URLs, and
+one drafted email; the UI owns their layout.
 
-**Why we need it** — The most useful thing a representative sees while an investigation runs is
-the model's own remark alongside its tool calls: "the second photograph is too dark to read, so
-I will look at the third". Two things spoiled it. The remark was cut at three hundred
-characters, mid-word, and a remark that is cut loses exactly the end of it — the part saying
-what the run decided to do next. And it arrived on screen as one unbroken line, so a remark
-written as three bullet points read as one paragraph with stray dashes in it, and the line
-breaks the model had put in were thrown away.
-
-**How it works**
-
-1. The run finishes a turn and the model has written something alongside its tool calls.
-2. That remark goes onto the stream exactly as written. Nothing is trimmed, shortened or
-   reflowed on the way.
-3. Every message on the stream is sent as data rather than as loose text, so line breaks inside
-   a remark survive the journey to the browser intact.
-4. The screen reads the remark as **markdown** — the plain-text conventions people already
-   write in: `#` for a heading, `-` for a bullet, `1.` for a numbered point, `**` around
-   something emphasised, backticks around a piece of code. It splits the text into blocks and
-   turns each one into the thing it describes.
-5. Anything the screen does not recognise is shown exactly as it was written, character for
-   character. A remark with no markdown in it at all reads as an ordinary sentence, which is
-   what most of them are.
-6. **A step that says a lot is folded.** Most are one short line and are shown as one. A
-   step that runs past a few lines is put in a quieter, greyed box that scrolls instead of
-   growing, so it takes the same room whether it says four lines or forty. It starts open,
-   and a representative can shut it and open it again. Shut, it shows its first line, so
-   they can tell what they are opening.
-
-**What it connects to** — It applies to the running commentary the investigation sends while it
-works, and to nothing else. The finished report's fields — a product's explanation, its
-concerns, what a photograph showed — are single sentences laid out in a table on screen, and are
-still shown as plain text.
-
-**Choices we made**
-
-- **Nothing the run says is cut.** The length of a remark is already bounded by how much the
-  model is allowed to write in one reply, so there was never an unbounded amount of text to
-  defend against — only a limit that fired on the longer remarks and lost their endings.
-- **The step-by-step record keeps its own short entries.** The record of what a run did still
-  trims each entry to a sentence or two. It is a different thing with a different job: the
-  record is a summary kept for review, and the commentary is the run talking while it works.
-  They looked alike, which is how they came to share a limit they should never have shared.
-- **We read the markdown ourselves rather than adding a library.** The screen has no
-  dependencies beyond React, and a small reader covering the things a model actually writes —
-  headings, bullet and numbered lists, code blocks, bold, italics, inline code — is a page of
-  code. A library for it would be the largest thing on the screen.
-- **Nothing the model writes becomes markup.** Each piece of the text is turned into an element
-  directly; the text is never handed to the browser as HTML. So a model that writes something
-  that looks like markup puts those characters on screen and cannot change the page.
-- **Links are not supported.** A link written as markdown shows as the characters that were
-  typed. Nothing in an investigation writes links today, and accepting them means deciding what
-  is safe to let a model send somebody to — a decision worth making deliberately rather than in
-  passing.
-- **A long step is folded, not shortened.** Cutting it is what we just stopped doing. Folding
-  it keeps every word and costs the screen nothing: the box scrolls, so a step that reasons at
-  length takes no more room than one that says a sentence.
-- **It starts open.** Watching the work happen is the reason any of this is on screen, and a
-  step that arrived already shut would put the stream back to being something a representative
-  has to go looking through. Shutting it is theirs to do.
-- **Whether to fold is judged on how much there is to read**, not on what sort of step it is:
-  more than three lines, or more than about two hundred and forty characters. So the reasoning
-  and a tool that answered at length are both folded without the screen having to know which
-  kinds of step tend to be long — and a kind nobody has seen before is treated on the same
-  terms as the rest.
-
-**When things go wrong** — Anything malformed falls back to being shown as written: a code
-fence nobody closed, a list that starts mid-sentence, emphasis with no end to it. There is no
-failure case in which text disappears, which is the property that matters — a representative
-seeing odd punctuation can still read the sentence, while one seeing nothing has lost it.
-
-**Not ready for production** — Nobody has measured how long the longest remark actually is.
-The screen no longer grows with it — the box scrolls — but nothing at either end puts a limit
-on the words themselves, so an unusually talkative model makes for a larger stream rather than
-a longer page. There are no tests over the markdown reader or over the folding, as there are
-no tests over any of the screen: both were checked by rendering them and reading the result.
-
-**Where the code is** — `src/claim_agent/agent/loop.py` is what the run says and how much of it
-is passed on, `web/src/components/Markdown.tsx` reads it, and
-`web/src/components/InvestigationStep.tsx` is the step it is drawn inside.
+**Where the code is** — `src/claim_agent/agent/events.py` defines progress, while
+`src/claim_agent/api/routes/investigate.py` emits the final report result and
+`web/src/api/investigationStream.ts` reads both without treating progress as report content.
 
 ---
 
@@ -1536,7 +1470,7 @@ says so where a reader will see it.
 5. The screen draws the first three of those, and adds nothing.
 
 **Step 4 is worked out and not shown.** The table of candidate rules was on the screen and was
-taken off, along with a chart breaking disagreement down by which of the four recommendations was
+taken off, along with a chart breaking disagreement down by which of the three actions was
 made. The scoring still runs and is still tested; what went is the drawing of it. That is the one
 thing on this screen that spoke directly to "could any of this be automated yet", so it is worth
 knowing it is a panel away rather than a piece of work away.
@@ -1709,7 +1643,7 @@ stage that sends an approved email does not exist yet, so an approval stops at b
   made, and the report says plainly that it went over. Refusing would throw away a decision a
   person made, which is worse than recording one somebody may query. **This is our reading**, not
   something anyone has ruled on — see the questions at the end.
-- **A stopped claim's report recommends nothing.** The four recommendations are about a damaged
+- **A stopped claim's report recommends nothing.** The three actions are about a damaged
   product, and a stopped claim has none. Its reasons are what it has to say, and turning them
   into a recommendation would be the system inventing an answer nobody gave.
 - **Still undecided:** whether sending a report back should be possible at all until the stage
@@ -1733,9 +1667,9 @@ review took is accepted and never measured. What the run actually did step by st
 so the ordered history of a case is still missing. All of these are in
 [Future production](#future-production).
 
-**On screen** — A representative watches an investigation as before, and the reports now arrive
-at the end of it: the document itself, drawn as it was written, with what is recommended and the
-amount above it. Under each one they can approve it, reword the merchant's email and then approve,
+**On screen** — A representative sees the report at the end of an investigation, constructed from
+its structured fields, with what is recommended and the amount above it. Under each one they can
+approve it, reword the merchant's email and then approve,
 or send it back with a note. All three reach the service and all three are recorded. The recipient
 of an email is shown and cannot be changed, because who hears about a claim is not a
 representative's to decide. **One sentence on that screen is the screen's own** — that approving is
@@ -1746,14 +1680,13 @@ What is not on screen: the view over a whole claim. A claim's reports can be fet
 with each product's own review state, and nothing draws that yet — so a representative sees the
 reports from the investigation they just watched and cannot come back to a claim tomorrow.
 
-**Where the code is** — `src/claim_agent/report/` holds the report, the writing of it, and the
+**Where the code is** — `src/claim_agent/report/` holds the report contract, its builder, and the
 two review actions; `src/claim_agent/storage/report_store.py` keeps it;
 `src/claim_agent/api/routes/reports.py` is the way in; and
 `src/claim_agent/api/routes/investigate.py` is where a finished investigation is written down.
-On the screen: `web/src/components/ReportCard.tsx` draws a report and acts on it,
-`web/src/api/reportsClient.ts` is how it reaches the service, and
-`web/src/components/Markdown.tsx` grew the ability to draw a table, which a report needs and
-nothing before it wrote.
+On the screen: `web/src/components/ReportCard.tsx` draws and acts on one report,
+`web/src/components/LineReport.tsx` lays out its structured content, and
+`web/src/api/reportsClient.ts` is how review actions reach the service.
 
 ---
 
@@ -2024,7 +1957,7 @@ the disagreements can be shown beside the rest of the evidence.
   against an unnamed carrier while a real carrier actually carried the parcel is worth a
   representative's attention, not worth hiding.
 - **Still undecided:** nobody has said what any of this should *do*. Whether a claim whose
-  description is about a different parcel should be stopped, escalated, or merely annotated is a
+  description is about a different parcel should be stopped, sent for representative clarification, or merely annotated is a
   product decision, and this feature deliberately makes none of it.
 
 **When things go wrong** — Nothing here raises an error at a caller. A missing description, a
@@ -2324,7 +2257,7 @@ which of the four things is missing. This module adds no new judgement about any
 evidence — that already exists — it only assembles those judgements into the verdict a
 representative actually wants: can we recommend anything, and if not, what happens next. No
 requirement asks for this exact shape; FR-1.6 and FR-1.7 are the requirements it serves, and NFR-4
-is why a gap on our own side escalates instead of being asked of the merchant.
+is why a gap on our own side requests representative clarification instead of being asked of the merchant.
 
 **How it works**
 
@@ -2518,10 +2451,9 @@ finds in production.
   stage of four. Approving a report, sending an email back with feedback, seeing a claim's
   separate products — all of those are later requirements with nothing behind them yet. The
   wording of an email *can* be edited, but only on screen: see the two entries below.
-- **Any real escalation.** The escalate button is a simulation in exactly the way the send
-  button is: nothing is queued, nobody is told, and the screen reports it as escalated regardless.
-  It is worse in one respect — nothing anywhere decides where an escalated claim should *go*, so
-  even the real version has an unanswered question in front of it (see the questions at the end).
+- **Any real routing after representative clarification.** The report now asks the rep directly
+  and generates no merchant email. A later operational workflow still has to decide where the
+  claim goes after the rep clarifies it.
 - **Any real sending.** The send button is a simulation. Nothing is contacted, nothing is
   recorded, and there is no address in the system behind it — the whole of stage 4 is empty. The
   screen reports the email as sent and gives no hint that it was not, which makes this the most
@@ -2604,12 +2536,6 @@ finds in production.
 - **The record of a run is not kept.** It exists for as long as the reply takes and is then gone.
   The requirement asking for an ordered record of what was done to each case is unmet, and the
   record has ordering but no times, because nothing fills them in.
-- **The screen reads only part of markdown.** Headings, bullet and numbered lists, code
-  blocks, bold, italics and inline code are drawn as what they are; links, tables, block
-  quotes and lists inside lists are shown as the characters that were typed. Nothing writes
-  those today. A model that starts to would produce something readable but untidy rather
-  than something broken.
-
 - **Every figure on the analysis screen is invented, and nothing on screen says so.** The screen
   carries the numbers itself rather than reading them from anywhere, because nothing records a
   real decision — the stage where a representative decides is not built — and a dashboard that is
@@ -2655,18 +2581,9 @@ finds in production.
   fed by a figure a model transcribed from an image. A misread digit produces a confident, wrong,
   and perfectly self-consistent answer.
 
-- **The report is prose, so nothing can lay out its parts.** That was asked for and it is what
-  makes a report one thing somebody can copy to a colleague. The cost is that a screen can only
-  show the writing: it cannot put the evidence in one panel and the figure in another, cannot
-  fold a section away, and cannot sort or filter anything inside a report. The requirement asking
-  for structured data rather than prose is knowingly unmet, and going back on it later means
-  writing the report a second way rather than adjusting this one.
-
-- **A report's words are fixed when it is written.** Changing how reports read improves the next
-  one and leaves every stored one exactly as it was. That is right for a record — a representative
-  who approved a report should be able to see what they approved — but it means two reports on a
-  screen can be worded differently for no reason a reader can see, and there is nothing marking
-  which is which.
+- **The structured report schema now needs deliberate migration.** Stored reports are JSON
+  records, and changing a required content field can make an older record unreadable. Presentation
+  changes belong in the UI; schema changes need backward-compatible defaults or a migration.
 
 - **A report and the claim it is about can drift apart.** The report copies what the claim was
   worth, who carried it and what the merchant said, and nothing goes back to check them. If
@@ -2681,14 +2598,9 @@ finds in production.
   deliberate, and it means a figure arriving in an unexpected shape would appear on screen in
   that shape rather than being quietly tidied up. Tidying it up in the browser is the thing this
   project most wants to avoid, so the trade was made knowingly.
-- **Half the rhythm is now real, and the half that is not looks exactly like it.** The
-  investigation genuinely reports as it works, and the screen shows those steps as they
-  arrive — so what a representative watches during the investigation is real work in real
-  order, in the service's own words. The quick checks at the top are still a replay, and
-  every message still spins for a fixed beat as it arrives, which means a step can appear a
-  little after it happened. So the *steps* are no longer invented; the *timing* still is.
-  That is a much smaller lie than the one this entry used to describe, and it is still worth
-  knowing before trusting the pace of it. Everything below applies to the quick checks.
+- **The screening rhythm is a replay.** The investigation's activity entries come from live SSE
+  progress, while the quick checks above them are revealed with fixed timing rather than their real
+  duration.
 
   Each finding turns before it settles, which reads as a step being worked on. It is not: the
   screening finished before the first message appeared, and every pause is a fixed length the
@@ -2858,6 +2770,10 @@ finds in production.
 - **Decide, once, whether a claim is priced from ShipBob's records or from the customer's receipt.**
   Every claim where they differ currently costs a representative a judgement call, and two
   representatives will not make it the same way.
+- **Give the agent access to the product inventory, including an undamaged reference for each
+  product.** Comparing the claimed item and its condition with the real product would help the
+  agent identify it, judge the level of damage, and estimate the true value of that damage rather
+  than relying on the claim photographs and purchase price alone.
 
 - **A record of every screening, and the ability to fetch one back.** This is the single biggest
   gap: it blocks an audit trail, protection against doing something twice, and a representative
@@ -2908,7 +2824,7 @@ finds in production.
   reading**, and the opposite reading is just as available. If it should be refused, the rule
   belongs beside the limit in the rules file rather than in the code that reviews a report.
 
-- **What should a stopped claim's report recommend?** Nothing, today. The four recommendations are
+- **What should a stopped claim's report recommend?** Nothing, today. The three actions are
   about a damaged product and a stopped claim has none, so its reasons are what it has to say. A
   representative approving one is agreeing to close the claim, and the report does not put that in
   so many words because nobody has said it should.
@@ -2929,13 +2845,13 @@ finds in production.
 - **What should happen when neither the claim nor the parcel records a delivery date?** We stop
   the claim and call it missing information. This is the decision we are least sure of.
 - **Should an insured claim reach the merchant at all?** We say no: FR-0.2 says an insured
-  shipment must be "routed out, never processed here", so we mark it for escalation and write
+  shipment must be "routed out, never processed here", so we request representative clarification and write
   nothing to the merchant, on the reasoning that whoever handles insurance claims will be the one
   to talk to them. But FR-0.4 says every ineligible claim is closed *with an explanation to the
   merchant*, without excepting this one, so the two can be read as contradicting each other. This
   is the interpretation the code now rests on, and it is the decision most worth confirming.
-- **And where should an escalated claim go?** Nothing says. The write-up says a claim has to be
-  escalated and nothing about to whom, which means today it is escalated to nobody in particular.
+- **And what should happen after the representative clarifies an insured claim?** Nothing says.
+  The report asks the rep, but the downstream operational destination is still unspecified.
 - **When a claim fails several checks a merchant can be told about, which comes first?** We lead
   with age, then wrong type, then missing information. They are told every reason either way —
   the order settles which one they read first and which one is in the subject line, not which

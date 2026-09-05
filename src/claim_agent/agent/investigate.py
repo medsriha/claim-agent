@@ -27,9 +27,10 @@ others** (FR-1b.4). Three things make that true rather than hoped for:
   information about the other products at all. Neither takes such an argument, and
   neither may be given one.
 
-**Nothing here writes a figure.** The model says which products were damaged; a
-deterministic function prices them from the invoice (FR-1.21). The only money in a
-finished email is arithmetic a representative can check.
+**The model proposes a figure; it never writes one into merchant wording.** Code reads
+the proposed amount as an exact decimal, applies the cap, and substitutes the resulting
+approved amount into an approval email (FR-1.21). The only money in a finished email is
+therefore the checked amount a representative can verify.
 
 **Every failure ends in front of a person** (NFR-4). A run that used up its steps, a
 model that could not be reached, an answer that would not fit the form, or an email the
@@ -46,7 +47,7 @@ from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, ConfigDict
 
 from claim_agent.agent.budget import BudgetLimit, BudgetSnapshot, RunBudget
-from claim_agent.agent.email import finish_email
+from claim_agent.agent.email import finish_email, name_what_is_missing
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
 from claim_agent.agent.ledger import LedgerEntry, RunLedger
@@ -84,8 +85,8 @@ logger = get_logger(__name__)
 CLOSING_REQUEST = (
     "Now give your conclusion for this one product: what each of the four pieces of "
     "evidence showed, your answers to the four questions if the evidence was all there, "
-    "which products should be paid for, what you recommend, and the email that would go "
-    "to the merchant."
+    "which products should be paid for, your confidence and next action, and — only when "
+    "that action addresses the merchant — the email draft."
 )
 """What the run is asked once it has stopped looking at things.
 
@@ -97,8 +98,7 @@ the question, and because the loop takes it as an argument.
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
     Recommendation.APPROVE: "pay this product",
     Recommendation.REQUEST_INFO: "go back to the merchant",
-    Recommendation.DENY: "refuse this product",
-    Recommendation.ESCALATE: "hand this product to a person",
+    Recommendation.REQUEST_REP_CLARIFICATION: "ask the representative for clarification",
 }
 """Each recommendation as a representative would say it, for the message on a screen.
 
@@ -124,7 +124,7 @@ class LineInvestigation(BaseModel):
     what stands, what it would cost, what worries the run had, the email that would
     go out, and the record of how it was all reached. A representative deciding on
     this line should need nothing else, and should be able to answer "why this
-    amount?" and "why was this escalated?" from here alone (NFR-3).
+    amount?" and "why was this sent for representative clarification?" from here alone (NFR-3).
 
     Frozen, because it is the account of something that has already happened.
 
@@ -152,14 +152,13 @@ class LineInvestigation(BaseModel):
             up, or an email that was refused. Silence here is treated as a defect
             rather than a clean result (FR-2.5).
         drafted_email: The exact wording that would go to the merchant, unsent and
-            marked as such (FR-1.17). It is `None` when there is nothing to send:
-            the run gave up before writing anything, or what it wrote was refused.
-            The line then goes to a person, who is the one who decides what the
-            merchant is told.
+            marked as such (FR-1.17). It is `None` for representative clarification,
+            including when the run gave up or merchant wording was refused. The line
+            then stays with the representative, who decides what clarification is needed.
         ledger: Every step the run took, in order, including the ones that failed
             (NFR-3, NFR-5).
         budget: What the run spent and which of its limits it reached, so an
-            escalation can be explained without anyone reading logs.
+            representative clarification request can be explained without anyone reading logs.
         conclusion: The model's own answer, exactly as it gave it, or `None` when
             the run never reached one. Keep the two apart when reading this: the
             fields above are what stands after the claim's settled evidence was
@@ -179,6 +178,7 @@ class LineInvestigation(BaseModel):
     ledger: tuple[LedgerEntry, ...]
     budget: BudgetSnapshot
     conclusion: InvestigationConclusion | None
+    requested_details: tuple[str, ...] = ()
 
     @property
     def confidence(self) -> float | None:
@@ -220,12 +220,13 @@ async def investigate_line(
 
     1. the evidence the claim had already settled is merged with this run's own read of
        the photographs of *its* product (FR-1a.3);
-    2. the figure is worked out in code from the products the run says were damaged,
-       priced against the invoice — never from anything the model wrote (FR-1.21);
+    2. the figure the model proposed is parsed exactly, checked against the damaged
+       products and invoice context, and capped in code (FR-1.21);
     3. the requirements that are written as rules are applied to what the run
        recommended. They can withhold a payment the rules forbid and can never move a
        recommendation towards paying (FR-1.6, FR-1.12, FR-1.15, FR-1.16);
-    4. the email is finished, with the real figure written into it.
+    4. for a merchant-facing action, the email is finished; approvals receive the exact
+       amount that survived the cap, while representative clarification receives no email.
 
     Never raises for anything that can happen to a claim. A run that gave up, and an
     email that was refused, both come back as a finished write-up recommending that a
@@ -383,6 +384,7 @@ def _settle(
     assessments = _questions_that_were_answered(conclusion.assessments)
     amount = _amount_it_recommends(conclusion, invoice=invoice, policy=policy)
     concerns = _concerns(conclusion, shared_evidence)
+    requested_details = _requested_details(conclusion, evidence)
 
     decision = decide_outcome(
         conclusion.recommendation,
@@ -391,43 +393,50 @@ def _settle(
         line=line,
         amount=amount,
         policy=policy,
+        requested_details=requested_details,
+        confidence=conclusion.confidence,
     )
 
-    try:
-        drafted = finish_email(
-            conclusion,
-            recommendation=decision.recommendation,
-            amount=amount,
-            contact_email=contact_email,
-        )
-    except ModelOutputRejectedError as refused:
-        # The wording cannot be shown to anyone, so the investigation's own
-        # recommendation is set aside and a person takes the line. That is the one
-        # direction code may move a recommendation in (NFR-4); what the run concluded
-        # is kept below, so a representative can still read it.
-        logger.warning(
-            "drafted_email_refused",
-            claim_line_id=line.claim_line_id,
-            recommendation=decision.recommendation.value,
-        )
-        return LineInvestigation(
-            line=line,
-            evidence=evidence,
-            assessments=assessments,
-            outcome=_hand_it_to_a_person(
+    if decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION:
+        # This action is entirely internal. No merchant wording is generated or surfaced
+        # while the representative still has to resolve what is wrong or ambiguous.
+        drafted = None
+    else:
+        try:
+            drafted = finish_email(
+                conclusion,
+                recommendation=decision.recommendation,
+                amount=amount,
+                contact_email=contact_email,
+                requested_details=requested_details,
+            )
+        except ModelOutputRejectedError as refused:
+            # Unsafe or incomplete merchant wording becomes a clarification request. The
+            # report keeps the investigation's conclusion and explains why no email was made.
+            logger.warning(
+                "drafted_email_refused",
+                claim_line_id=line.claim_line_id,
+                recommendation=decision.recommendation.value,
+            )
+            return LineInvestigation(
+                line=line,
                 evidence=evidence,
                 assessments=assessments,
-                line=line,
+                outcome=_hand_it_to_a_person(
+                    evidence=evidence,
+                    assessments=assessments,
+                    line=line,
+                    amount=amount,
+                    policy=policy,
+                ),
                 amount=amount,
-                policy=policy,
-            ),
-            amount=amount,
-            concerns=_also(concerns, refused.message),
-            drafted_email=None,
-            ledger=outcome.ledger,
-            budget=outcome.budget,
-            conclusion=conclusion,
-        )
+                concerns=_also(concerns, refused.message),
+                drafted_email=None,
+                ledger=outcome.ledger,
+                budget=outcome.budget,
+                conclusion=conclusion,
+                requested_details=(),
+            )
 
     return LineInvestigation(
         line=line,
@@ -440,7 +449,18 @@ def _settle(
         ledger=outcome.ledger,
         budget=outcome.budget,
         conclusion=conclusion,
+        requested_details=(
+            requested_details if decision.recommendation is Recommendation.REQUEST_INFO else ()
+        ),
     )
+
+
+def _requested_details(
+    conclusion: InvestigationConclusion, evidence: Sequence[EvidenceFinding]
+) -> tuple[str, ...]:
+    """Merge standard evidence requests with the agent's other merchant-fillable gaps."""
+    named = (*name_what_is_missing(evidence), *conclusion.requested_details)
+    return tuple(dict.fromkeys(detail.strip() for detail in named if detail.strip()))
 
 
 def _a_run_that_gave_up(
@@ -552,11 +572,11 @@ def _hand_it_to_a_person(
 
     Handing a line to a person is proposed rather than imposed here, and the rules are
     asked about it exactly as they are asked about anything else. They can only ever be
-    more cautious than that, so the result is always an escalation — and it arrives
+    more cautious than that, so the result is always an representative clarification request — and it arrives
     carrying whatever else the rules found wrong with the line, which is what a
     representative needs to see (NFR-3).
 
-    Escalating is proposed as the run's *own* recommendation here, rather than the
+    Representative clarification is proposed as the run's *own* action here, rather than the
     recommendation being carried over from what the run actually concluded. That is
     deliberate and worth being careful about: passing the run's own answer through
     would let the rules approve a line whose email had just been thrown away, leaving a
@@ -565,7 +585,7 @@ def _hand_it_to_a_person(
     it (NFR-3).
     """
     return decide_outcome(
-        Recommendation.ESCALATE,
+        Recommendation.REQUEST_REP_CLARIFICATION,
         evidence=evidence,
         assessments=assessments,
         line=line,
@@ -579,7 +599,7 @@ def _ran_out_of_steps(outcome: LoopOutcome[InvestigationConclusion]) -> bool:
     """Say whether the run stopped without concluding because its steps ran out (FR-1.16).
 
     Both halves matter. A run that spent its last step and *did* conclude has finished
-    its work, and escalating it would make the answer depend on how big the allowance
+    its work, and requesting clarification would make the answer depend on how big the allowance
     happened to be rather than on the claim. A run that stopped early for some other
     reason — a model that could not be reached, an answer that would not fit the form —
     still goes to a person, but not for this reason, and saying so would send whoever

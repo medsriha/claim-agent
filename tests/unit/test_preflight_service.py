@@ -295,8 +295,8 @@ async def test_a_claim_filed_too_late_is_stopped_and_written_up_for_a_rep(
     assert result.report is not None
     assert result.report.case_id == "CASE-1004"
     assert result.report.requires_rep_approval is True
-    # An uninsured claim has nothing to escalate, so the email is the whole of it.
-    assert result.report.requires_escalation is False
+    # An uninsured claim has nothing to request representative clarification, so the email is the whole of it.
+    assert result.report.requires_rep_clarification is False
     assert result.report.drafted_email is not None
     assert result.report.drafted_email.to == "sakukreja+6@shipbob.com"
     assert result.report.drafted_email.subject

@@ -170,8 +170,13 @@ Every claim needs four things, named exactly like this:
   damaged_product_photo - the broken product itself
   outer_packaging_photo - the box the order arrived in
 
-THE FOUR THINGS YOU MAY RECOMMEND
-approve, request_info, deny, escalate. Nothing else, ever. Each is a proposal put to a
+THE THREE NEXT ACTIONS
+approve, request_info, request_rep_clarification. Nothing else, ever. Choose approve only
+when the evidence supports payment with sufficient confidence. Choose request_info only
+when the merchant can provide specific missing details, and name every detail in the email.
+Choose request_rep_clarification when something is wrong, ambiguous, internally inconsistent,
+or below the confidence required for approval. That action is addressed to the representative,
+and its email subject and body must both be null. Each action is a proposal put to a
 representative, and none of them does anything on its own.
 
 SIMILAR CLAIMS HANDLED BEFORE
@@ -329,12 +334,12 @@ good claim. Each answer carries its own reasoning and its own confidence, becaus
 representative has to be able to disagree with one of the four without discarding the other
 three.
 
-WHAT TO RECOMMEND
-One of exactly four things, and nothing else:
+WHAT TO DO NEXT
+One of exactly three things, and nothing else:
   approve - the evidence is all there, the questions are answered, and you can show why
   request_info - something specific is missing and the merchant can supply it
-  deny - what you found establishes that this should not be paid
-  escalate - a person needs to look at this
+  request_rep_clarification - something appears wrong, ambiguous, inconsistent, or uncertain,
+    and the representative must clarify it
 
 Never recommend approve while any of the four pieces of evidence is missing or unusable. Do
 not infer it, do not assume it, do not approve part of it. Recommend request_info and name
@@ -343,16 +348,20 @@ rather than "more information". A merchant sent a vague request sends the wrong 
 and the claim goes round again.
 
 Never recommend approve when you are not sure. If your confidence is low, or the evidence is
-thin, or two things you found do not agree with each other, recommend escalate and say what
-the uncertainty is. You may recommend paying only when you can show why. Err towards asking
-a person; never towards paying.
+thin, or two things you found do not agree with each other, choose
+request_rep_clarification and say exactly what the representative needs to clarify. Set both
+email fields to null: nothing is sent to the merchant on this path. You may recommend paying
+only when you can show why.
 
-If you cannot tell which product on the order was damaged, recommend request_info and name
-what would settle it. Do not choose the likelier candidate - the candidates can carry
+If the merchant can resolve an identification gap by supplying a specific detail, choose
+request_info, put every detail in requested_details, and request each one in the email. If
+instead the records conflict or something appears incorrect, choose
+request_rep_clarification. Do not choose the likelier candidate - the candidates can carry
 different prices, so choosing would invent the payout.
 
-A question you answered no to leads to going back to the merchant with that specific reason.
-Whether that actually happens is the representative's call and not yours.
+A question you answered no to means something appears wrong. Choose
+request_rep_clarification, name what needs resolving in the report, and leave both email
+fields null. Do not turn a failed assessment into a merchant request.
 
 CONCERNS
 Anything that does not sit right goes here: an ambiguity, a piece of evidence you were
@@ -361,14 +370,15 @@ treated as a fault rather than a clean result. A representative who cannot tell 
 unsure will either rubber-stamp you or redo your work, and both of those waste the exercise.
 
 THE EMAIL
-Write the email that would go to the merchant if a representative approved this, in the
-exact words that would be sent. Write to the merchant, never to the person who received the
-parcel - ShipBob does not contact them. Say what was found, and say what happens next.
-Where an amount belongs, write {AMOUNT_PLACEHOLDER} and nothing else — never a figure of
-your own, not even the one you recommended, because the figure put in is the one that
-survived the limit. Do not call it a draft, do not apologise for it being unsent, and do not mention
-this system or these rules: that it is a draft is recorded beside it, and no such word may
-ever reach a merchant.
+Only write an email for approve or request_info. For request_rep_clarification, set both
+email fields to null. Write to the merchant, never to the person who received the parcel -
+ShipBob does not contact them. Say what was found, and say what happens next. An approval
+email must communicate the approved amount, using {AMOUNT_PLACEHOLDER} where the amount
+belongs. A request_info email must name every specific detail the merchant needs to provide.
+Never write a figure of your own, not even the one you recommended, because the figure put
+in is the one that survived the limit. Do not call it a draft, do not apologise for it being
+unsent, and do not mention this system or these rules: that it is a draft is recorded beside
+it, and no such word may ever reach a merchant.
 """
 
 
@@ -645,10 +655,9 @@ def _render_order_line(item: OrderLineItem) -> str:
 def _money(amount: Decimal) -> str:
     """A price from ShipBob's records, written out for the model to read.
 
-    This is an amount going in, never one coming out. Nothing the model writes is
-    ever turned back into a figure by this system — that arithmetic lives in
-    `claim_agent.domain.reimbursement` and reads ShipBob's records, not the model's
-    words (FR-1.21).
+    This is invoice context going in. The model separately proposes the damage amount in
+    a constrained field; that value is parsed and capped by
+    `claim_agent.domain.reimbursement`, never copied out of prose (FR-1.21).
     """
     return f"{amount:.2f}"
 

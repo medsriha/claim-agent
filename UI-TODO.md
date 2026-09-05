@@ -214,16 +214,10 @@ time and starts at UI-20.
     of the control that worked (up and down buttons, positions numbered, no dragging and no
     library) is in the history rather than in the code.
 
-- [x] UI-19 — The escalation, and the button that hands a claim on.
-  - **What was built:** `chat/EscalationAction.tsx`, shown when the service says a claim has to be
-    escalated — which today means the parcel was insured. It appears before the email, because
-    being insured leads the reasons, and a claim can carry both.
-  - **Conclusion:** it adds no words. The reason is already on screen in the system's own
-    sentence, in the findings just above, so the message is a label and a button.
-  - **Be aware:** escalating is a simulation, in the same way sending is — nothing is queued and
-    nobody is told, and the screen reports it as escalated anyway. Worse than the send in one
-    way: nothing anywhere decides where an escalated claim should go, so there is no real version
-    to build against yet. See DESIGN.md.
+- [x] UI-19 — **Replaced.** There is no escalation button or escalation outcome.
+  - **What exists now:** the report card shows `request_rep_clarification`, explains what the rep
+    needs to clarify, displays confidence, and shows no merchant email. The deleted
+    `chat/EscalationAction.tsx` simulation is not part of the current interface.
 
 - [x] UI-17 — Saving, being refused, and putting the startup values back.
   - **What was built:** Save sends the whole form; the panel then draws whatever the service says
@@ -507,7 +501,7 @@ screen still rests on React and React DOM and nothing else.
     confidence comparison, and how long a review took.
   - **What happened to the other three:** *how often each recommendation was changed*, *candidate
     rules, scored*, and *taken exactly as recommended, week by week* were all removed. The first
-    said little — disagreement came out much the same across all four recommendations, because
+    said little — disagreement came out much the same across all three actions, because
     what drives it in the invented data is how sure the system was and what the order was worth,
     rather than which of the four it landed on.
   - **Be aware:** the approval rate week by week was the only chart carrying two series, and its
@@ -672,7 +666,7 @@ context  order_value_usd (string, or null when the order could not be read), is_
 report   case_id, account_name, user_id, reasons[], findings[], gates[], context,
          drafted_email{to, subject, body, is_draft} — null when there is nothing the
          merchant can be told, which today means a claim stopped only by being insured,
-         requires_escalation (true exactly when the parcel was insured),
+         requires_rep_clarification (true exactly when the parcel was insured),
          requires_rep_approval
 error    error{code, message, details} — "not_found" (404), "upstream_unavailable" (502)
 ```
