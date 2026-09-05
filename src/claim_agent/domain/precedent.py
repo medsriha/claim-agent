@@ -1,33 +1,3 @@
-"""What we remember about a claim we already investigated, and how alike two claims are.
-
-The rest of the system makes each claim consistent with itself: the same rules,
-the same investigation, the same shape of report. None of that makes today's claim
-agree with a materially identical claim handled three weeks ago, because nothing
-remembers that claim. A **precedent** is that memory — one record per damaged
-product whose claim was **closed**, kept so a later claim like it can be handled the
-same way (FR-S.1).
-
-**Only closed claims go in here.** A claim still in review has no outcome: the system
-suggested something and nobody has agreed or disagreed yet. Keeping those would make the
-store circular, teaching a later investigation what this system already guessed.
-
-Two halves live here, both of them pure:
-
-- **The shape of a record**, and the factory that builds one from a closed claim
-  (FR-S.1, FR-S.3).
-- **How alike two claims are**, as a score between nothing and one, together with
-  the reasons in words a person can check (FR-S.4).
-
-Nothing here reaches out to anything, reads a clock, or calls a model. The same
-query against the same record always scores the same, which is what lets the store
-be searched without introducing run-to-run variance (NFR-1).
-
-**Similarity is over what happened, never over who it happened to** (FR-S.4). The
-merchant, the case number and the carrier are deliberately not compared. A claim's
-closest precedent usually belongs to a different merchant, and that is the point: a
-rule applied to one merchant and not another is the inconsistency, not the fix.
-"""
-
 from __future__ import annotations
 
 import re

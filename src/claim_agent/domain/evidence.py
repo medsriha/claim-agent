@@ -1,34 +1,3 @@
-"""The four pieces of evidence a claim needs, and the states each of them can be in.
-
-Before ShipBob reimburses anyone, four things have to be in hand:
-
-1. proof of what was ordered and at what price — an invoice;
-2. confirmation from the person who received the parcel that it arrived damaged,
-   which the merchant supplies, because ShipBob never contacts end customers;
-3. photographs of the damaged product;
-4. photographs of the outer packaging the order arrived in.
-
-Items 1, 2 and 4 describe the whole shipment and are settled once for the entire
-claim (FR-1a.3). Item 3 is settled per claim line: a claim covering two products
-needs photographs showing damage to each of them.
-
-**The interesting part of this file is that there are three ways to not have a
-piece of evidence, not one.** An attachment that was never sent is missing. An
-attachment that arrived but is too dark, too blurry or too cropped to support a
-conclusion does not satisfy its requirement either, and counts as not having it
-(FR-1.5). But an image *we* could not fetch or could not analyse is a third thing
-entirely, and it must never be confused with the first two: asking a merchant to
-send a photograph again because our own download failed is a request they cannot
-act on, and the pre-flight screen already has one label covering problems the
-merchant cannot fix, which DESIGN.md records as a fault rather than a pattern to
-copy.
-
-So: missing or unusable sends a specific request to the merchant (FR-1.6, FR-1.7);
-unreadable goes to a person (NFR-4).
-
-Nothing here reaches out to anything. These are shapes and plain rules over them.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

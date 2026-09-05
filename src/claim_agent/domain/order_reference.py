@@ -1,26 +1,3 @@
-"""Proving that a document in a photograph belongs to the claim in front of us.
-
-A merchant attaches a photograph of an invoice. The investigation reads prices off it and
-recommends a payout. Nothing anywhere checks that the invoice is for *this* claim.
-
-That is not a hypothetical worry, because order numbers never match across systems in
-ShipBob's own sample data. One claim is order `337761802` to ShipBob, `#HS3449170` on the
-merchant's support screen, and `Store Order # 344917` on the invoice itself — three
-numbers for one order, and **none of them is the ShipBob order id**. Another shows
-`#SO387378` with a purchase order of `#329233`, where ShipBob knows it as `336431771`.
-
-So the dangerous case is not a document that fails to match. It is a document that
-*silently* fails to match and gets read anyway: reasoning over another customer's invoice
-produces a recommendation that is confident, detailed, and about the wrong order.
-
-**No requirement covers this.** It came from comparing the sample claims' records against
-the photographs attached to them. The nearest ones are FR-1.13, which forbids narrowing two
-possibilities to one, and NFR-4.
-
-**Nothing here decides anything.** It says how strongly a document ties to this claim and
-what it found, and a person decides whether that is good enough.
-"""
-
 from __future__ import annotations
 
 import re

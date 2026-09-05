@@ -1,35 +1,3 @@
-"""Whether there is enough evidence to recommend anything yet, and what to ask for if not.
-
-`evidence.py` already knows the four things a reimbursement decision needs, and already
-knows the four states one of them can be in — present, missing, unusable, or unreadable.
-This module adds nothing new to either list. It only answers the question a rep and a
-merchant both actually want answered: given what was found, is a recommendation
-supportable, and if not, what — specifically — should happen next?
-
-CASE-1005 is the case that makes this worth writing down on its own. It has **zero
-attachments** and its status is already "Waiting on Client" — nobody has sent anything
-yet. The right output for a claim like that is not a priced verdict and not a vague
-"insufficient evidence"; it is a specific, sendable request: which of the four things is
-missing, and what exactly to ask the merchant for.
-
-**The distinction this module exists to protect is the one `agent/tools.py`'s own module
-docstring already draws, and it is repeated here rather than reinvented:** evidence the
-merchant never sent, or sent too dark or blurry to use, is *their* gap and they can be
-asked to fix it (FR-1.5, FR-1.6, FR-1.7). Evidence *we* could not fetch or could not get
-an answer about is a fault on our side, the merchant can do nothing about it, and asking
-them to "resend" something our own systems failed to read would be asking them to fix a
-problem that was never theirs (NFR-4). The two must never appear in the same list of
-things to ask the merchant for.
-
-`(no requirement covers this exact shape; see DESIGN.md)`. Assembling a rep-facing
-verdict from `evidence.py`'s findings is new; FR-1.6 and FR-1.7 are the requirements it
-serves, and NFR-4 ("fail toward the human") is why unreadable evidence requests representative clarification instead
-of being asked for again.
-
-Nothing here reaches out to anything or reads a clock. The same findings always produce
-the same verdict (NFR-1).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
