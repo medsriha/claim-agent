@@ -43,13 +43,17 @@ from claim_agent.api.deps import (
     ModelsDep,
     PolicyDep,
     PrecedentStoreDep,
+    ReportStoreDep,
     ShipBobClientDep,
 )
 from claim_agent.domain.models import Verdict
-from claim_agent.errors import ClaimAgentError
+from claim_agent.errors import ClaimAgentError, StorageError
 from claim_agent.observability import get_logger
 from claim_agent.preflight.models import PreflightResult
 from claim_agent.preflight.service import run_preflight
+from claim_agent.report.build import build_investigation_reports, build_screening_report
+from claim_agent.report.models import Report
+from claim_agent.storage.report_store import ReportStore
 
 logger = get_logger(__name__)
 
@@ -80,6 +84,7 @@ async def investigate_case(
     models: ModelsDep,
     merchant_memory: MerchantMemoryDep,
     precedent_store: PrecedentStoreDep,
+    reports: ReportStoreDep,
     policy: PolicyDep,
 ) -> StreamingResponse:
     """Screen a claim, investigate every damaged product on it, and say so as it goes.
@@ -110,6 +115,8 @@ async def investigate_case(
         precedent_store: The closed claims this service has handled before, looked
             up per product so a claim is judged the way comparable ones were
             (FR-S.5).
+        reports: Where the finished reports are kept, so a representative can come
+            back to them and decide (FR-2.9b, FR-R.13).
         policy: The thresholds every judgement is made against (FR-0.7).
 
     Returns:
@@ -134,6 +141,7 @@ async def investigate_case(
             models=models,
             merchant_memory=merchant_memory,
             precedent_store=precedent_store,
+            reports=reports,
             policy=policy,
         ),
         media_type=STREAM_MEDIA_TYPE,
@@ -156,6 +164,7 @@ async def _narrate(
     models: ModelsDep,
     merchant_memory: MerchantMemoryDep,
     precedent_store: PrecedentStoreDep,
+    reports: ReportStoreDep,
     policy: PolicyDep,
 ) -> AsyncIterator[str]:
     """Do the work and yield each message as it happens.
@@ -201,7 +210,16 @@ async def _narrate(
     if screening.verdict is Verdict.TERMINAL:
         # Stopped before anything expensive. The explanation a representative has to
         # approve is the whole result, and no image was ever looked at (FR-0.4, NFR-8).
-        yield _frame("result", {"screening": screening.model_dump(mode="json")})
+        stopped = build_screening_report(screening, at=asked_at)
+        kept, could_not_keep = _keep(reports, (stopped,) if stopped else ())
+        yield _frame("progress", (await _say_they_are_ready(events, kept, could_not_keep)))
+        yield _frame(
+            "result",
+            {
+                "screening": screening.model_dump(mode="json"),
+                **_reports_message(kept, could_not_keep),
+            },
+        )
         yield _frame("done", {"case_id": screening.case_id})
         return
 
@@ -246,7 +264,11 @@ async def _narrate(
         yield _frame("done", {"case_id": screening.case_id})
         return
 
-    yield _frame("result", _result_message(screening, investigated))
+    kept, could_not_keep = _keep(
+        reports, build_investigation_reports(screening, investigated, at=asked_at)
+    )
+    yield _frame("progress", (await _say_they_are_ready(events, kept, could_not_keep)))
+    yield _frame("result", _result_message(screening, investigated, kept, could_not_keep))
     yield _frame("done", {"case_id": screening.case_id})
 
 
@@ -307,7 +329,12 @@ def _screening_message(screening: PreflightResult) -> RunEvent:
     )
 
 
-def _result_message(screening: PreflightResult, investigated: ClaimInvestigation) -> dict[str, Any]:
+def _result_message(
+    screening: PreflightResult,
+    investigated: ClaimInvestigation,
+    kept: tuple[Report, ...],
+    could_not_keep: str | None,
+) -> dict[str, Any]:
     """Assemble the one message a representative actually decides from.
 
     Carries the screening as well as the investigation, so that everything behind a
@@ -318,7 +345,91 @@ def _result_message(screening: PreflightResult, investigated: ClaimInvestigation
     return {
         "screening": screening.model_dump(mode="json"),
         "investigation": investigated.model_dump(mode="json"),
+        **_reports_message(kept, could_not_keep),
     }
+
+
+def _keep(
+    reports: ReportStore, built: tuple[Report | None, ...] | tuple[Report, ...]
+) -> tuple[tuple[Report, ...], str | None]:
+    """Write the finished reports down, and never fail the claim for not managing it.
+
+    A representative is watching this happen. Losing an investigation they have just
+    seen run, because a file on disk could not be written, is the worst thing this
+    route could do — so the findings are still sent and the reply says plainly that
+    they were not kept (NFR-4).
+
+    **What it says is not one of the three answers the precedent search gives.** "We
+    looked and found none" and "we could not look" are both about what is known;
+    this is a fourth thing — the findings are here, and they cannot be approved,
+    because there is nothing to approve *against*. A representative told only that
+    something failed would go looking for them.
+
+    Each report is written on its own, so one that fails does not take the others
+    with it. Whatever was kept comes back, and the reason comes back beside it.
+
+    Returns:
+        The reports that were kept, and one plain sentence if any were not.
+    """
+    kept: list[Report] = []
+    for report in built:
+        if report is None:
+            continue
+        try:
+            reports.record(report)
+            kept.append(report)
+        except StorageError as failure:
+            logger.error(
+                "report_not_kept",
+                case_id=report.case_id,
+                claim_line_id=report.claim_line_id,
+                report_id=report.report_id,
+                failure=type(failure).__name__,
+            )
+            return (
+                tuple(kept),
+                "These findings could not be kept, so they cannot be approved yet. "
+                "Asking for this claim again will try to keep them.",
+            )
+    return tuple(kept), None
+
+
+def _reports_message(kept: tuple[Report, ...], could_not_keep: str | None) -> dict[str, Any]:
+    """The part of the result that says what a representative can now decide on."""
+    return {
+        "reports": [report.model_dump(mode="json") for report in kept],
+        "reports_unavailable_reason": could_not_keep,
+    }
+
+
+async def _say_they_are_ready(
+    events: EventStream, kept: tuple[Report, ...], could_not_keep: str | None
+) -> dict[str, Any]:
+    """Announce the finished reports as the last thing the investigation says.
+
+    Numbered through the same stream as everything else, so it takes its place in
+    order rather than being given a number invented here. **Handed straight back to
+    be written out** rather than left to the queue: by this point the loop that
+    drains the queue has already finished, so anything only put there would never be
+    read.
+
+    Nothing here carries an amount. The detail on an event is text meant for a
+    heading and a count, and money belongs in the report itself (FR-1.21).
+    """
+    if could_not_keep is not None:
+        summary = could_not_keep
+    elif not kept:
+        summary = "There is nothing to review on this claim."
+    else:
+        summary = f"{len(kept)} report(s) ready for review."
+
+    event = await events.emit(
+        EventKind.REPORT_READY,
+        summary,
+        kept=str(len(kept)),
+        outcome="kept" if could_not_keep is None else "not_kept",
+    )
+    return event.model_dump(mode="json")
 
 
 def _frame(name: str, payload: dict[str, Any]) -> str:

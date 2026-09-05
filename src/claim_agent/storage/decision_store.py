@@ -1,8 +1,12 @@
 """Every review action a representative has taken, kept so it can be counted later.
 
-A decision is written once and never changed: it is a fact about what a person chose at a
-moment, and rewriting history is exactly what an audit record must not allow (FR-C.1, NFR-5).
-There is no update and no delete here, for the same reason merchant memory has neither.
+A decision is a fact about what a person chose at a moment, so nothing here edits one. Writing
+the same decision twice replaces it rather than adding a second copy, which makes an id one
+event rather than one row — every rate worked out from this store would be wrong otherwise.
+
+There is one way to remove decisions, and it removes all of them. It exists because a
+development tool invents this history and invented history has to be removable (FR-C.8), not
+because anything in the service ever needs to forget a decision.
 
 Only one kind of question is ever asked of this store — *what was decided between these two
 moments* — because everything built on it reports on a period. So the whole record is kept as

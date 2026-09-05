@@ -50,7 +50,7 @@ export function TimeSeriesChart({ chart, tokens, height }: TimeSeriesChartProps)
       gridlines={chart.gridlines}
       domain={chart.domain}
       table={{
-        columns: [chart.y_label, ...chart.series.map((series) => series.name)],
+        columns: ["Week", ...chart.series.map((series) => series.name)],
         rows: Array.from({ length: count }, (_unused, index) => [
           first?.points[index]?.label ?? "",
           ...chart.series.map((series) => series.points[index]?.text ?? "—"),

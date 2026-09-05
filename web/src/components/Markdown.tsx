@@ -55,12 +55,17 @@ type Block =
   | { readonly kind: "paragraph"; readonly lines: string[] }
   | { readonly kind: "heading"; readonly level: number; readonly text: string }
   | { readonly kind: "list"; readonly ordered: boolean; readonly items: string[] }
-  | { readonly kind: "code"; readonly lines: string[] };
+  | { readonly kind: "code"; readonly lines: string[] }
+  | { readonly kind: "table"; readonly header: string[]; readonly rows: string[][] };
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
 const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
 const FENCE = /^\s*```/;
+/** A table row: at least one bar, and a bar at each end. */
+const ROW = /^\s*\|(.*)\|\s*$/;
+/** The line under a table's heading, which is dashes and colons and nothing else. */
+const RULE = /^\s*\|[\s|:-]+\|\s*$/;
 
 /**
  * Split text into the blocks it is made of, in the order they were written.
@@ -131,6 +136,24 @@ function readBlocks(text: string): Block[] {
       continue;
     }
 
+    // A table is read whole rather than line by line, because a row on its own means
+    // nothing and the line of dashes under the heading is not content. A row with no
+    // rule under it is left as ordinary text, which is what it is.
+    const row = ROW.exec(line);
+    if (row && RULE.test(lines[index + 1] ?? "")) {
+      endParagraph();
+      const header = cells(line);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && ROW.test(lines[index] ?? "")) {
+        rows.push(cells(lines[index] ?? ""));
+        index += 1;
+      }
+      index -= 1;
+      blocks.push({ kind: "table", header, rows });
+      continue;
+    }
+
     paragraph.push(line);
   }
 
@@ -183,7 +206,51 @@ function Block({ block }: { block: Block }): React.JSX.Element {
           <code>{block.lines.join("\n")}</code>
         </pre>
       );
+
+    case "table":
+      // Wrapped in something that scrolls on its own, so a wide table never makes the
+      // page itself scroll sideways.
+      return (
+        <div className="md-table-frame">
+          <table className="md-table">
+            <thead>
+              <tr>
+                {block.header.map((cell, index) => (
+                  <th key={index}>
+                    <Inline text={cell} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, index) => (
+                    <td key={index}>
+                      <Inline text={cell} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
   }
+}
+
+/**
+ * Split one table row into its cells.
+ *
+ * A bar that was escaped is part of the text rather than the edge of a cell, so it is put
+ * back as an ordinary bar once the splitting is done — which is what lets a finding say
+ * "two columns | one row" without shifting every column after it.
+ */
+function cells(line: string): string[] {
+  const inside = ROW.exec(line)?.[1] ?? "";
+  return inside
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.replace(/\\\|/g, "|").trim());
 }
 
 /**

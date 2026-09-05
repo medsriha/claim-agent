@@ -28,7 +28,7 @@ export function App(): React.JSX.Element {
           <nav className="header-nav" aria-label="Screens">
             <ScreenTab screen="screening" label="Screening" showing={showing} onChoose={setShowing} />
             <ScreenTab screen="policy" label="Admin panel" showing={showing} onChoose={setShowing} />
-            <ScreenTab screen="analysis" label="Analysis" showing={showing} onChoose={setShowing} />
+            <ScreenTab screen="analysis" label="Monitoring" showing={showing} onChoose={setShowing} />
           </nav>
         </div>
       </header>

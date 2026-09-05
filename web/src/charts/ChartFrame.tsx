@@ -53,6 +53,8 @@ interface ChartFrameProps {
   title: string;
   /** The service's sentence about the whole chart, shown when nothing is picked out. */
   summary: string;
+  /** Whether to show the static summary below the chart. Interactive point readouts remain. */
+  showSummary?: boolean;
   /** Fixed, and **including the band the x-axis labels sit in**, so no card grows a scrollbar. */
   height: number;
   /**
@@ -79,6 +81,7 @@ interface ChartFrameProps {
 export function ChartFrame({
   title,
   summary,
+  showSummary = true,
   height,
   axisBand,
   count,
@@ -180,11 +183,13 @@ export function ChartFrame({
             )}
           </div>
 
-          <p className="chart-readout" role="status" aria-live="polite">
-            {active?.source === "keyboard" && tip !== null
-              ? `${tip.heading}. ${tip.rows.map((row) => `${row.name}: ${row.value}`).join(". ")}`
-              : summary}
-          </p>
+          {(showSummary || (active?.source === "keyboard" && tip !== null)) && (
+            <p className="chart-readout" role="status" aria-live="polite">
+              {active?.source === "keyboard" && tip !== null
+                ? `${tip.heading}. ${tip.rows.map((row) => `${row.name}: ${row.value}`).join(". ")}`
+                : summary}
+            </p>
+          )}
         </>
       )}
     </section>

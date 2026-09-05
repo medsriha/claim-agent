@@ -37,7 +37,9 @@ import { Thread } from "../chat/Thread";
 import {
   failureTranscript,
   investigationMessages,
+  noteMessage,
   pickedMessage,
+  reportMessages,
   stepMessage,
   transcriptFor,
 } from "../chat/transcript";
@@ -167,6 +169,15 @@ async function investigate(
             });
             add(investigationMessages(message.investigation), true);
           }
+          // The reports come last, because they are what a representative acts on and
+          // everything above them is how they were reached. A claim whose findings could
+          // not be kept says so in the service's own words rather than showing nothing.
+          add(
+            message.reportsUnavailable !== null
+              ? [noteMessage(message.reportsUnavailable)]
+              : reportMessages(message.reports),
+            true,
+          );
           return;
 
         case "failed":

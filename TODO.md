@@ -68,9 +68,9 @@ Keep it to a few lines — the full explanation belongs in DESIGN.md.
     carries both, and the rep chooses which to act on. The report refuses to exist in any other
     combination: an email with nothing to say, or a reason the merchant could be told with no
     email, is a mistake in our own code and is rejected on construction.
-  - **Be aware:** this report shape is scoped to Layer 0. Layer 2 has its own requirements
-    (FR-2.1–FR-2.10) that nobody has built yet; the two will need reconciling rather than this one
-    being extended. Nothing is stored and nothing is sent — the email is a draft on an object, and
+  - **Be aware:** this shape is still scoped to Layer 0 and was **not** extended. Layer 2
+    reconciled the two by reading from it: a stopped claim's write-up is rendered into the same
+    report a rep decides from, behind the same head, naming no product. Nothing here changed. Nothing is stored and nothing is sent — the email is a draft on an object, and
     the word "draft" is deliberately absent from its text so a marker can never reach a merchant.
 
 - [x] FR-0.5 — Order value, high-value flag, days since delivery, and the merchant's past
@@ -353,22 +353,78 @@ still unticked below.
 
 ## Layer 2 — The report
 
-- [ ] FR-2.1
-- [ ] FR-2.2
-- [ ] FR-2.3
-- [ ] FR-2.4
-- [ ] FR-2.5
-- [ ] FR-2.5a
+**Read this first.** The report is a **markdown document**, not a set of fields. The AI answers in
+fixed fields as it always did and a pure function writes those into what a representative reads.
+That was asked for, and it is why FR-2.10 below is deliberately unticked. Do not "fix" it by adding
+a structured shape beside the document — see DESIGN.md and CLAUDE.md's decisions.
+
+Reports are written down only when a claim is **investigated**. Asking for a screening on its own
+keeps nothing.
+
+- [x] FR-2.1 — the recommendation and the amount lead the report, worded as something a
+  representative is deciding on rather than something that happened.
+  - **Conclusion:** a claim the quick checks stopped recommends **nothing** — the four
+    recommendations are about a damaged product and it has none. `domain/decision.py` had already
+    ruled this for a decision, so the report follows it rather than inventing a mapping.
+  - **Be aware:** what the representative settled on is kept beside what was advised, so a report
+    approved at a different figure never shows only the old one.
+- [x] FR-2.2 — all four pieces of evidence, each naming the image it came from.
+  - **Be aware:** a piece nobody found is written out as missing rather than left off, so a gap is
+    seen rather than inferred from silence.
+- [x] FR-2.3 — each question with its reasoning and how sure it was.
+  - **Be aware:** a question **missing** from the table was never answered, which is not the same
+    as answered no. The report says so in words underneath, because a reader counting three rows
+    would otherwise have to guess.
+- [x] FR-2.4 — which items at which prices, from which document, and what the limit did.
+  - **Be aware:** it is written even where nothing would be paid — "nothing, and here is why" is
+    something a representative can act on. The figure is the AI's judgement of the damage, not the
+    sum of the prices shown; the prices are there to weigh it against.
+- [x] FR-2.5 — concerns, and never silence.
+  - **Conclusion:** a report with nothing worrying says so in words rather than showing an empty
+    heading. A stopped claim's findings are rendered as its concerns, which is the only way that
+    kind of report has anything to put here.
+- [x] FR-2.5a — decidable at a glance, checkable below.
+  - **Conclusion:** recommendation, amount and concerns first; evidence, questions, working and the
+    email under them. A test pins the order rather than trusting it.
 - [ ] FR-2.6 — the two things this asks for are already computed and already reach the model:
   the high-value flag and the merchant's past corrections. What is missing is a rep-facing
   report to put them on, and the third clause — *which* past correction influenced this
   recommendation — needs the decision record of FR-C.1 before there is anything to name.
-- [ ] FR-2.7
-- [ ] FR-2.8
-- [ ] FR-2.9
-- [ ] FR-2.9a
-- [ ] FR-2.9b
-- [ ] FR-2.10
+  **Still unticked, and now for one reason only.** The high-value flag and the merchant's past
+  corrections are both on the report. What is missing is the third clause: `corrections_considered`
+  gives *which* past correction changed the conclusion and can never say *how*, because that is all
+  the AI is asked for. Widening what it is asked for is the work left.
+- [x] FR-2.7 — the merchant's email, in the exact wording that would be sent.
+  - **Be aware:** it sits inside a fenced block so nothing in a reader can reinterpret a character
+    of it. A rewording by a representative is shown in full underneath, because after a rewording
+    that is the wording. There is nowhere to send a *recipient* from — who hears about a claim
+    comes from the claim.
+- [ ] FR-2.8 — **two of the three actions.** Approving works, and so does rewording the email
+  before approving (which is a flag on the approval, not an action of its own — FR-2.8 reads it
+  that way and `RepAction` already said so). Sending a report back records the note and parks the
+  report, and **nothing picks it up**, because the stage that reworks one is Layer R. Do not tick
+  this until that exists.
+- [x] FR-2.9 — approving is the only exit, and it is final.
+  - **Conclusion:** written as an explicit state machine and tested transition by transition.
+    `approved` is terminal: it cannot be sent back, and a *different* approval on it is refused
+    rather than quietly replacing a decision a person took. Nothing else reaches `approved` — no
+    time limit, no confidence, no number of rounds.
+  - **Be aware:** the same approval arriving twice changes nothing and records nothing, so a
+    double-click leaves one decision. Two *different* notes sent back are two decisions and both
+    are kept.
+- [x] FR-2.9a — the other products on the claim, beside each report.
+  - **Conclusion:** looked up when a report is read, **never stored inside it**. A sibling's review
+    state changes the moment somebody approves it, and a stored copy would say "waiting" beside a
+    product approved ten minutes ago — which is the exact case the requirement's own example is
+    about.
+- [x] FR-2.9b — a claim-level view over the line reports.
+  - **Be aware:** it shows each product at the version in force, never every version of every one.
+    Layer R is unbuilt so every report is version 1 today, which is exactly why this was easy to
+    get wrong.
+- [ ] FR-2.10 — **deliberately not met.** The report is prose, because that is what was asked for.
+  A screen can show the writing and cannot lay out its parts, sort them, or fold one away. Ticking
+  this means writing the report a second way, as structured fields, rather than adjusting what is
+  there. See DESIGN.md under **Could break**.
 
 ## Layer R — Revision
 
@@ -541,11 +597,34 @@ since retry-safety is cheaper to build in than to add; then FR-C.5–FR-C.6; FR-
 demonstration needs the rest to exist. FR-C.7 is a question for whoever owns the requirements and
 should be asked, not answered here.
 
-- [ ] FR-C.1 — the decision record. Sits between FR-2.8 (what a rep may do) and FR-3.1 (what an
+- [x] FR-C.1 — the decision record. Sits between FR-2.8 (what a rep may do) and FR-3.1 (what an
   approval releases), and belongs to neither: recording a decision sends nothing. Two things to
   design around: `decided_by` cannot be filled in, because there is no sign-in anywhere in this
   service, and a claim stopped in Layer 0 has no claim lines to key a decision to — it is never
   split. A record that insists on a line cannot hold the one decision that costs nothing to reach.
+  - **Half of this now exists, and it is the half that stores.** The record and its store were
+    built for the analysis screen (UI-33 onward in [UI-TODO.md](UI-TODO.md)):
+    `domain/decision.py` in the shape this requirement describes, and a `rep_decisions` table
+    beside merchant memory and precedent. Both design problems above are handled — `decided_by`
+    is present and always empty, and `claim_line_id` is optional so a stopped claim has somewhere
+    to sit.
+  - **The other half exists now: the capture point.** Approving a report or sending one back
+    writes exactly one record, in `report/review.py`, and the route that does it is the only
+    caller in `src/`. `tools/seed_analysis_history.py` still invents history for demonstrations
+    and still says so, so a machine can hold both — invented decisions and real ones.
+  - **Be aware: repeating a decision is safe, and two different ones are never collapsed.** A
+    decision is named from what it was about and *which* decision on that report it is, so the
+    same approval twice writes over itself and two different notes sent back on one report stay
+    two records. The decision is written **before** the report is moved on, so a failure between
+    the two heals itself on the retry rather than losing what a person chose.
+  - **Be aware:** the record carries fields this requirement does not mention — how sure the
+    investigation said it was, what the order was worth, who carried the parcel, and what the
+    merchant reported. They are copied off the report rather than joined to it, which was the
+    plan when there was no report store; the join is still worth building, and now there is
+    something to join to.
+  - **Be aware: nothing measures how long a review took.** It is accepted from whoever calls and
+    is nothing by default, so every saving worked out from it is an upper bound. Out of scope
+    here, and written up in DESIGN.md.
 - [ ] FR-C.2 — the merchant correction, written only where the decision differs from the
   recommendation. Store already exists; the difference test and the wording do not.
 - [ ] FR-C.3 — the close event that writes precedent. FR-S.1 says when a record is written;
@@ -594,11 +673,12 @@ should be asked, not answered here.
     identical way is the least likely thing to come back differently, so the product goes
     to a person instead. A single reshaped retry would recover some of those — see DESIGN.md.
 
-- [ ] NFR-3 — Partly. Every conclusion traces to the observation that produced it inside a
-  single reply: each finding names the attachment it came from, each judgement carries its
-  reasoning, and the amount carries its full working. What is missing is that none of it is
-  kept — close the connection and the record is gone, so "why this amount?" can be answered
-  now and not tomorrow. Waits on somewhere to store a report.
+- [ ] NFR-3 — Partly, and closer than it was. Every conclusion traces to the observation that
+  produced it, and **that now survives the connection**: a report is written down and can be
+  fetched back, so "why this amount?" can be answered tomorrow as well as today. What is still
+  missing is the run itself — what the investigation did and saw, in order, is not kept, and
+  neither is which past claims it was shown. So a report can be re-read and the working behind
+  how it was reached cannot.
 
 - [x] NFR-4 — Every failure ends with a person, and none ends in a payment or a dropped case.
   - **Conclusion:** proven for an exhausted budget, a model that cannot be reached, a reply
@@ -610,9 +690,11 @@ should be asked, not answered here.
     merchant — the pre-flight screen has one label that makes exactly that mistake, and
     DESIGN.md records it as a fault rather than a pattern to copy.
 
-- [ ] NFR-5 — Not built. Each run keeps an ordered record of what it did and saw, and it
-  travels in the reply, but nothing stores it and nothing fills in the times. There is no
-  per-case history, so the requirement is met inside one request and not at all across two.
+- [ ] NFR-5 — Partly. **The human half is built:** every review action is a durable record, in
+  order, saying what was chosen and what changed, and each round is written into the report
+  itself under its own numbered heading. **The agent half is not:** each run keeps an ordered
+  record of what it did and saw, it travels in the reply, and nothing stores it or fills in the
+  times. Neither is what was ultimately sent, because nothing sends anything yet.
 
 - [ ] NFR-5a — Not applicable yet. There is no revision loop to converge.
 
@@ -640,3 +722,90 @@ should be asked, not answered here.
   - **Be aware:** CASE-1004 is the case that proves the first half. It has four attachments
     and dies on the age gate, so it is the only sample claim where images exist that must
     never be read.
+
+---
+
+## Work with no requirement id
+
+Everything above traces to REQUIREMENTS.md. **The seven tools below do not.** They came from
+reading ShipBob's mock API and the attachments on its five sample claims, and finding ways this
+system could hand a representative a confident recommendation that was quietly wrong. Nobody at
+ShipBob has agreed that any of them is right behaviour, so none of them can be ticked against a
+requirement — they are listed here so the work is visible rather than invisible, and they are
+explained in [DESIGN.md](DESIGN.md) under "Four tools that came from reading ShipBob's data, not
+the requirements".
+
+The investigation now holds **eleven** tools where it held four. Every one of them still only
+reads or works something out; the guarantee that none of them writes is unchanged, and is still
+checked by name and by import graph.
+
+- [x] Currency — work out what money a claim is in, and convert it to dollars
+  - **Built:** three clues (a symbol on the evidence, the country a tracking number ends in, the
+    carrier) ranked and cross-checked, plus conversion from a fixed dated rate table in
+    `policy.py`. Wired as the `check_currency` tool.
+  - **Conclusion:** ShipBob's API has no currency field at all. CASE-1001 ships Royal Mail on a
+    `GB` tracking number and its evidence reads `£55.95`, while its order totals a bare `90.00` —
+    inside the $100 cap as dollars, over it as pounds. That claim was being measured against the
+    wrong limit and nothing said so.
+  - **Be aware:** the rates are invented and need sign-off. Two clues that disagree conclude
+    nothing rather than picking a winner. **This should not be a tool** — it ought to be worked
+    out before the run starts, the way precedent is, so two runs cannot differ over whether the
+    model remembered to check.
+- [x] Document arithmetic — read money off a photograph and check the paperwork adds up
+  - **Built:** an exact reader for prices as documents write them, and a recomputation of a
+    document's own totals. Wired as `check_document_totals`.
+  - **Conclusion:** CASE-1002's sales order contradicts itself three ways — items summing to
+    `46.93` under a printed subtotal of `49.85`, and a grand total of `49.42` matching neither.
+  - **Be aware:** a figure it cannot read exactly comes back unread rather than guessed. The
+    investigation still has to transcribe the totals in; nothing reads them off the image itself.
+- [x] Case facts — read the facts buried in a claim's own description
+  - **Built:** a deterministic parse of the description prose, and four contradiction checks
+    against ShipBob's records. Wired as `read_case_facts`.
+  - **Conclusion:** every description hides structured data in prose, and says `Carrier: Other`
+    while the shipment record names a real carrier. CASE-1003 claims two affected orders while the
+    case names one.
+  - **Be aware:** CASE-1001's description is loose prose with no labels at all and names no
+    carrier, so the carrier contradiction fires on four of the five sample claims, not all five.
+- [x] Price reconciliation — compare ShipBob's prices with the customer's receipt
+  - **Built:** per-line and whole-document comparison, wired as `compare_prices`.
+  - **Conclusion:** the two disagree on **all four** sample claims that have evidence. CASE-1003
+    is priced at `195.94` by ShipBob and was paid at `134.99` after a discount.
+  - **Be aware:** it deliberately does **not** say which price is authoritative. Nobody has decided
+    that, and until somebody does, a representative chooses on every claim where they differ.
+- [x] Product matching — find which invoice lines could be the damaged product
+  - **Built:** tiered scoring on codes and significant words, wired as `match_damaged_product`.
+  - **Conclusion:** ShipBob and merchants write products differently — `Blue Razz Liquid Carnitine`
+    against `liquid carnitine 3000` — so exact comparison fails on products that are obviously the
+    same.
+  - **Be aware:** two lines scoring alike are both reported and neither is chosen (FR-1.13).
+- [x] Evidence sufficiency — say whether there is enough to recommend anything
+  - **Built:** which kinds are missing, the exact sentence to ask the merchant for each, and a
+    separate list of what only a person here can fix. Wired as `check_evidence_is_enough`, which
+    also reports the same photograph attached twice.
+  - **Conclusion:** CASE-1005 has zero attachments and is already waiting on the merchant. The
+    right answer is a named request, not a priced verdict.
+  - **Be aware:** it keeps "the merchant sent nothing usable" and "we could not read it" strictly
+    apart, because only the first may be asked about.
+- [x] Requested remedy — work out what the merchant actually asked for
+  - **Built:** keyword rules over the merchant's own words, wired as `read_requested_remedy`.
+  - **Conclusion:** CASE-1004's merchant asks for a replacement lid, on a claim filed as damage in
+    transit, 73 days after delivery, on a case already closed. No reimbursement answers that.
+  - **Be aware:** whoever built it recommends this **not** be a tool the model calls — it is a
+    shallow reading of text the model already read more carefully, and feeding it back risks
+    anchoring the model on the worse reading. It belongs on the representative's report as an
+    independent cross-reference. It is wired as a tool anyway, which is a decision to revisit.
+
+### Specified from the same review, not built
+
+- [ ] Case state — whether a case is even answerable (`Closed`, `Waiting on Client`, an internal
+  `@shipbob.com` contact address, a case opened before its own delivery date). The policy values
+  it would read are already in `policy.py`; nothing reads them.
+- [ ] Ambiguous dates — CASE-1001's evidence reads `Wed 11/02/2026`, which is 11 February read one
+  way and a future date read the other. The 60-day age gate (FR-0.2) turns on which you believe.
+- [ ] Order reference resolution — proving a document in a photograph belongs to this claim.
+  Order numbers never match across systems: CASE-1003 is `337761802` to ShipBob, `#HS3449170` on
+  screen and `Store Order # 344917` on its invoice. Reasoning over the wrong customer's invoice
+  produces a confident, wrong recommendation.
+- [ ] Related claims — the finding-claims half of `evidence_integrity.py` is built and tested but
+  nothing calls it, because ShipBob's case listing returns a summary with no order, shipment or
+  merchant on it, so relating claims means reading every case in full.

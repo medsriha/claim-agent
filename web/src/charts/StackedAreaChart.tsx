@@ -32,6 +32,7 @@ export function StackedAreaChart({
     <ChartFrame
       title={chart.title}
       summary={chart.summary}
+      showSummary={false}
       height={height}
       axisBand={PLOT.axisBand}
       count={count}
@@ -42,7 +43,7 @@ export function StackedAreaChart({
       gridlines={chart.gridlines}
       domain={chart.domain}
       table={{
-        columns: [chart.y_label, ...chart.bands.map((band) => band.name)],
+        columns: ["Week", ...chart.bands.map((band) => band.name)],
         rows: Array.from({ length: count }, (_unused, index) => [
           weekLabel(chart, index),
           ...chart.bands.map((band) => band.points[index]?.text ?? "—"),

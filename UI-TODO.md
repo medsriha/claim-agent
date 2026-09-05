@@ -393,6 +393,270 @@ time and starts at UI-20.
     scrolling box: nobody has seen how a scroll region inside a conversation that also scrolls
     behaves under a wheel or on a phone.
 
+## v7 — how the agent is doing, for the business
+
+A third screen, beside the screening and the admin panel. It answers a different question from
+either: not "what should happen to this claim", but "how has this been going, over months, and is
+it getting better".
+
+**Read this before anything else: every figure on that screen is invented, and nothing on screen
+says so.** Nothing in the system records what a representative decided, so there is no real
+history to draw. The screen carries a year of made-up figures in `web/src/analysis/demoFigures.ts`
+rather than reading them from anywhere.
+
+That is a deliberate departure from the rule that the interface never invents a record, and it was
+taken for one reason: the alternative was a tab that stays blank until somebody runs a command
+they have no way of knowing about, and a blank dashboard is indistinguishable from a broken one.
+The cost is that a viewer cannot tell these numbers from measured ones. Like the send button, the
+warning lives only in the docs and the docstring.
+
+**The numbers were still not typed by hand.** They were produced by running the real thing — the
+tool that invents a year of decisions, then the service's own arithmetic — and keeping the answer,
+so every written figure matches the value beside it and each week's four shares really do come to
+one. They are remade rather than edited.
+
+Even so the screen works nothing out: a rate, a total, an axis and a verdict all arrive decided
+(FR-1.21, NFR-2, and the UI rules in CLAUDE.md), which is what would let it be pointed back at
+`GET /analysis/performance` without touching a single component.
+
+**These ids cover the service work too, not only the screen.** REQUIREMENTS.md never mentions
+measurement, reporting or automation, so the store, the arithmetic and the address behind this
+screen trace to no requirement id at all and have nowhere to live in TODO.md, which holds
+REQUIREMENTS.md ids and nothing else. Two requirements do bear on it and are named where they
+apply: FR-C.8 governs the invented data, and FR-C.7's open question is the shape of the rules the
+screen scores.
+
+**There is no charting library and there is not going to be one.** The charts are inline SVG in
+`web/src/charts/`, drawn the way `theme/ShipBobLogo.tsx` is drawn. No dependency was added; the
+screen still rests on React and React DOM and nothing else.
+
+- [x] UI-33 — A third screen and a third tab.
+  - **What was built:** `screens/AnalysisScreen.tsx`, a third `ScreenTab`, and the header's
+    ternary replaced by a `switch` that lists every screen — so a fourth one cannot be added
+    without the compiler asking where it goes.
+  - **Be aware:** the dev proxy does **not** forward `/analysis`. It did, and the entry was taken
+    out again when the screen stopped calling the service — a proxy rule for an address nothing
+    asks for is one more thing to be wrong. Put it back if the screen is ever pointed at the
+    service.
+  - **Be aware:** the screen you leave is still taken down rather than hidden (UI-13), and that
+    now matters for a second reason: figures worked out under one set of rules, sitting beside
+    rules that have since changed, would mislead exactly the way a stale screening would.
+
+- [x] UI-34 — The record of what a representative decided, and the store that keeps it.
+  - **What was built:** `domain/decision.py` in the shape FR-C.1 already describes, a
+    `rep_decisions` table beside the others, and `storage/decision_store.py`.
+  - **Conclusion:** this is the store half of FR-C.1 and nothing more. **FR-C.1 is not ticked in
+    TODO.md**, because it asks for a review action to *produce* the record and that stage is not
+    built — the same half-built position merchant memory's write side has been in since UI-8.
+  - **Be aware:** three fields go beyond FR-C.1's reference record — how sure the system said it
+    was, what the order was worth, and how long the review took. None of the figures on the screen
+    can be worked out without them, and there is no store of reports to look them up in.
+
+- [x] UI-35 — The arithmetic, and the address that serves it. **Nothing calls it.**
+  - **What was built:** `analysis/performance.py` holds every count and rate and touches nothing —
+    no database, no network, no model — so all of it is tested without any of those.
+    `analysis/view.py` turns those figures into what the screen draws.
+  - **Be aware:** a rate over nothing is *nothing*, never zero. A week nobody decided anything in
+    has no direct-approval rate, and drawing it at 0% would read as a collapse in quality.
+  - **Be aware:** claims the quick checks stopped are counted apart from investigated products
+    everywhere. They cost no AI and are agreed with far more often, so one blended figure would
+    flatter the advice.
+
+- [x] UI-36 — The typed shapes the figures travel in.
+  - **What was built:** `api/analysisTypes.ts`, mirroring the service field for field, and
+    `analysis/demoFigures.ts`, which holds a set of those figures per period and says in its own
+    docstring that all of them are invented.
+  - **Be aware:** the client that fetched them was deleted when the screen stopped calling the
+    service. The types stayed, because they are still the shape the service answers in and the
+    shape the screen draws — that is what keeps the two swappable.
+  - **Be aware:** every figure arrives twice — a number that exists only to become a position, and
+    the words a person reads. Nothing on the screen turns one into the other. If you ever find
+    yourself writing a `formatPercent` here, the figures are under-specified.
+
+- [x] UI-37 — **Removed.** The filter row: the service's own periods, in one row.
+  - **What happened:** the screen shows twelve months and offers no choice. Once the figures moved
+    into the screen, a choice of three periods meant carrying three sets of them, and three sets
+    nobody switches between is weight in the page for nothing. The sentence saying what the period
+    covers stayed; the buttons went.
+  - **Be aware:** the service still reports on four weeks and thirteen weeks as well, and the
+    shape it answers in still carries the list of choices. Putting the row back is a matter of
+    writing out more than one period, not of building anything.
+
+- [x] UI-38 — The hero figure, the tiles, and the savings.
+  - **Be aware:** the tiles are whatever list the service sends, drawn in its order — another
+    figure appears with no change here, the same way a new threshold does on the admin panel.
+  - **Be aware: the assumptions behind the money are no longer shown.** They were, marked
+    PROVISIONAL and in the service's own words, and they were taken off for being noise on the
+    page. The cost is real and worth stating plainly: the dollar figures are hours multiplied by
+    an hourly rate we invented, less a cost per claim we also invented, and nothing on screen now
+    says so. The figures still travel in the reply and the service still explains them; only the
+    panel that printed them is gone.
+
+- [x] UI-39 — The chart frame: a one-to-one drawing, an axis, a legend, a table twin, and one
+  tooltip serving every chart.
+  - **Be aware:** the drawing is never scaled. It is measured with a `ResizeObserver` and drawn at
+    its measured size, because a `viewBox` stretched by CSS scales the type with everything else —
+    7px labels on a narrow window and 22px ones on a wide monitor.
+  - **Be aware:** one focus stop per chart, with the arrow keys moving between points. A stop per
+    point would be hundreds of them before the table at the bottom of the page.
+  - **Be aware:** every chart has a table twin holding the same figures, so no value on this
+    screen is reachable only by hovering.
+
+- [x] UI-40 — The charts, after three were taken off.
+  - **What was built:** how far a representative changed things (four bands, week by week), the
+    confidence comparison, and how long a review took.
+  - **What happened to the other three:** *how often each recommendation was changed*, *candidate
+    rules, scored*, and *taken exactly as recommended, week by week* were all removed. The first
+    said little — disagreement came out much the same across all four recommendations, because
+    what drives it in the invented data is how sure the system was and what the order was worth,
+    rather than which of the four it landed on.
+  - **Be aware:** the approval rate week by week was the only chart carrying two series, and its
+    removal is why the two-line case now has no user. `TimeSeriesChart` still draws any number of
+    series and still has the legend for it; nothing on the screen asks for more than one.
+  - **Be aware:** the confidence panel is one plot, not two. A rate and a count must never share
+    an axis, so how many decisions a band held is *written* under it rather than drawn — the point
+    where two such lines crossed would be an accident of scaling a reader would take for meaning.
+  - **Be aware:** a week with nothing in it breaks the line. Nothing bridges the gap.
+
+- [x] UI-41 — **Removed.** The candidate rules, as a table and never as a switch.
+  - **What happened:** taken off the screen. It scored each order-value band crossed with each
+    band of stated confidence, on how much of the work it would cover and how often people agreed,
+    and it was the panel that most directly answered "could any of this be automated yet".
+  - **Be aware:** the scoring still exists and is still tested — `analysis/performance.py` works
+    the rules out and the service still returns them. What went is the table that drew them. The
+    care that went into it is worth keeping if it comes back: no toggle, no button, no colour on
+    the verdict, and no sorting, because FR-2.9 says a person approving is the only way a claim
+    leaves review and a green "meets bar" would read as a recommendation the screen is not making.
+
+- [x] UI-42 — The chart palette, in `theme/shipbob.css`.
+  - **What was built:** four hues in a fixed order plus a hairline for the axis, each checked
+    against this page's own white for lightness, for staying apart under colour blindness, and
+    for reading against the background.
+  - **Be aware: this started as four steps of one blue and that did not work.** How far a
+    representative went is genuinely an *order*, and one hue getting darker is how a reader sees
+    an order in the colour — but four steps that all stay light enough to read on white sit too
+    close to tell apart in a stack, which was the whole job. Four hues lose the ordering and win
+    the legibility, and the legend carries the meaning instead. Do not put the ramp back without
+    looking at it.
+  - **Be aware:** aqua and yellow sit below three-to-one against white. That is allowed only
+    because every chart using them also has a legend and a table holding the same figures.
+  - **Be aware:** the existing pass, stop and flag colours are **not** usable as chart series.
+    Flag against stop is very nearly indistinguishable with the commonest form of colour
+    blindness, and pass against flag is worse. That costs nothing where each sits beside a word,
+    as on the screening screen, and would cost a great deal in a chart.
+
+- [x] UI-43 — Empty, and unreadable, told apart.
+  - **What was built:** every panel carries its own sentence for why it is empty, and on the
+    service side a store that cannot be read fails the whole request with its own code instead.
+  - **Be aware:** with the figures held in the screen there is nothing left to fail, so the
+    loading and failure paths were taken out of the screen rather than left sitting unreachable.
+    The empty-panel path survives, because a period really can hold nothing.
+  - **Be aware:** `storage_unavailable` had to be added to the screen's list of failure kinds.
+    Without it, an unreadable store fell through to "something went wrong", and the nearest
+    existing heading says "ShipBob could not be read" — which would send somebody looking in
+    entirely the wrong place.
+
+- [x] UI-45 — Which claims come back ready to send.
+  - **What was built:** the same claims cut four ways, each part showing the share that went out
+    untouched, with how many decisions that share rests on. Three of the cuts are things known
+    *before* anybody looks at a claim — what the merchant said was damaged, what they said caused
+    it, and who carried the parcel — and the fourth is how sure the system said it was.
+  - **Conclusion:** this is the panel that answers *which claims are likely to be recommended
+    right away and which are not*. The answer is in the spread inside each group, so the service
+    writes that spread out and orders the groups by it: how sure the system was separates claims
+    by 43 points, what the merchant reported by 20, the carrier by 9, and what they said caused
+    the damage by 4 — which is to say the last one does not help, and the screen says so rather
+    than leaving somebody to eyeball two bars of much the same length.
+  - **Be aware: the first version of this panel was wrong, and wrong in an instructive way.** It
+    cut by what the system *recommended* and by what the order was worth, and both came out flat —
+    the first because a recommendation is something the investigation produced rather than a
+    property of the claim, so grouping by it can only describe work already done. Bars that all
+    end in the same place look like a broken chart, when what they really mean is "this way of
+    sorting claims tells you nothing". Both problems were fixed: cut by things that arrive with
+    the claim, and say the spread out loud.
+  - **Be aware:** the vocabulary is ShipBob's own, taken from the published mock API. A case
+    description states the two in a fixed form — "Damage Type: Damage due to carrier mishandling.
+    Defect Type: Product damaged, but shipping box is intact." — and carriers come from the
+    shipment. Nothing here is reworded.
+  - **Be aware:** parts within a cut are ordered readiest first, because a carrier is not "more"
+    than another carrier and the measure is the only order they have. The confidence bands keep
+    their own order, because they have one.
+  - **Be aware: the confidence bands are named by the range they cover** — "Under 70% sure",
+    "85 to 95% sure" — and not by the short names the settings give them. "Fair" and "High" say
+    nothing on their own, and "below the bar" is worse than nothing: it means below the level at
+    which the rules already refuse to recommend paying (FR-1.15), which nobody outside this
+    codebase could know. The label is built from the band's own edges, so moving a band cannot
+    leave the words describing where it used to be.
+  - **Be aware:** it is plain bars in HTML rather than a chart. One measure across a handful of
+    named groups reads faster as labelled rows, and it needed no drawing code. The bar's length
+    comes from a share the service worked out, handed to CSS as a `calc`.
+  - **Be aware:** claims the quick checks stopped are left out of all four cuts. They are decided
+    by fixed rules and almost always accepted, so including them would drop a large, easy
+    population into every group and flatten the differences the panel exists to show.
+
+- [x] UI-44 — Tried in a browser.
+  - **What was built:** the screen was rendered against the real service with a year of seeded
+    decisions and looked at. **This is the first `tried in a browser` box in this file that is
+    ticked** — UI-18, UI-25, UI-27 and UI-29 are all still open.
+  - **Be aware:** two real faults were found only by looking. The names under the confidence bars
+    were being drawn over the bars themselves, because the room reserved under a plot was sized
+    for one line of text and that chart writes two; the axis band is a property of each chart now.
+    And the empty state was exercised by accident first — another service was already answering on
+    port 8000 — which is how the "nothing was decided" path got checked as well.
+  - **Be aware:** it was looked at again after the figures moved into the screen, with no service
+    running at all, which is the state anybody cloning this will be in.
+  - **Be aware:** what has *not* been tried is a narrow window. The charts are measured and redraw
+    on resize, but nobody has watched them do it below about a thousand pixels.
+
+## v7 — deciding on a report
+
+The reports the service now keeps, on screen, with the two things a representative can do to
+them. The endpoints behind it — `POST /reports/{id}/approve` and `.../send-back` — are real, and
+so is what they record.
+
+- [x] UI-34 — The report, drawn as the document it is.
+  - **What was built:** `components/ReportCard.tsx`. The service sends the report as markdown and
+    `components/Markdown.tsx` draws it. The card above it shows what is recommended, the amount as
+    the text it arrived as, and where the review has got to.
+  - **Conclusion:** the screen adds no sentences to the report and takes no data out of it. The
+    one thing it needs structurally — the wording of the merchant's email — is sent as a field
+    beside the document, so nothing has to read prose for data.
+  - **Be aware:** money is text the whole way. The card shows `amount_usd` as it arrived and
+    nothing on screen adds two figures together.
+
+- [x] UI-35 — Tables in a report, which markdown could not draw before.
+  - **What was built:** `Markdown.tsx` reads tables. It was written for a step's commentary, where
+    nothing writes one; a report writes three, and without this the evidence, the four questions
+    and the four checks all appeared as rows of raw bars.
+  - **Conclusion:** found by rendering a real report to HTML, not by reading the code. A bar the
+    service escaped comes back as an ordinary bar inside its cell, so a finding saying
+    "two columns | one row" reads correctly instead of shifting every column after it.
+  - **Be aware:** a table scrolls inside its own frame, so a wide one never makes the page scroll
+    sideways.
+
+- [x] UI-36 — Approving, rewording, and sending back — all three real.
+  - **What was built:** `api/reportsClient.ts`, and the buttons on the report card. Approving
+    records a decision; rewording the email first changes what the report carries; sending back
+    records the note and parks the report.
+  - **Conclusion: this is the first thing on this screen that is not a simulation.** The send
+    button on a screening email still reaches nothing (UI-24) and this does not — it reaches the
+    service and something is written down.
+  - **Be aware:** the recipient is shown and cannot be edited, because who hears about a claim
+    comes from the claim. The screen refuses to send one, and the service has nowhere to put one.
+  - **Be aware:** `chat/pageWords.ts` went from two sentences to three. The new one says that
+    approving is recorded and nothing else happens — no email, no money — because the service
+    answers with a report and a report cannot describe what the rest of the system does not do.
+  - **Be aware: a report sent back leads nowhere.** Layer R is unbuilt, so nothing picks one up.
+  - **Be aware: there is no sign-in.** Anyone who opens this can approve a claim, and the record
+    cannot say who did.
+
+- [ ] UI-37 — Tried in a browser.
+  - **Not done.** The card and the report's markdown were rendered to HTML against the live
+    service and read, the whole approve-and-reword round trip was driven through the real
+    endpoints, and the project builds, typechecks and lints clean. Nobody has clicked a button.
+    The thing most likely to look wrong is a long report inside its scrolling frame next to the
+    controls under it.
+
 ## Reference — what the endpoint returns
 
 Field names as they appear on the wire, so UI-3 does not have to be reverse-engineered from
@@ -437,12 +701,19 @@ outage — which is enough to build every screen against without inventing sampl
 
 ## Not built
 
-Everything past the quick checks, because it does not exist in the service either: no approving,
-no feedback, no view over a claim's separate products, no fetching back a screening. Those are
-Layer 2 and Layer R.
+**Most of this now has a screen** — see v7 above. What is still missing is a **view over a whole
+claim**: `GET /cases/{case_id}/reports` returns every product on a claim with its own review
+state, and nothing draws it. Today a representative sees the reports from the investigation they
+just watched, and cannot come back to a claim later and pick up where they left off. That is the largest gap in this
+file: a representative cannot reach any of it from a browser, and the only way to try it is by
+hand.
+
+`GET /reports/{report_id}` also returns the other products on the same claim beside it, and
+nothing draws those either — so a representative approving one product cannot see that the second
+is still waiting.
 
 An email **can** be reworded now (UI-23) and **can** be sent (UI-24), but the send reaches
 nothing and the edit is kept nowhere. Both are simulations on a screen, not stages of the
-system.
+system — and the real rewording endpoint now exists beside them, unused.
 
 There are also **no tests for the UI**, and it is outside the checks that run before a push.

@@ -26,8 +26,10 @@ from claim_agent.policy import Policy
 from claim_agent.settings import Settings
 from claim_agent.shipbob.client import ShipBobClient
 from claim_agent.shipbob.evidence_client import EvidenceClient
+from claim_agent.storage.decision_store import DecisionStore
 from claim_agent.storage.merchant_memory import MerchantMemory
 from claim_agent.storage.precedent_store import PrecedentStore
+from claim_agent.storage.report_store import ReportStore
 
 ModelsFor = Callable[[], tuple[BaseChatModel, StructuredModel]]
 """How a caller gets the models once it knows it needs them. See `get_models`."""
@@ -75,9 +77,29 @@ def get_merchant_memory(request: Request) -> MerchantMemory:
     return memory
 
 
+def get_decision_store(request: Request) -> DecisionStore:
+    """Return the record of what representatives decided (FR-C.1).
+
+    Two things reach this. Reviewing a report writes one record per action a representative
+    takes, and the analysis screen counts them afterwards.
+
+    Nothing that *judges* a claim touches it, which is the part worth keeping true: what somebody
+    decided last month has no bearing on the claim in hand, and the thing that does carry forward
+    is a merchant correction, which lives next door.
+    """
+    store: DecisionStore = request.app.state.decision_store
+    return store
+
+
 def get_precedent_store(request: Request) -> PrecedentStore:
     """Return the record of claims already investigated (FR-S.1, FR-S.5)."""
     store: PrecedentStore = request.app.state.precedent_store
+    return store
+
+
+def get_report_store(request: Request) -> ReportStore:
+    """Return the store of reports a representative decides from (FR-2.9b, FR-R.13)."""
+    store: ReportStore = request.app.state.report_store
     return store
 
 
@@ -137,6 +159,8 @@ LivePolicyDep = Annotated[LivePolicy, Depends(get_live_policy)]
 ShipBobClientDep = Annotated[ShipBobClient, Depends(get_shipbob_client)]
 MerchantMemoryDep = Annotated[MerchantMemory, Depends(get_merchant_memory)]
 PrecedentStoreDep = Annotated[PrecedentStore, Depends(get_precedent_store)]
+ReportStoreDep = Annotated[ReportStore, Depends(get_report_store)]
+DecisionStoreDep = Annotated[DecisionStore, Depends(get_decision_store)]
 EvidenceClientDep = Annotated[EvidenceClient, Depends(get_evidence_client)]
 ImageFetcherDep = Annotated[ImageFetcher, Depends(get_image_fetcher)]
 ModelsDep = Annotated[ModelsFor, Depends(get_models)]

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
-.PHONY: help install hooks run mock seed-memory clear-memory test lint format typecheck check \
-        ui-install ui-dev ui-build ui-lint
+.PHONY: help install hooks run mock seed-memory clear-memory seed-analysis clear-analysis analysis-figures \
+        test lint format typecheck check ui-install ui-dev ui-build ui-lint
 
 help: ## Show available commands
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -22,6 +22,15 @@ seed-memory: ## Write one invented rep correction, so the demo has history to sh
 
 clear-memory: ## Remove every rep correction again
 	uv run python -m tools.seed_merchant_memory --clear
+
+seed-analysis: ## Invent a year of rep decisions, so the analysis screen has something to show
+	uv run python -m tools.seed_analysis_history
+
+clear-analysis: ## Remove every invented decision again
+	uv run python -m tools.seed_analysis_history --clear
+
+analysis-figures: ## Remake the invented figures the analysis screen shows
+	uv run python -m tools.seed_analysis_history --figures web/src/analysis/demoFigures.json
 
 test: ## Run the test suite
 	uv run pytest

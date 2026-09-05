@@ -16,6 +16,7 @@
  */
 import type { FailureKind } from "../api/failure";
 import type {
+  Report,
   Case,
   ClaimContext,
   ClaimInvestigation,
@@ -98,6 +99,7 @@ export type MessageBody =
       readonly capApplied: boolean;
       readonly concerns: string[];
     }
+  | { readonly kind: "report"; readonly report: Report }
   | { readonly kind: "note"; readonly text: string }
   | { readonly kind: "failure"; readonly failure: FailureKind; readonly message: string };
 
@@ -397,4 +399,31 @@ export function investigationMessages(
   });
 
   return messages;
+}
+
+/**
+ * One message per report the service kept, in the order it sent them (FR-2.9b).
+ *
+ * Added at the end of a conversation, because a report is the thing a representative acts on and
+ * everything above it is how it was reached. A claim the checks stopped has one; an investigated
+ * claim has one per damaged product.
+ */
+export function reportMessages(reports: readonly Report[]): TranscriptMessage[] {
+  return reports.map((report) => ({
+    id: `report-${report.report_id}`,
+    speaker: "system",
+    label: "For your decision",
+    body: { kind: "report", report },
+  }));
+}
+
+/**
+ * One sentence the service said, on its own, where a report would otherwise be.
+ *
+ * Used when the findings arrived and could not be kept: they are on screen above, and this
+ * says plainly that there is nothing to approve. The wording is the service's, not ours —
+ * only the service knows what failed.
+ */
+export function noteMessage(text: string): TranscriptMessage {
+  return { id: "reports-note", speaker: "system", label: null, body: { kind: "note", text } };
 }

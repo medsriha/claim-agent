@@ -108,8 +108,17 @@ class DecisionRecord(BaseModel):
     - `order_value_usd` is what the order was worth, so decisions can be grouped by value. FR-C.7
       asks whether an expensive claim should be held to a stricter standard and leaves the
       question open; grouping by value is how somebody would answer it.
-    - `rep_minutes` is how long the review took, which is the only way to say whether any of this
-      saves anyone time.
+    - `rep_minutes` is how long the review took, in whole minutes, which is the only way to say
+      whether any of this saves anyone time. Whole minutes because the figure ends up multiplied
+      by an hourly rate, and no amount of money in this system is allowed to come from a float.
+    - `defect_type`, `damage_type` and `carrier` are what the merchant said happened and who
+      carried the parcel. ShipBob puts the first two in the case description in a fixed form —
+      "Damage Type: Damage due to carrier mishandling. Defect Type: Product damaged, but shipping
+      box is intact." — and the third is on the shipment. They are kept as ShipBob words them,
+      never reworded, and they are here because they are the only things about a claim that are
+      known *before* anybody looks at it. Everything else worth grouping by — how sure the system
+      was, what it recommended — is something the investigation produced, so grouping by it can
+      only describe work already done rather than work about to arrive.
 
     **Those last three are copied from the report rather than looked up.** There is no store of
     reports to look them up in — that is a gap listed in DESIGN.md, not an oversight here. Copying
@@ -136,7 +145,10 @@ class DecisionRecord(BaseModel):
     email_edited: bool
     stated_confidence: Confidence | None
     order_value_usd: Decimal | None
-    rep_minutes: float
+    defect_type: str | None
+    damage_type: str | None
+    carrier: str | None
+    rep_minutes: int
     rep_words: str | None
     decided_by: str | None
     decided_at: UtcDatetime

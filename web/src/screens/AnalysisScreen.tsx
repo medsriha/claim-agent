@@ -82,13 +82,15 @@ export function AnalysisScreen(): React.JSX.Element {
               }))}
               token="--sb-chart-1"
               height={286}
-              sublabels={calibration.bands.map((band) => `${band.volume.text} decisions`)}
+              sublabels={calibration.bands.map(
+                (band) => `${band.volume.text} decisions reviewed`,
+              )}
               legend={[
-                { name: "How often it was accepted", token: "--sb-chart-1" },
-                { name: "How sure the system said it was", token: "--sb-canvas" },
+                { name: "Accepted without changes", token: "--sb-chart-1" },
+                { name: "AI confidence range", token: "--sb-canvas" },
               ]}
               table={{
-                columns: ["How sure the system said it was", "Accepted", "Decisions"],
+                columns: ["AI confidence", "Accepted without changes", "Decisions reviewed"],
                 rows: calibration.bands.map((band) => [
                   band.band,
                   band.agreement.text,
@@ -103,7 +105,9 @@ export function AnalysisScreen(): React.JSX.Element {
           {(chart) => <TimeSeriesChart chart={chart} tokens={ONE_SERIES} height={230} />}
         </PanelState>
 
-        <p className="analysis-generated">Worked out {formatMoment(view.generated_at)}.</p>
+        <p className="analysis-generated">
+          Dashboard data generated {formatMoment(view.generated_at)}.
+        </p>
       </div>
     </main>
   );

@@ -14,7 +14,7 @@
  * service; this file does not write, reorder, summarise or total anything.
  */
 import { ApiFailure } from "./failure";
-import type { ClaimInvestigation, PreflightResult, RunEvent } from "./types";
+import type { ClaimInvestigation, PreflightResult, Report, RunEvent } from "./types";
 
 /** What the service sends, one of these at a time. */
 export type InvestigationMessage =
@@ -24,6 +24,10 @@ export type InvestigationMessage =
   | {
       readonly kind: "result";
       readonly screening: PreflightResult;
+      /** The reports the service kept, ready to be decided on. Empty when it kept none. */
+      readonly reports: readonly Report[];
+      /** Why the findings could not be kept, or null when they were. */
+      readonly reportsUnavailable: string | null;
       readonly investigation: ClaimInvestigation | null;
     }
   /** It went wrong, and this is the service's own account of why. */
@@ -165,10 +169,14 @@ function readOneMessage(block: string): InvestigationMessage | null {
       const sent = payload as {
         screening: PreflightResult;
         investigation?: ClaimInvestigation;
+        reports?: Report[];
+        reports_unavailable_reason?: string | null;
       };
       return {
         kind: "result",
         screening: sent.screening,
+        reports: sent.reports ?? [],
+        reportsUnavailable: sent.reports_unavailable_reason ?? null,
         // Absent on a claim the checks turned away: it was never investigated, and
         // saying so is different from saying it was investigated and found nothing.
         investigation: sent.investigation ?? null,

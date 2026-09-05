@@ -28,9 +28,9 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
 ) -> None:
     """FR-0.7: the panel is offered the values it is meant to change, and no others.
 
-    The eight it is not offered are still policy values, still read by whatever reads
-    them, and still set from the environment — they are simply not changeable from a
-    browser while the service runs.
+    The eighteen it is not offered are still policy values, still read by whatever
+    reads them, and still set from the environment — they are simply not changeable
+    from a browser while the service runs.
     """
     response = await client.get("/admin/policy")
 
@@ -54,6 +54,16 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
         "precedent_results_per_line",
         "min_precedent_similarity",
         "cap_applies_to_whole_claim",
+        "usd_conversion_rates",
+        "conversion_rates_as_of",
+        "assume_usd_when_currency_unknown",
+        "default_date_region",
+        "price_divergence_fraction",
+        "document_total_tolerance",
+        "unanswerable_case_statuses",
+        "internal_email_domain",
+        "min_order_reference_confidence",
+        "min_item_match_confidence",
     }
     assert body["matches_startup"] is True
     assert body["changed_at"] is None

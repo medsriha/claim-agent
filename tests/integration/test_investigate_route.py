@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 import respx
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from langchain_core.messages import AIMessage
 from tests.fakes.model import scripted
 from tests.fixtures.attachments import ATTACHMENTS_1001, ATTACHMENTS_1004, INVOICE_342578703
@@ -33,8 +34,22 @@ from tests.fixtures.shipbob import (
 )
 
 from claim_agent.agent.llm import StructuredModel
-from claim_agent.agent.schemas import ClaimSplit
+from claim_agent.agent.schemas import (
+    AssessmentJudgement,
+    ClaimedProductProposal,
+    ClaimSplit,
+    DamagedItem,
+    EvidenceJudgement,
+    InvestigationConclusion,
+)
 from claim_agent.api.deps import get_models
+from claim_agent.app import create_app
+from claim_agent.domain.assessment import AssessmentName
+from claim_agent.domain.evidence import EvidenceKind, EvidenceState
+from claim_agent.domain.outcome import Recommendation
+from claim_agent.settings import Settings
+from claim_agent.storage.decision_store import DecisionStore
+from claim_agent.storage.report_store import ReportStore
 
 pytestmark = pytest.mark.integration
 
@@ -71,26 +86,30 @@ def a_scripted_investigation(app: FastAPI) -> Iterator[None]:
     judgement (FR-1a.4).
     """
 
-    def scripted_models() -> tuple[object, StructuredModel]:
-        """Both models, from a script, built only if the investigation asks for them."""
-        return (
-            scripted(AIMessage(content="I have read the claim.")),
-            StructuredModel(
-                scripted(
-                    ClaimSplit(
-                        is_ambiguous=True,
-                        ambiguity="The photographs do not say which of the two products broke.",
-                        reasoning="Two similar products, and nothing distinguishes them.",
-                        confidence=0.3,
-                    )
-                ),
-                max_attempts=1,
-            ),
-        )
-
-    app.dependency_overrides[get_models] = lambda: scripted_models
+    app.dependency_overrides[get_models] = lambda: an_unsettled_split
     yield
     app.dependency_overrides.clear()
+
+
+def an_unsettled_split() -> tuple[object, StructuredModel]:
+    """Both models, from a script, built only if the investigation asks for them.
+
+    The split comes back ambiguous, which is the shortest complete run there is.
+    """
+    return (
+        scripted(AIMessage(content="I have read the claim.")),
+        StructuredModel(
+            scripted(
+                ClaimSplit(
+                    is_ambiguous=True,
+                    ambiguity="The photographs do not say which of the two products broke.",
+                    reasoning="Two similar products, and nothing distinguishes them.",
+                    confidence=0.3,
+                )
+            ),
+            max_attempts=1,
+        ),
+    )
 
 
 A_REMARK_IN_SEVERAL_LINES = (
@@ -149,9 +168,12 @@ async def test_a_stopped_claim_is_explained_and_never_reaches_the_agent(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     messages = read_stream(response.text)
-    assert names(messages) == ["progress", "result", "done"]
+    # Two progress messages: the screening's verdict, then the write-up being kept so a
+    # representative can come back and approve it (FR-0.4, FR-2.9b).
+    assert names(messages) == ["progress", "progress", "result", "done"]
     assert "cannot be processed" in messages[0][1]
-    assert "claim_too_old" in messages[1][1]
+    assert "report(s) ready for review" in messages[1][1]
+    assert "claim_too_old" in messages[2][1]
     # The whole point: its photographs were never touched, and no invoice was priced.
     assert images.call_count == 0
     assert invoicing.call_count == 0
@@ -293,4 +315,227 @@ async def test_a_stopped_claim_needs_no_model_and_so_needs_no_key(
     response = await client.post("/cases/CASE-1004/investigate")
 
     assert response.status_code == 200
-    assert names(read_stream(response.text)) == ["progress", "result", "done"]
+    assert names(read_stream(response.text)) == ["progress", "progress", "result", "done"]
+
+
+# --- What was found is kept, so a representative can come back to it (FR-2.9b) ---
+
+
+async def test_a_stopped_claim_keeps_its_write_up_so_it_can_be_approved_later(
+    settings: Settings, shipbob: respx.Router
+) -> None:
+    """FR-0.4, FR-2.9b: the cheapest decision in the system still has to be decidable."""
+    shipbob.get("/cases/CASE-1004").respond(200, json=CASE_1004)
+    shipbob.get("/shipments/330936165").respond(200, json=SHIPMENT_1004)
+    shipbob.get("/orders/322882110").respond(200, json=ORDER_1004)
+    reports = ReportStore(settings.database_path)
+    app = create_app(settings, report_store=reports)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        response = await http.post("/cases/CASE-1004/investigate")
+
+    result = json.loads(dict(read_stream(response.text))["result"])
+    assert result["reports_unavailable_reason"] is None
+    (kept,) = result["reports"]
+    assert kept["stage"] == "screening"
+    assert kept["claim_line_id"] is None
+    # And it is really there afterwards, not only in the reply that announced it.
+    assert len(reports.for_case("CASE-1004").reports) == 1
+
+
+async def test_asking_twice_keeps_one_report_rather_than_two(
+    settings: Settings, shipbob: respx.Router
+) -> None:
+    """FR-C.4: a claim screened again writes over its write-up instead of adding a second."""
+    shipbob.get("/cases/CASE-1004").respond(200, json=CASE_1004)
+    shipbob.get("/shipments/330936165").respond(200, json=SHIPMENT_1004)
+    shipbob.get("/orders/322882110").respond(200, json=ORDER_1004)
+    reports = ReportStore(settings.database_path)
+    app = create_app(settings, report_store=reports)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        await http.post("/cases/CASE-1004/investigate")
+        await http.post("/cases/CASE-1004/investigate")
+
+    assert len(reports.for_case("CASE-1004").reports) == 1
+
+
+async def test_a_store_that_cannot_be_written_still_reports_what_was_found(
+    settings: Settings, shipbob: respx.Router, tmp_path: Path
+) -> None:
+    """NFR-4: losing an investigation a rep just watched run is the worst thing this can do.
+
+    Only the report store is broken here, on a file of its own. Corrupting the one database
+    everything shares would stop the screening instead — merchant memory fails loudly on
+    purpose — and the branch this test is about would never be reached.
+    """
+    shipbob.get("/cases/CASE-1004").respond(200, json=CASE_1004)
+    shipbob.get("/shipments/330936165").respond(200, json=SHIPMENT_1004)
+    shipbob.get("/orders/322882110").respond(200, json=ORDER_1004)
+    unwritable = tmp_path / "reports.db"
+    unwritable.write_text("this is not a database at all")
+    app = create_app(settings, report_store=ReportStore(unwritable))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        response = await http.post("/cases/CASE-1004/investigate")
+
+    assert response.status_code == 200
+    messages = dict(read_stream(response.text))
+    result = json.loads(messages["result"])
+    # The findings still arrived. What is missing is only the keeping of them, and the
+    # reply says which — a rep told merely that something failed would go looking for them.
+    assert result["screening"]["report"]["reasons"] == ["claim_too_old"]
+    assert result["reports"] == []
+    assert "cannot be approved yet" in result["reports_unavailable_reason"]
+
+
+async def test_a_split_nobody_could_settle_keeps_nothing_and_says_so(
+    settings: Settings, shipbob: respx.Router
+) -> None:
+    """FR-1a.4: nothing was established about any product, so there is nothing to approve."""
+    shipbob.get("/cases/CASE-1001").respond(200, json=CASE_1001)
+    shipbob.get("/shipments/342578703").respond(200, json=SHIPMENT_1001)
+    shipbob.get("/orders/334291211").respond(200, json=ORDER_1001)
+    shipbob.get("/cases/CASE-1001/attachments").respond(200, json=ATTACHMENTS_1001)
+    shipbob.post("/invoices/generate").respond(200, json=INVOICE_342578703)
+    reports = ReportStore(settings.database_path)
+    app = create_app(settings, report_store=reports)
+    app.dependency_overrides[get_models] = lambda: an_unsettled_split
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        response = await http.post("/cases/CASE-1001/investigate")
+
+    result = json.loads(dict(read_stream(response.text))["result"])
+    assert result["reports"] == []
+    assert result["reports_unavailable_reason"] is None
+    assert reports.for_case("CASE-1001").reports == ()
+
+
+def a_settled_investigation() -> tuple[object, StructuredModel]:
+    """Both models, scripted through a whole claim that reaches a recommendation.
+
+    Four answers in the order the investigation asks for them: a remark and a settled split for
+    the triage pass, then a remark and a conclusion for the one damaged product. Written out here
+    because the fixture above deliberately stops at an unsettled split, and the report that comes
+    out the other end is the thing these tests are about.
+
+    **It asks the merchant for more rather than recommending payment**, and that is what this
+    script can honestly produce. The run never looks at an image, so the evidence the claim
+    settles for every product is not in hand, and the rules withhold a payment on evidence that is
+    short (FR-1.6) — exactly as they should. Scripting a payment would mean scripting each image
+    being inspected, which is a great deal of scaffolding between the test and the report it is
+    actually about.
+    """
+    return (
+        scripted(
+            AIMessage(content="I have read the claim."),
+            AIMessage(content="I have looked at the photographs."),
+        ),
+        StructuredModel(
+            scripted(
+                ClaimSplit(
+                    claimed_products=(
+                        ClaimedProductProposal(
+                            name="Liposomal Tripeptide Collagen",
+                            sku="COLLAGEN1",
+                            quantity=1,
+                            damage_attachment_ids=("ATT-CASE-1001-03",),
+                            reasoning="The photographs show this bottle broken.",
+                            confidence=0.93,
+                        ),
+                    ),
+                    reasoning="One product is named and photographed.",
+                    confidence=0.93,
+                ),
+                InvestigationConclusion(
+                    evidence=tuple(
+                        EvidenceJudgement(
+                            kind=kind,
+                            state=EvidenceState.PRESENT,
+                            observed=f"The {kind.value.replace('_', ' ')} is there and readable.",
+                            attachment_id="ATT-CASE-1001-02",
+                        )
+                        for kind in EvidenceKind
+                    ),
+                    assessments=tuple(
+                        AssessmentJudgement(
+                            name=name,
+                            passed=True,
+                            reasoning="Established from the photographs.",
+                            confidence=0.92,
+                        )
+                        for name in AssessmentName
+                    ),
+                    damaged_items=(
+                        DamagedItem(
+                            product_name="Liposomal Tripeptide Collagen",
+                            sku="COLLAGEN1",
+                            quantity=1,
+                        ),
+                    ),
+                    recommendation=Recommendation.REQUEST_INFO,
+                    reasoning="The bottle is smashed, but the claim's evidence is not all in.",
+                    concerns=("The outer mailer is only lightly marked.",),
+                    confidence=0.92,
+                    email_subject="About your claim",
+                    email_body="Could you send us a photograph of the outer box?",
+                ),
+            ),
+            max_attempts=1,
+        ),
+    )
+
+
+async def test_a_claim_that_reaches_a_recommendation_keeps_a_report_per_product(
+    settings: Settings, shipbob: respx.Router
+) -> None:
+    """FR-2.1, FR-3.1a: one report per damaged product, each approved or sent back on its own."""
+    shipbob.get("/cases/CASE-1001").respond(200, json=CASE_1001)
+    shipbob.get("/shipments/342578703").respond(200, json=SHIPMENT_1001)
+    shipbob.get("/orders/334291211").respond(200, json=ORDER_1001)
+    shipbob.get("/cases/CASE-1001/attachments").respond(200, json=ATTACHMENTS_1001)
+    shipbob.post("/invoices/generate").respond(200, json=INVOICE_342578703)
+    reports = ReportStore(settings.database_path)
+    app = create_app(settings, report_store=reports)
+    app.dependency_overrides[get_models] = lambda: a_settled_investigation
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        response = await http.post("/cases/CASE-1001/investigate")
+        kept = (await http.get("/cases/CASE-1001/reports")).json()
+
+    result = json.loads(dict(read_stream(response.text))["result"])
+    assert result["reports_unavailable_reason"] is None
+    (report,) = result["reports"]
+    assert report["stage"] == "investigation"
+    assert report["product_name"] == "Liposomal Tripeptide Collagen"
+    assert report["recommendation"] == "request_info"
+    # Money is text all the way out, never a JSON number (FR-1.21).
+    assert isinstance(report["amount_usd"], str)
+    # And it is really there afterwards, reachable by the routes a rep would use.
+    assert len(kept["reports"]) == 1
+
+
+async def test_a_kept_report_can_then_be_approved(
+    settings: Settings, shipbob: respx.Router
+) -> None:
+    """FR-2.8, FR-2.9, FR-C.1: the whole way from investigating to a decision being recorded."""
+    shipbob.get("/cases/CASE-1001").respond(200, json=CASE_1001)
+    shipbob.get("/shipments/342578703").respond(200, json=SHIPMENT_1001)
+    shipbob.get("/orders/334291211").respond(200, json=ORDER_1001)
+    shipbob.get("/cases/CASE-1001/attachments").respond(200, json=ATTACHMENTS_1001)
+    shipbob.post("/invoices/generate").respond(200, json=INVOICE_342578703)
+    app = create_app(settings, report_store=ReportStore(settings.database_path))
+    app.dependency_overrides[get_models] = lambda: a_settled_investigation
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        response = await http.post("/cases/CASE-1001/investigate")
+        report_id = json.loads(dict(read_stream(response.text))["result"])["reports"][0][
+            "report_id"
+        ]
+        approved = await http.post(f"/reports/{report_id}/approve", json={"amount_usd": "31.20"})
+
+    assert approved.status_code == 200
+    body = approved.json()
+    assert body["state"] == "approved"
+    assert body["decided"]["amount_usd"] == "31.20"
+    assert DecisionStore(settings.database_path).count() == 1

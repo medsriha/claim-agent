@@ -1,5 +1,5 @@
 {
- "period_label": "Covering 8 September 2025 to 4 September 2026.",
+ "period_label": "Data period: 8 September 2025 through 4 September 2026.",
  "starts_at": "2025-09-08T00:00:00Z",
  "ends_at": "2026-09-04T09:00:00Z",
  "presets": [
@@ -20,90 +20,90 @@
   }
  ],
  "hero": {
-  "label": "Investigated products taken exactly as recommended",
+  "label": "AI recommendations accepted without changes",
   "value": "67%",
-  "note": "Approved with the outcome, the amount and every word of the email left as the system produced them."
+  "note": "Share of AI-investigated products where the representative kept the recommended outcome, reimbursement amount, and merchant email unchanged."
  },
  "figures": [
   {
-   "label": "Decisions taken",
+   "label": "Total decisions reviewed",
    "value": "4,966",
-   "note": null
+   "note": "Includes AI-investigated products and claims stopped by eligibility checks."
   },
   {
-   "label": "Needed a representative to act",
+   "label": "Required changes or reinvestigation",
    "value": "33%",
-   "note": "Investigated products that were changed, rewritten or sent back."
+   "note": "Share of AI-investigated products where a representative changed the outcome, reimbursement, or email wording, or sent the case back."
   },
   {
-   "label": "Amount changed",
+   "label": "Reimbursement amount changed",
    "value": "9%",
-   "note": "The answer stood; the figure did not."
+   "note": "Share of AI-investigated products where a representative changed the recommended reimbursement amount."
   },
   {
-   "label": "Sent back",
+   "label": "Sent back for reinvestigation",
    "value": "8%",
-   "note": "Returned with feedback for the investigation to run again."
+   "note": "Share of AI-investigated products returned with feedback for another run."
   },
   {
    "label": "Average review time",
-   "value": "8 min",
-   "note": null
+   "value": "8.4 min",
+   "note": "Average representative review time per decision."
   }
  ],
  "savings": [
   {
-   "label": "Representative time saved",
+   "label": "Estimated representative time saved",
    "value": "796 hours",
-   "note": "Against how long the same work is assumed to take unaided."
+   "note": "Compared with the assumed time needed to handle the same work without AI."
   },
   {
-   "label": "That time, valued",
+   "label": "Estimated value of time saved",
    "value": "$39,781.50",
-   "note": null
+   "note": "Estimated time saved multiplied by the assumed representative hourly cost."
   },
   {
    "label": "Estimated AI investigation cost",
    "value": "$1,571.64",
-   "note": "Estimated model and image-processing cost only; excludes claim payouts and representative labor."
+   "note": "Estimated AI model and image-processing costs. Excludes claim reimbursements and representative time."
   },
   {
-   "label": "Left over",
+   "label": "Estimated net savings",
    "value": "$38,209.86",
-   "note": "The valued time, less what the investigating cost."
+   "note": "Estimated value of time saved minus estimated AI investigation costs. Excludes claim reimbursements and other operating costs."
   }
  ],
  "assumptions": [
   {
-   "label": "A representative's hour",
+   "label": "Assumed representative hourly cost",
    "value": "$50.00",
-   "description": "What an hour of a support representative's time is taken to cost, including employment costs. Every dollar saving on this screen is hours multiplied by this rate. PROVISIONAL — the figure is ours, not ShipBob's.",
+   "description": "Assumed fully loaded cost of one support representative hour, including employment costs. The dashboard multiplies estimated hours saved by this rate. PROVISIONAL — this estimate was set by this project, not supplied by ShipBob.",
    "marker": "PROVISIONAL"
   },
   {
-   "label": "Investigating one product",
+   "label": "Estimated AI cost per investigated product",
    "value": "$0.42",
-   "description": "What it is taken to cost to investigate one claim, counting the AI and the images it looks at. It is subtracted from the saving, so the figure shown is what is left after paying for the system. A claim the quick checks stopped costs nothing and is charged nothing. PROVISIONAL — the figure is ours, not ShipBob's.",
+   "description": "Estimated AI model and image-processing cost for one investigated product. Claims stopped by eligibility checks do not incur this cost. PROVISIONAL — this estimate was set by this project, not supplied by ShipBob.",
    "marker": "PROVISIONAL"
   },
   {
-   "label": "One product, done unaided",
+   "label": "Assumed manual time per investigated product",
    "value": "22 min",
-   "description": "How long one damaged product would take a representative to work through from scratch, with no report to start from. Time saved is this less the time they actually spent reviewing. PROVISIONAL — nobody has timed the old way of working.",
+   "description": "Assumed time for a representative to investigate one damaged product without AI assistance. Estimated time saved is this amount minus the recorded review time. PROVISIONAL — the manual process has not been timed.",
    "marker": "PROVISIONAL"
   },
   {
-   "label": "One stopped claim, done unaided",
+   "label": "Assumed manual time per stopped claim",
    "value": "6 min",
-   "description": "How long a claim that cannot be processed would take a representative to establish and close by hand. Much less than an investigation, because the four checks are quick questions with clear answers. PROVISIONAL — nobody has timed it.",
+   "description": "Assumed time for a representative to identify and close an ineligible claim without the automated checks. PROVISIONAL — the manual process has not been timed.",
    "marker": "PROVISIONAL"
   }
  ],
  "approval_trend": {
   "empty_reason": null,
   "data": {
-   "title": "Taken exactly as recommended, week by week",
-   "y_label": "Share of decisions",
+   "title": "Recommendations accepted without changes, by week",
+   "y_label": "Acceptance rate",
    "domain": {
     "minimum": 0.0,
     "maximum": 1.0
@@ -141,7 +141,7 @@
    ],
    "series": [
     {
-     "name": "Investigated products",
+     "name": "AI-investigated products",
      "points": [
       {
        "value": 0.5370370370370371,
@@ -406,7 +406,7 @@
      ]
     },
     {
-     "name": "Claims stopped at screening",
+     "name": "Claims stopped by eligibility checks",
      "points": [
       {
        "value": 0.7333333333333333,
@@ -671,14 +671,14 @@
      ]
     }
    ],
-   "summary": "Across the period, 67% of investigated products and 79% of stopped claims went out untouched."
+   "summary": "Representatives accepted 67% of AI-investigated product recommendations and 79% of eligibility-check decisions without changes."
   }
  },
  "intervention_mix": {
   "empty_reason": null,
   "data": {
-   "title": "How much a representative changed",
-   "y_label": "Share of investigated products",
+   "title": "How representatives handled AI recommendations",
+   "y_label": "Share of reviewed products",
    "domain": {
     "minimum": 0.0,
     "maximum": 1.0
@@ -716,7 +716,7 @@
    ],
    "bands": [
     {
-     "name": "Taken as recommended",
+     "name": "Accepted without changes",
      "points": [
       {
        "upper": 0.5370370370370371,
@@ -981,7 +981,7 @@
      ]
     },
     {
-     "name": "Wording rewritten",
+     "name": "Email wording changed only",
      "points": [
       {
        "upper": 0.7592592592592593,
@@ -1246,7 +1246,7 @@
      ]
     },
     {
-     "name": "Amount or outcome changed",
+     "name": "Outcome or reimbursement changed",
      "points": [
       {
        "upper": 0.8888888888888888,
@@ -1511,7 +1511,7 @@
      ]
     },
     {
-     "name": "Sent back",
+     "name": "Sent back for reinvestigation",
      "points": [
       {
        "upper": 1.0,
@@ -1776,13 +1776,13 @@
      ]
     }
    ],
-   "summary": "Across the period 67% went out untouched, 14% had only their wording changed, 11% had an amount or an outcome changed, and 8% were sent back."
+   "summary": "Of investigated products, 67% were accepted without changes, 14% had only the merchant email wording changed, 11% had the recommended outcome or reimbursement changed, and 8% were sent back for another investigation."
   }
  },
  "calibration": {
   "empty_reason": null,
   "data": {
-   "title": "How sure the system said it was, against how often it was accepted",
+   "title": "AI confidence compared with representative acceptance",
    "bands": [
     {
      "band": "Under 70% sure",
@@ -1875,17 +1875,17 @@
     "minimum": 0.0,
     "maximum": 2000.0
    },
-   "summary": "Each bar is how often a representative accepted the advice. The band behind it is how sure the system said it was. A bar shorter than its band means the system was more confident than it turned out to deserve."
+   "summary": "Each bar shows the percentage of recommendations accepted without changes. The shaded range shows the AI confidence for that group. When a bar falls below its shaded range, actual acceptance was lower than the stated confidence."
   }
  },
  "readiness": {
   "empty_reason": null,
   "data": {
-   "title": "Which claims came back ready to send",
+   "title": "Acceptance rate by claim characteristic",
    "groups": [
     {
-     "name": "How sure the system said it was",
-     "spread_text": "43 points apart, so it tells claims apart",
+     "name": "AI confidence",
+     "spread_text": "43 percentage points between highest and lowest",
      "rows": [
       {
        "label": "Under 70% sure",
@@ -1942,11 +1942,11 @@
      ]
     },
     {
-     "name": "What the merchant reported",
-     "spread_text": "20 points apart, so it tells claims apart",
+     "name": "Reported damage pattern",
+     "spread_text": "20 percentage points between highest and lowest",
      "rows": [
       {
-       "label": "Both product and shipping box damaged",
+       "label": "Product and shipping box both damaged",
        "ready": {
         "value": 0.7342502218278616,
         "text": "73%",
@@ -1974,8 +1974,8 @@
      ]
     },
     {
-     "name": "Who carried the parcel",
-     "spread_text": "9 points apart",
+     "name": "Shipping carrier",
+     "spread_text": "9 percentage points between highest and lowest",
      "rows": [
       {
        "label": "Royal Mail Tracked 48",
@@ -2032,11 +2032,11 @@
      ]
     },
     {
-     "name": "What they said caused it",
-     "spread_text": "4 points apart, so it barely tells claims apart",
+     "name": "Reported damage cause",
+     "spread_text": "4 percentage points between highest and lowest",
      "rows": [
       {
-       "label": "Damage due to poor/bad packaging",
+       "label": "Poor packaging",
        "ready": {
         "value": 0.672736220472441,
         "text": "67%",
@@ -2049,7 +2049,7 @@
        }
       },
       {
-       "label": "Damage due to carrier mishandling",
+       "label": "Carrier mishandling",
        "ready": {
         "value": 0.631578947368421,
         "text": "63%",
@@ -2068,13 +2068,13 @@
     "minimum": 0.0,
     "maximum": 1.0
    },
-   "summary": "Each bar is how often that kind of claim went out exactly as the system produced it, and the groups are ordered by how far apart their bars are. A group near the top sorts the work before anybody starts on it; one near the bottom says that way of sorting claims does not help."
+   "summary": "Each bar shows the percentage of AI recommendations accepted without changes. The decision count shows the sample size. Sections are ordered by the gap between their highest and lowest acceptance rates."
   }
  },
  "disagreement": {
   "empty_reason": null,
   "data": {
-   "title": "How often each recommendation was changed",
+   "title": "Recommendation change rate by outcome",
    "domain": {
     "minimum": 0.0,
     "maximum": 1.0
@@ -2123,14 +2123,14 @@
      "label": "escalate"
     }
    ],
-   "summary": "A bar is the share of that recommendation a representative did not accept as it stood. A recommendation nobody made has no bar."
+   "summary": "Each bar shows the percentage of recommendations a representative changed or sent back. Outcomes with no recommendations have no bar."
   }
  },
  "review_time": {
   "empty_reason": null,
   "data": {
-   "title": "How long a review took, week by week",
-   "y_label": "Minutes, average",
+   "title": "Average review time by week",
+   "y_label": "Average minutes per decision",
    "domain": {
     "minimum": 0.0,
     "maximum": 20.0
@@ -2168,285 +2168,285 @@
    ],
    "series": [
     {
-     "name": "Minutes per review",
+     "name": "Average review time",
      "points": [
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 9.63768115942029,
+       "text": "9.6 min",
        "label": "week of 8 Sep"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 9.166666666666666,
+       "text": "9.2 min",
        "label": "week of 15 Sep"
       },
       {
-       "value": 11.0,
-       "text": "11 min",
+       "value": 10.107142857142858,
+       "text": "10.1 min",
        "label": "week of 22 Sep"
       },
       {
-       "value": 10.0,
-       "text": "10 min",
+       "value": 10.07865168539326,
+       "text": "10.1 min",
        "label": "week of 29 Sep"
       },
       {
-       "value": 11.0,
-       "text": "11 min",
+       "value": 10.013698630136986,
+       "text": "10.0 min",
        "label": "week of 6 Oct"
       },
       {
-       "value": 10.5,
-       "text": "10.5 min",
+       "value": 9.635135135135135,
+       "text": "9.6 min",
        "label": "week of 13 Oct"
       },
       {
-       "value": 8.5,
-       "text": "8.5 min",
+       "value": 8.277777777777779,
+       "text": "8.3 min",
        "label": "week of 20 Oct"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.774647887323944,
+       "text": "8.8 min",
        "label": "week of 27 Oct"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 9.421052631578947,
+       "text": "9.4 min",
        "label": "week of 3 Nov"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.32394366197183,
+       "text": "8.3 min",
        "label": "week of 10 Nov"
       },
       {
-       "value": 10.0,
-       "text": "10 min",
+       "value": 9.45054945054945,
+       "text": "9.5 min",
        "label": "week of 17 Nov"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.825,
+       "text": "8.8 min",
        "label": "week of 24 Nov"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 9.254901960784315,
+       "text": "9.3 min",
        "label": "week of 1 Dec"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.732394366197184,
+       "text": "8.7 min",
        "label": "week of 8 Dec"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 8.268292682926829,
+       "text": "8.3 min",
        "label": "week of 15 Dec"
       },
       {
-       "value": 10.0,
-       "text": "10 min",
+       "value": 9.301369863013699,
+       "text": "9.3 min",
        "label": "week of 22 Dec"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 9.138297872340425,
+       "text": "9.1 min",
        "label": "week of 29 Dec"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 9.275510204081632,
+       "text": "9.3 min",
        "label": "week of 5 Jan"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 9.514285714285714,
+       "text": "9.5 min",
        "label": "week of 12 Jan"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.670731707317072,
+       "text": "8.7 min",
        "label": "week of 19 Jan"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.951219512195122,
+       "text": "9.0 min",
        "label": "week of 26 Jan"
       },
       {
-       "value": 10.0,
-       "text": "10 min",
+       "value": 9.846153846153847,
+       "text": "9.8 min",
        "label": "week of 2 Feb"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.823529411764707,
+       "text": "8.8 min",
        "label": "week of 9 Feb"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.791208791208792,
+       "text": "8.8 min",
        "label": "week of 16 Feb"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 8.458823529411765,
+       "text": "8.5 min",
        "label": "week of 23 Feb"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 8.45054945054945,
+       "text": "8.5 min",
        "label": "week of 2 Mar"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.776785714285714,
+       "text": "8.8 min",
        "label": "week of 9 Mar"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 8.34375,
+       "text": "8.3 min",
        "label": "week of 16 Mar"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 7.775,
+       "text": "7.8 min",
        "label": "week of 23 Mar"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.643835616438356,
+       "text": "8.6 min",
        "label": "week of 30 Mar"
       },
       {
-       "value": 8.5,
-       "text": "8.5 min",
+       "value": 8.8125,
+       "text": "8.8 min",
        "label": "week of 6 Apr"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.7889908256880735,
+       "text": "7.8 min",
        "label": "week of 13 Apr"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 7.873684210526315,
+       "text": "7.9 min",
        "label": "week of 20 Apr"
       },
       {
-       "value": 10.0,
-       "text": "10 min",
+       "value": 9.316326530612244,
+       "text": "9.3 min",
        "label": "week of 27 Apr"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 8.116279069767442,
+       "text": "8.1 min",
        "label": "week of 4 May"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 8.492063492063492,
+       "text": "8.5 min",
        "label": "week of 11 May"
       },
       {
-       "value": 6.0,
-       "text": "6 min",
+       "value": 7.582417582417582,
+       "text": "7.6 min",
        "label": "week of 18 May"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.820754716981132,
+       "text": "7.8 min",
        "label": "week of 25 May"
       },
       {
-       "value": 9.0,
-       "text": "9 min",
+       "value": 8.78688524590164,
+       "text": "8.8 min",
        "label": "week of 1 Jun"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 8.179775280898877,
+       "text": "8.2 min",
        "label": "week of 8 Jun"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.9021739130434785,
+       "text": "7.9 min",
        "label": "week of 15 Jun"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.671428571428572,
+       "text": "7.7 min",
        "label": "week of 22 Jun"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.835051546391752,
+       "text": "7.8 min",
        "label": "week of 29 Jun"
       },
       {
-       "value": 8.0,
-       "text": "8 min",
+       "value": 7.845238095238095,
+       "text": "7.8 min",
        "label": "week of 6 Jul"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.446280991735537,
+       "text": "7.4 min",
        "label": "week of 13 Jul"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.661016949152542,
+       "text": "7.7 min",
        "label": "week of 20 Jul"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.658914728682171,
+       "text": "7.7 min",
        "label": "week of 27 Jul"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.596153846153846,
+       "text": "7.6 min",
        "label": "week of 3 Aug"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.153846153846154,
+       "text": "7.2 min",
        "label": "week of 10 Aug"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.111111111111111,
+       "text": "7.1 min",
        "label": "week of 17 Aug"
       },
       {
-       "value": 6.0,
-       "text": "6 min",
+       "value": 7.318181818181818,
+       "text": "7.3 min",
        "label": "week of 24 Aug"
       },
       {
-       "value": 7.0,
-       "text": "7 min",
+       "value": 7.324324324324325,
+       "text": "7.3 min",
        "label": "week of 31 Aug"
       }
      ]
     }
    ],
-   "summary": "The average review took 8 min across the period."
+   "summary": "Representatives spent an average of 8.4 min reviewing each decision during this period."
   }
  },
  "gates": {
   "empty_reason": null,
   "data": {
-   "title": "Candidate rules, scored",
+   "title": "Potential automation rules",
    "columns": [
     "Order value",
-    "How sure",
-    "Decisions",
-    "Share of work",
-    "Agreed with",
-    "Against the bar"
+    "AI confidence",
+    "Decisions reviewed",
+    "Share of investigated work",
+    "Accepted without changes",
+    "Evaluation"
    ],
    "rows": [
     {

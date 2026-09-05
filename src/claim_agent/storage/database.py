@@ -46,6 +46,15 @@ logger = get_logger(__name__)
 # sorting the text sorts the moments, and somebody opening the file by hand can
 # see what it says.
 #
+# `reports` follows the same shape again, and its key is two columns rather than
+# one: a report keeps every version of itself, so `report_id` alone names a report
+# and `(report_id, version)` names one telling of it (FR-R.13). `case_id` is broken
+# out and indexed because the one question asked across reports is *what is on this
+# claim* — the list a representative works from, and the other products shown beside
+# any one of them. `state` is beside the record as well as inside it: it is the only
+# thing about a report that changes, and it changes by writing the row again rather
+# than by editing what the report says.
+#
 # `precedent_search` is SQLite's own full-text index, and it is there purely to
 # narrow the store cheaply: it finds records sharing any meaningful word with the
 # claim in hand, and the scoring then runs over that handful rather than over
@@ -89,6 +98,20 @@ CREATE TABLE IF NOT EXISTS rep_decisions (
 );
 
 CREATE INDEX IF NOT EXISTS rep_decisions_by_time ON rep_decisions (decided_at);
+
+CREATE TABLE IF NOT EXISTS reports (
+    report_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    case_id TEXT NOT NULL,
+    claim_line_id TEXT,
+    stage TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    record TEXT NOT NULL,
+    PRIMARY KEY (report_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS reports_by_case ON reports (case_id);
 """
 
 

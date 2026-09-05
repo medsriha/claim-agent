@@ -16,6 +16,7 @@ import { FailureNotice } from "../components/FailureNotice";
 import { GateCard } from "../components/GateCard";
 import { InvestigationStep } from "../components/InvestigationStep";
 import { LineReport } from "../components/LineReport";
+import { ReportCard } from "../components/ReportCard";
 import { SimilarClaims } from "../components/SimilarClaims";
 import { Spinner } from "../components/Spinner";
 import { VerdictBanner } from "../components/VerdictBanner";
@@ -179,6 +180,11 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
           />
         </div>
       );
+
+    case "report":
+      // Carries its own frame, like a line report: it is the thing being acted on rather
+      // than something said in passing.
+      return <ReportCard report={body.report} />;
 
     case "failure":
       return <FailureNotice kind={body.failure} message={body.message} onRetry={onRetry} />;

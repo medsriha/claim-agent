@@ -53,7 +53,6 @@ export function HeroFigure({ hero }: { hero: Figure }): React.JSX.Element {
     <section className="panel hero">
       <h2 className="hero-label">{hero.label}</h2>
       <p className="hero-figure">{hero.value}</p>
-      {hero.note !== null && <p className="hero-note">{hero.note}</p>}
     </section>
   );
 }
@@ -80,7 +79,6 @@ export function FigureTiles({
           <div className="fact" key={figure.label}>
             <span className="fact-label">{figure.label}</span>
             <span className="fact-value">{figure.value}</span>
-            {figure.note !== null && <span className="fact-note">{figure.note}</span>}
           </div>
         ))}
       </div>
@@ -88,17 +86,16 @@ export function FigureTiles({
   );
 }
 
-/** What the time saved is worth. */
+/** Estimated time saved, its value, and the AI cost deducted from it. */
 export function SavingsPanel({ savings }: { savings: readonly Figure[] }): React.JSX.Element {
   return (
     <section className="panel">
-      <h3 className="panel-title">What that is worth</h3>
+      <h3 className="panel-title">Estimated time and cost savings</h3>
       <div className="facts">
         {savings.map((figure) => (
           <div className="fact" key={figure.label}>
             <span className="fact-label">{figure.label}</span>
             <span className="fact-value">{figure.value}</span>
-            {figure.note !== null && <span className="fact-note">{figure.note}</span>}
           </div>
         ))}
       </div>

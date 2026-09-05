@@ -282,6 +282,8 @@ async def triage_claim(
         case_id=case.case_id,
         shipment_id=case.shipment_id,
         user_id=case.user_id,
+        case=case,
+        shipment=record.shipment,
         evidence=evidence,
         fetcher=fetcher,
         model=structured,

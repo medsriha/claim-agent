@@ -113,8 +113,10 @@ too short — and lets someone change one and watch the next claim be screened b
 with no restart. Nothing about a change is stored: a restart puts every value back to what the
 machine's own settings say.
 
-Nothing is stored. The answer exists only in the reply, so a representative cannot fetch a
-screening again, and there is no lasting record of one. Closing the page loses what it showed.
+A screening asked for on its own still keeps nothing: the answer exists only in the reply, so
+closing the page loses what it showed. Asking for the claim to be *investigated* is what writes a
+report down — including for a claim the checks turn away — and that report can be fetched back
+afterwards.
 
 **Stages 2 and 3 are built and can be asked for.** A claim can be investigated over the web:
 the system screens it, finds its photographs, works out what each one is, looks up how
@@ -124,6 +126,13 @@ hands back, per product, what the evidence showed, what it recommends, how the a
 arrived at, and a draft email. **It reports all of that while it happens** rather than going
 quiet and answering at the end.
 
+The investigation has eight tools, all of which only read or work something out. Four of them —
+working out what currency the money is in, checking that a photographed document adds up, reading
+the facts buried in the claim's own description, and comparing ShipBob's prices with the
+customer's receipt — **answer no requirement**, and were added after reading ShipBob's sample data
+turned up four ways a recommendation could be quietly wrong. See "Four tools that came from
+reading ShipBob's data, not the requirements".
+
 **The screen shows all of it.** A representative picks a claim and watches the quick checks,
 then the similar past claims, then the investigation reporting each thing it does as it does
 it, and finally a report per damaged product with the working behind its figure and a draft
@@ -132,8 +141,24 @@ the money is the AI's judgement of what the damage is worth, held to a limit no 
 exceed. That last part changed recently and deliberately; the figure used to be arithmetic
 nobody could argue with, and now it is an estimate somebody has to weigh.
 
-**Stage 4 is untouched**, and nothing has ever been sent to a merchant or paid out. The parts of
-the system that could do those things do not exist.
+**Half of stage 4 exists now.** What an investigation found is written into a report a person
+reads, kept, and fetched back; a representative can read a claim's reports, approve one — as it
+stands, after rewording the email, or at a different figure — or send it back with a note. What
+they chose is recorded. The other half does not exist: **nothing has ever been sent to a merchant
+or paid out**, an approval stops at being written down, and a report sent back is picked up by
+nothing. There is also no sign-in on any of it.
+
+**There is a third screen, for the business rather than for one claim.** It shows how often
+representatives took the advice exactly as it stood, how far they changed it when they did, how
+long claims took, what that was worth in time and money, and whether the system's own statement of
+how sure it was predicts whether anybody agreed with it.
+
+**Every figure on it is invented, and the screen does not say so.** Nothing in the system records
+what a representative decided, because the stage where a person decides is still untouched, so
+there is no real history to draw. The screen carries a year of made-up history instead, so that
+opening the tab shows something rather than nothing. The machinery that would produce real
+figures — the record, the store, the arithmetic and an address that serves them — is built and
+tested and has no caller.
 
 For what that leaves missing or fragile, see [Future production](#future-production).
 
@@ -1171,9 +1196,24 @@ representative there is no comparable history when in fact nobody looked.
   "order" — count as much as rare ones, so two unrelated claims share a floor of similarity. A
   proper scheme would weigh a rare word more heavily. Written up under
   [Would improve](#would-improve).
-- **The amount is stored but never shown to the AI.** A past payout is a fact a representative
-  may want, but the AI is forbidden to write a figure, and the surest way to stop it repeating
-  one is never to show it one.
+- **What a past claim was settled for is shown to the AI.** It used to be stored and
+  deliberately withheld: the AI was forbidden to write a figure at all, and the surest way to
+  stop it repeating one was never to show it one. That reasoning went when the AI became the
+  one who decides the amount. It is now asked to weigh how comparable claims were actually
+  settled, and that is an instruction with nothing behind it if the figures are hidden.
+- **The AI is told twice that a past claim is not evidence.** A run on one claim read a past
+  claim belonging to a different merchant as the explanation for a brand name it did not expect
+  on this claim's packaging photograph, and told the representative that images may have been
+  crossed between the two cases. That is an accusation about ShipBob's filing which nobody in
+  the conversation could check. No other claim's evidence had actually reached it — the claim
+  an investigation answers about is fixed when its tools are built, and it can fetch no image
+  belonging to any other — so what crossed over was the *idea* of another claim, off the page it
+  was shown for consistency. The standing rules now say a past claim is a record of an outcome
+  and never a fact about the parcel in hand, and forbid guessing at how ShipBob's records were
+  put together. They keep what was genuinely useful in that run: saying plainly that a label
+  names a product this order does not contain, and what that stops the AI concluding. The same
+  sentence is repeated beside the records themselves, because that is where another merchant's
+  product and another merchant's words actually arrive.
 - **A store that cannot be read does not stop the claim.** This is the opposite of what merchant
   memory does, on purpose. Merchant memory has no way to say "unknown" — an empty list would be
   indistinguishable from a merchant with a clean record — so it fails loudly. Here the answer
@@ -1340,9 +1380,10 @@ model key, a run that used up its steps, a photograph that cannot be fetched: ea
 as something a representative can act on. Nothing ends in an empty connection, and nothing
 ends in a payment.
 
-**Not ready for production** — Nothing is stored, so a stream cannot be caught up
-with or replayed — a representative who reloads has to start the investigation again, and
-one who closes the tab half way through loses the work. There is no keep-alive on a quiet
+**Not ready for production** — The stream itself is not stored, so it cannot be caught up with
+or replayed — a representative who reloads has to start the investigation again, and one who
+closes the tab half way through loses watching it happen. What it *found* is now kept, so the
+reports at the end survive; the narration on the way there does not. There is no keep-alive on a quiet
 connection, so anything between the browser and the service that times out an idle stream
 would cut a long investigation off. And a caller who goes away does not stop the
 investigation: it runs to the end and its findings are discarded.
@@ -1472,31 +1513,74 @@ says so where a reader will see it.
    changed the wording, anything they said in their own words, and when. The requirements
    already describe this record in detail (FR-C.1), so it is that record rather than one we
    invented.
-2. The screen asks the service for a period — the last month, three months, a year.
-3. The service reads every decision in that period and works out the figures: the share taken as
+2. Every decision in a period is read, and the figures worked out from them: the share taken as
    recommended, the share changed, how far they were changed, how long they took, and what that
-   adds up to in hours and money. All of it is worked out in the service. Nothing is worked out
-   in the browser.
-4. It groups those decisions by how sure the system said it was, and compares that against how
-   often a person agreed. That comparison is the point of the screen.
-5. It also scores a handful of candidate rules — claims under a certain value, where the system
-   was more than a certain amount sure — and reports, for each, how much of the work it would
-   cover and how often people agreed with it. It scores them. It does not choose one, and there
-   is no button next to any of them.
-6. The screen draws all of that, and adds nothing.
+   adds up to in hours and money.
+3. Those decisions are grouped by how sure the system said it was, and that is compared against
+   how often a person agreed. **That comparison is the point of the screen.**
+3a. The same decisions are also cut four ways, and each part reports the share that went out
+   untouched. Three of the cuts are things known *before* anybody looks at a claim — what the
+   merchant said was damaged, what they said caused it, and who carried the parcel — because a
+   cut by something the investigation produced could only describe work already done. The fourth
+   is how sure the system said it was.
 
-**What it connects to** — It reads the record of decisions, which is kept in the same single
-database file as the merchant corrections and the past claims. It depends on nothing else: no
-ShipBob call, no AI, no images. It is the cheapest thing in the system to run.
+   The useful thing is the spread inside a group rather than any one number, so the service
+   works that spread out, says it in words, and puts the groups in order of it. A group at the
+   top sorts the work before anybody starts on it; one at the bottom says that way of sorting
+   claims does not help, which is an answer rather than a gap. This is the part that tells a
+   reader **which claims come back ready and which need a person**.
+4. A handful of candidate rules are scored — claims under a certain value, where the system was
+   more than a certain amount sure — and for each, how much of the work it would cover and how
+   often people agreed with it. They are scored. None is chosen, and there is no button next to
+   any of them.
+5. The screen draws the first three of those, and adds nothing.
+
+**Step 4 is worked out and not shown.** The table of candidate rules was on the screen and was
+taken off, along with a chart breaking disagreement down by which of the four recommendations was
+made. The scoring still runs and is still tested; what went is the drawing of it. That is the one
+thing on this screen that spoke directly to "could any of this be automated yet", so it is worth
+knowing it is a panel away rather than a piece of work away.
+
+**Where those steps actually happen today is the important caveat.** Steps 1 to 4 are built and
+work: the record, the store, the arithmetic and an address that serves it all exist and are
+tested. But **the screen does not call any of it.** It carries the finished figures itself, as a
+file, because nothing in the system has ever recorded a real decision and a dashboard with
+nothing on it demonstrates nothing. Somebody would otherwise have to know to run a command before
+the tab showed anything at all, and a blank screen is indistinguishable from a broken one.
+
+So the figures on screen were made by running the real thing once — the tool that invents a year
+of decisions, then the service's own arithmetic — and keeping the answer. They are consistent
+with each other in a way hand-typed numbers would not be, and they can be made again rather than
+edited. What they are not is measured.
+
+**What it connects to** — Nothing, as it stands. The screen depends on no service, no ShipBob
+call, no AI and no database; it draws figures it carries. The machinery behind it — the record of
+decisions, kept in the same single database file as the merchant corrections and the past claims,
+and the address that reports on it — is built and tested and currently has no caller.
 
 **Choices we made**
 
-- **The service sends numbers ready to be drawn, and the finished words beside them.** Every
-  point on every chart carries both the number that becomes its position and the sentence a
-  person reads. The browser turns a number into a position on the screen and does nothing else
-  — it never works out a percentage, a total, a difference or a boundary. This is the same rule
-  that keeps money out of the browser (FR-1.21), applied to every figure rather than only to
-  money. No chart on the screen draws money at all.
+- **The figures are held in the screen, and that breaks a rule on purpose.** Everywhere else, the
+  interface shows what the service returned and never invents a record, because fabricated
+  content on screen is indistinguishable from real history. Here it is invented, and nothing a
+  viewer can see says so. It was chosen because the alternative was a tab that is blank until
+  somebody runs a command they have no way of knowing about. The warning therefore lives in three
+  places instead — the docstring of `web/src/analysis/demoFigures.ts`, this section, and
+  UI-TODO.md — and those are the only ones anybody gets.
+- **The assumptions behind the money were shown, and are not any more.** A panel listed the hourly
+  rate and the cost per claim, marked provisional and explained in the service's own words; it was
+  taken off for being noise. So the dollar figures on screen now rest on two invented numbers that
+  nothing on the page names. The service still carries both, with their explanations, for whoever
+  puts them back.
+- **One year, and no way to ask for another.** The service reports on shorter periods too, and the
+  shape it answers in still carries the choice, but a screen holding its own figures would have to
+  hold a set for each period offered.
+- **Every number is carried twice even so: one to draw, one to read.** A point carries both the
+  value that becomes its position and the sentence a person reads, and the scale of every axis is
+  given rather than derived. That was worth keeping when the figures moved into the screen: it is
+  what stops a chart and the words beside it ever disagreeing, and it means the screen can be
+  pointed back at the service without changing a single component. This is the same rule that
+  keeps money out of the browser (FR-1.21), applied to every figure. No chart draws money at all.
 - **Two kinds of decision are counted separately.** A claim stopped by the quick checks never
   reaches the AI, has no products in it, and costs nothing to decide. A claim that was
   investigated is a different thing entirely. The requirements already say the record has to
@@ -1527,26 +1611,830 @@ ShipBob call, no AI, no images. It is the cheapest thing in the system to run.
   stricter standard — which is exactly the shape of the rules this screen scores. So the screen
   produces the evidence for a question the requirements have left open.
 
-**When things go wrong** — If the store cannot be read at all, the screen says so and offers to
-try again; it never shows zero claims, because "nobody decided anything" and "we could not look"
-are different answers and telling somebody the first when the truth is the second is the one
-badly wrong outcome here. A period with genuinely nothing in it says that instead, in the
-service's words. A week with no claims in it leaves a gap in the line rather than a dip to zero.
-If a request fails while the screen already has figures on it, the old figures stay, dimmed,
-still labelled with the period they cover, rather than being thrown away.
+**When things go wrong** — Very little can, which is the flip side of carrying the figures: there
+is nothing to time out and nothing to fail. A week with no claims in it still leaves a gap in the
+line rather than a dip to zero, and a panel with nothing to show still carries a sentence saying
+why rather than an empty box. Those paths are real and were built for the service; they survive
+because the figures kept their shape.
 
-**Not ready for production** — Every decision behind every figure is invented, because nothing
-in the system records a real one yet: the stage where a person decides is not built. The record
-store is therefore half a feature — the half that reads. The hourly rate and the AI cost are
-numbers we chose. The confidence comparison is only as good as the invented data behind it, and
-on real data it might show something quite different. See
+The address that reads the real store keeps the behaviour that mattered: a period nobody decided
+anything in comes back as a success saying so, while a store that cannot be read fails outright,
+because "nobody decided anything" and "we could not look" are different answers and reporting the
+second as the first is the one badly wrong outcome.
+
+**Not ready for production** — Every figure is invented and the screen does not say so. The
+service that would produce real ones is built but unused, so the whole feature is currently a
+picture of what this would look like rather than a measurement of anything. The record store is
+half a feature — the half that reads. The hourly rate and the AI cost are numbers we chose. The
+confidence comparison is only as good as the invented data behind it, and on real data it might
+show something quite different. See [Future production](#future-production).
+
+**Where the code is** — What the screen actually uses:
+`web/src/analysis/demoFigures.ts` holds the figures and says they are invented,
+`web/src/screens/AnalysisScreen.tsx` lays them out, and `web/src/charts/` draws them.
+
+What produced them, and currently has no caller: `src/claim_agent/domain/decision.py` is the
+record, `src/claim_agent/storage/decision_store.py` keeps it, `src/claim_agent/analysis/` works
+the figures out, `src/claim_agent/api/routes/analysis.py` is the way in, and
+`tools/seed_analysis_history.py` invents the history.
+
+---
+
+### The report a representative decides from
+
+**What it does** — Turns everything an investigation established into one written report, keeps
+it, and lets a representative approve it or send it back. Until now the work was done and then
+thrown away when the reply ended. Now it is written down, and a person can act on it.
+
+**Why we need it** — This is the moment the system hands over. A representative reads the report
+and decides; nothing reaches a merchant and no money moves until they do (FR-2.1 to FR-2.10). It
+is also the step four other parts of the system have been waiting on: reworking a report after
+feedback, sending an approved email, and remembering what was decided all begin with a report
+that exists (FR-C.1, FR-R.13).
+
+**How it works**
+
+1. A claim is investigated exactly as before. Nothing about the investigation changes.
+2. When it finishes, each damaged product's findings are written into a **report** — a written
+   document a person reads, in the order they need it: what is recommended and for how much,
+   what is worrying, what the claim is worth and what this merchant was corrected about before,
+   then the four pieces of evidence, the four questions, the working behind the figure, and last
+   the exact email that would go to the merchant.
+3. A claim the quick checks stopped is written up the same way, from its own reasons. It has no
+   products in it, so its report is about the whole claim rather than one product.
+4. Each report is filed under the claim it belongs to and can be fetched back afterwards. Closing
+   the page no longer loses it.
+5. A representative reads a claim's reports as a list, and acts on each one separately. They can
+   **approve** it — as it stands, or after rewording the email, or after changing what is paid —
+   or **send it back** with a note saying what is wrong.
+6. Whatever they do is written down: which report, which version of it, what they chose, what
+   they changed, their own words, and when.
+
+**What it connects to** — It reads what the investigation produced and what the quick checks
+established. It writes reports into the same database file the rest of the system uses, and
+writes what a representative decided into the record that was already there waiting for it. The
+stage that sends an approved email does not exist yet, so an approval stops at being recorded.
+
+**Choices we made**
+
+- **The report is a written document, not a set of fields.** The AI already answers in fixed
+  fields, and a plain function turns those into the document. That was asked for, and it means
+  what a representative reads is one thing they can copy to somebody else. The cost is real and
+  worth stating: a screen can no longer lay out the parts on its own, because there are no parts
+  to lay out — the requirement asking for structured data rather than prose is knowingly not met.
+- **A few facts sit outside the document.** Which claim it is, which product, what is
+  recommended, how much, how sure the system was, what the order was worth, who carried the
+  parcel, what the merchant said was wrong, and whether it has been approved. The list of a
+  claim's reports needs the first few to draw a row, and the record of what a representative
+  decided needs the rest to say what they changed and to group decisions afterwards. Everything
+  else is in the writing.
+- **What the merchant said was wrong is read out of their own description**, using the reader
+  built for exactly that alongside this. It is what they said, never checked, and the report does
+  not weigh it — it is kept because it is one of the few things about a claim known before
+  anybody looks at it. Who carried the parcel comes from ShipBob's shipment record instead, not
+  from the description, because the two can name different carriers.
+- **The other products on the claim are not written into the document.** Their state changes when
+  somebody approves one of them, and a document saying "waiting" beside a product approved ten
+  minutes ago would be worse than saying nothing. They are looked up fresh every time a report is
+  read.
+- **Approving is the only way out, and it is final.** A report can go back and forth as often as
+  a representative likes, but once approved it cannot be reopened, sent back, or approved again
+  differently. Nothing else can approve one: no time limit, no level of confidence, no number of
+  rounds.
+- **Approving twice is safe.** A double click, or a retry after a slow reply, leaves one decision
+  rather than two. Two *different* notes sent back on the same report are two decisions, and both
+  are kept.
+- **A representative may pay more than the limit.** The limit is on what the system recommends,
+  and no rule says a person cannot exceed it. So the decision stands, it is recorded as it was
+  made, and the report says plainly that it went over. Refusing would throw away a decision a
+  person made, which is worse than recording one somebody may query. **This is our reading**, not
+  something anyone has ruled on — see the questions at the end.
+- **A stopped claim's report recommends nothing.** The four recommendations are about a damaged
+  product, and a stopped claim has none. Its reasons are what it has to say, and turning them
+  into a recommendation would be the system inventing an answer nobody gave.
+- **Still undecided:** whether sending a report back should be possible at all until the stage
+  that reworks it exists. Today it parks the report and nothing picks it up.
+
+**When things go wrong**
+
+- **The store cannot be written.** The investigation still runs and still reports everything it
+  found — a representative watching it lose their work part-way through would be the worst
+  outcome. The reply says plainly that the findings were not kept and so cannot be approved,
+  which is a different thing from having no findings.
+- **The store cannot be read.** Asking for a report fails loudly rather than answering with an
+  empty list. An empty list looks exactly like a claim nobody has investigated, and a
+  representative has no way to tell the two apart.
+- **A report that does not exist**, or an action that does not make sense for the state it is in,
+  each get their own answer rather than a general failure.
+
+**Not ready for production** — Nothing signs in, so anyone who can reach the service can approve
+a payout, and the record cannot say who did. Sending a report back leads nowhere. How long a
+review took is accepted and never measured. What the run actually did step by step is not kept,
+so the ordered history of a case is still missing. All of these are in
 [Future production](#future-production).
 
-**Where the code is** — `src/claim_agent/domain/decision.py` is the record,
-`src/claim_agent/storage/decision_store.py` keeps it, `src/claim_agent/analysis/` works the
-figures out, `src/claim_agent/api/routes/analysis.py` is the way in,
-`tools/seed_analysis_history.py` writes the invented history, and `web/src/screens/
-AnalysisScreen.tsx` with `web/src/charts/` draws it.
+**On screen** — A representative watches an investigation as before, and the reports now arrive
+at the end of it: the document itself, drawn as it was written, with what is recommended and the
+amount above it. Under each one they can approve it, reword the merchant's email and then approve,
+or send it back with a note. All three reach the service and all three are recorded. The recipient
+of an email is shown and cannot be changed, because who hears about a claim is not a
+representative's to decide. **One sentence on that screen is the screen's own** — that approving is
+recorded and nothing else happens — because the service answers with a report, and a report has no
+way to describe what the rest of the system does not do.
+
+What is not on screen: the view over a whole claim. A claim's reports can be fetched together,
+with each product's own review state, and nothing draws that yet — so a representative sees the
+reports from the investigation they just watched and cannot come back to a claim tomorrow.
+
+**Where the code is** — `src/claim_agent/report/` holds the report, the writing of it, and the
+two review actions; `src/claim_agent/storage/report_store.py` keeps it;
+`src/claim_agent/api/routes/reports.py` is the way in; and
+`src/claim_agent/api/routes/investigate.py` is where a finished investigation is written down.
+On the screen: `web/src/components/ReportCard.tsx` draws a report and acts on it,
+`web/src/api/reportsClient.ts` is how it reaches the service, and
+`web/src/components/Markdown.tsx` grew the ability to draw a table, which a report needs and
+nothing before it wrote.
+
+---
+
+### Four tools that came from reading ShipBob's data, not the requirements
+
+The four sections that follow are different from every other feature in this document, and the
+difference matters more than the features do.
+
+Everything else here was built because REQUIREMENTS.md asked for it, and each section names the
+requirement it satisfies. **These four answer no requirement at all.** They came from reading
+ShipBob's sample claims and their attachments closely and finding four ways this system could hand
+a representative a confident recommendation that was quietly wrong:
+
+- ShipBob's records never say what currency a price is in, and the limit on a reimbursement is a
+  dollar figure. One sample claim ships by Royal Mail on a British tracking number, its evidence
+  reads in pounds, and its order totals a bare `90.00` — inside the limit as dollars, over it as
+  pounds.
+- A total printed on a photographed invoice is a claim the document makes about itself, and one
+  sample invoice contradicts itself three ways at once.
+- Every claim's description hides facts in prose, and those facts disagree with ShipBob's own
+  records on nearly every sample claim.
+- What ShipBob says a shipment was worth and what the customer's receipt says they paid disagree
+  on **all four** sample claims that have evidence — once by sixty dollars.
+
+Because nobody specified them, everything about them is our reading rather than ShipBob's rule.
+The exchange rates are invented. The thresholds are placeholders. And the question each of them
+raises — is a claim priced from ShipBob's catalogue or from what the customer paid? — is a product
+decision nobody has made, so none of these tools makes it. They report, and a person decides.
+
+They are tracked nowhere but here. TODO.md lists REQUIREMENTS.md ids and nothing else, and these
+have no id to list.
+
+---
+
+### Reading money that is not in dollars
+
+**What it does** — Works out which currency a claim's prices are in, and converts a figure into
+dollars so the $100 limit can be applied to it.
+
+**Why we need it** — The limit on what a claim may be reimbursed is a dollar figure (FR-1.20).
+ShipBob's records give us prices — and they never say what currency those prices are in. There is
+no currency field anywhere in ShipBob's system. A price arrives as the bare number `52.00`, and
+until now this system read every one of them as dollars.
+
+That is not a theoretical problem. One of the sample claims ships by Royal Mail on a tracking
+number ending `GB`, and the merchant's own order screen — a photograph attached to the claim —
+reads **£55.95**. The order totals `90.00`. Read as dollars that sits comfortably under the limit.
+Read as pounds it is over it. Same claim, same records, two opposite answers about whether a
+representative may approve it.
+
+**No requirement asks for any of this.** The requirements document never mentions currency, and
+neither does ShipBob's API documentation. This came out of reading the sample claims, and the
+exchange rates are placeholders that somebody at ShipBob has to sign off before they decide real
+money.
+
+**How it works**
+
+1. When a claim is being investigated, the system gathers what few clues it has about the currency:
+   a currency symbol somebody photographed, the country code at the end of the tracking number, and
+   the carrier's name.
+2. Those clues are ranked. A symbol on the evidence is trusted most, because it is the only clue
+   where a person actually wrote down what the money was; the rest are us inferring it from
+   geography.
+3. If the clues agree, the system says which currency it is and how sure it is. Three clues
+   agreeing is about as good as this data ever gets.
+4. **If two clues contradict each other, the system concludes nothing.** Not the strongest clue,
+   not a majority vote — nothing, marked as unsettled, for a person to decide.
+5. To convert a figure, the system looks the currency up in a fixed table of rates kept with the
+   other claim settings, multiplies, and rounds to the nearest cent.
+6. A currency that is not in the table does not quietly become dollars. The figure comes back
+   unconverted and the claim needs a person.
+
+**What it connects to** — It reads the shipment's carrier and tracking number, and any currency
+symbols the investigation read off the merchant's photographs. It produces a currency and a dollar
+figure that the reimbursement limit can then be applied to. The exchange rate table and the
+question of whether guessing is allowed both live with the other claim settings, so they can be
+corrected without changing any code.
+
+**Choices we made**
+
+- **A fixed table of exchange rates, not a live one.** A live rate would be more accurate and would
+  make this system unpredictable: the same claim, screened twice ten minutes apart, could be inside
+  the limit once and outside it the next time. It would also add an outside service that can fail
+  in the middle of judging a claim. A stale rate is an error you can see; a moving one is an error
+  you cannot. The date the rates were written down travels with every answer so nobody has to guess
+  how old they are.
+- **Two clues that disagree produce no answer at all.** This is the decision that matters most
+  here. A parcel posted in Britain whose paperwork shows a dollar sign is a genuine puzzle — it
+  might be a British merchant pricing in dollars, or it might be a photograph from somebody else's
+  order. Picking one quietly is how a claim gets measured against the wrong limit. The requirements
+  already say this system does not narrow two possibilities to one when the evidence will not
+  (FR-1.13), and this follows that.
+- **A dollar sign does not mean dollars.** Canada and Australia write their money with one too. It
+  narrows the currency to three, which is genuinely useful — it can rule the pound *out* even when
+  it cannot pick a winner — but it is never treated as an answer on its own.
+- **An unknown currency stops the claim rather than being assumed.** There is a setting that turns
+  this off, and it is off by default. When it is used, the answer says so out loud, because it is
+  the one path here that guesses about money.
+- **Dollars convert to dollars without consulting the table**, so a mistyped rate can never disturb
+  a claim that was already in the right currency.
+- **Still undecided:** the actual exchange rates. The ones shipped are roughly right for late 2026
+  and have no authority behind them.
+
+**When things go wrong** — A claim with no clues at all is the ordinary case, and it comes back
+saying so rather than guessing. A currency with no rate, or clues that contradict, both end with a
+figure that cannot be compared against the limit, which sends the claim to a person (NFR-4).
+Nothing here raises an error or stops a claim on its own.
+
+**Not ready for production**
+
+- The exchange rates are invented, and nothing refreshes them. A rate that is a year old will
+  quietly mis-measure every non-dollar claim against the limit, and the only warning is the date
+  printed beside the answer.
+- The clues are thin. A tracking country tells you where a parcel was posted, not where the
+  merchant prices things, and the list of single-country carriers has seven entries in it.
+- Nothing yet feeds real photographed currency symbols into this. Until the investigation records
+  the symbols it sees, the strongest of the three clues is always missing.
+- The rate table is not changeable from the admin screen, because that screen draws one control per
+  value and a table of rates needs a screen of its own.
+
+**Where the code is** — `src/claim_agent/domain/currency.py`, `src/claim_agent/policy.py`,
+`tests/unit/test_domain_currency.py`.
+
+---
+### Reading a price off a photograph, and checking the paperwork adds up
+
+**What it does** — Turns a price written on a photographed invoice into an exact figure the system
+can work with, and adds the document's own totals up again to see whether it agrees with itself.
+
+**Why we need it** — Merchants attach photographs of invoices and order screens to their claims,
+and those figures are the closest thing anyone has to what the customer actually paid. Two
+problems come with that.
+
+The first is reading the figure at all. Until now the investigation was told to report money
+*without* its currency symbol. That threw away the single most useful thing on one of the sample
+claims: an order screen reading `£55.95` for a product ShipBob records as a bare `52.00`. The
+symbol was the only place in the entire system where a currency was ever stated.
+
+The second is that documents are wrong. One sample invoice lists three items at `9.95`, `16.99`
+and `19.99` — which come to `46.93` — then prints a subtotal of `49.85`, a tax total of `0.00`
+beside a `2.92` tax line, and a grand total of `49.42`. No two of those agree. A figure taken off
+that document and used for a reimbursement would be wrong, and nothing would say so.
+
+**No requirement asks for this.** It came from looking at the actual attachments on the sample
+claims.
+
+**How it works**
+
+1. A piece of text that is meant to be a price goes in. The system notices how the document marked
+   a credit — accountants bracket a negative, some systems trail a minus sign — and keeps the
+   currency symbol or three-letter code written beside the figure.
+2. It reads the number, working out whether a full stop or a comma is separating thousands or
+   marking the decimal point.
+3. **If it cannot tell, it returns nothing at all.** A guessed figure is worse than no figure,
+   because nothing further down can tell the two apart.
+4. Separately, the priced lines read off a document go in with whatever totals the document
+   printed. The system adds the lines up itself, works out what the final total should have been
+   once tax, shipping and any discount are allowed for, and reports each place the document's own
+   figures disagree — forgiving a penny for rounding.
+
+**What it connects to** — It reads text the investigation got out of a photograph. It feeds the
+currency work and the price comparison. The rounding allowance is a claim setting, so it can be
+corrected without a code change.
+
+**Choices we made**
+
+- **A number that could be a thousandfold out is refused, not resolved.** `1.234` is one and a bit
+  in London and one thousand two hundred and thirty-four in Berlin, and nothing in the text settles
+  it. Assuming a country here would be wrong by a factor of a thousand on somebody's reimbursement.
+  Where both a comma and a full stop appear, the last one is the decimal point — true everywhere,
+  and it settles most real prices.
+- **Anything with words left over is not a price.** "total due 49.42" contains a number and is not
+  a price. Allowing leftover text would turn any sentence with a number in it into money.
+- **"We checked and it is fine" and "there was nothing to check" are kept apart.** A document that
+  printed no totals comes back as *not adding up*, with nothing listed against it and a sentence
+  saying why. Letting the two read the same way would tell a representative a document had passed a
+  check that never happened.
+- **A disagreement is reported without a currency symbol**, because this check never learns what
+  currency the document is in. Printing a `$` it did not see would invent the one fact the reading
+  half of this works hardest to preserve.
+- **Nothing here decides anything.** Whether a document that disagrees with itself should stop a
+  claim is a judgement for a person.
+
+**When things go wrong** — Text that is not money, or money that cannot be read without guessing,
+both come back as nothing, which is an ordinary answer rather than an error. Text arriving from a
+photograph is untrusted and could be any length, so only a bounded amount is scanned. Nothing here
+raises.
+
+**Not ready for production**
+
+- Nothing reads the totals off a photograph on its own. The investigation has to transcribe them
+  into the tool, so a document nobody transcribed is not checked at all.
+- Tax is taken as a single figure. Real invoices carry several tax lines at different rates, and
+  one sample document already lists tax as an item *and* as a total — exactly the shape this cannot
+  untangle on its own.
+- The reading half is exercised through the tool but nothing yet stores the symbols it finds, so
+  the currency work still has to be told about them by the model rather than reading them directly.
+
+**Where the code is** — `src/claim_agent/domain/document_money.py`, `src/claim_agent/policy.py`,
+`tests/unit/test_domain_document_money.py`.
+
+---
+### Reading the facts hidden in a case description
+
+**What it does** — Reads the few sentences a merchant writes when they open a claim and pulls
+the real facts out of them: which parcel, what kind of damage, how badly, how many orders, when
+the carrier last saw the parcel, and which carrier they say carried it. Then it holds each of
+those against ShipBob's own records and reports every place the two accounts disagree.
+
+**Why we need it** — ShipBob's claim portal takes a form and writes the answers out as a
+paragraph. The facts are all still in there, but until now nothing in the system read a single
+word of them, so we were throwing away the merchant's own account of what happened. Reading it
+turned out to matter more than expected: on four of the five sample claims the merchant's
+paragraph names a different carrier from the shipment record, and on two of them the tracking
+date in the paragraph is not the day the parcel was recorded as delivered. One claim says two
+orders were affected while the case covers exactly one. None of that was visible to anyone
+before. **No requirement covers this feature.** It came out of reading the sample data, not out
+of anything ShipBob asked for. The nearest rules it works under are the ones about screening
+giving the same answer every time (FR-0.6, NFR-1), never narrowing two possible answers to one
+(FR-1.13), and always failing towards a person rather than towards a guess (NFR-4).
+
+**How it works**
+
+1. Take the merchant's description off the case. If there is none, stop and say so — a claim
+   written in three words is a normal claim, not a broken one.
+2. Look for each fact in turn. Most descriptions label them, the way the form does. One of the
+   five sample claims labels nothing and writes the same facts as ordinary sentences, so each
+   fact has a second, looser way of being found as well.
+3. If a fact is answered twice with two different answers, use neither. Write down what was
+   said and move on.
+4. Turn the tracking date, written out in words, into a real date. If it is not a real date, say
+   so rather than dropping it.
+5. Match the damage wording and the defect wording against the wordings ShipBob is known to use.
+   A wording we have never seen keeps the merchant's own words and is left unmatched.
+6. Compare four of the results against ShipBob's records — the carrier, the parcel, the number
+   of orders, the tracking date — and write down every disagreement, always in that same order.
+7. Hand back the facts, the disagreements, and anything that was written down but could not be
+   used.
+
+**What it connects to** — It reads a support case and, when one is available, the shipment
+record for the parcel. It reaches nothing else: no network, no database, no model, no clock. It
+produces a set of facts, a list of disagreements, and a list of unusable answers. Nothing acts
+on any of it yet — it is written so the investigation can offer it to a representative, and so
+the disagreements can be shown beside the rest of the evidence.
+
+**Choices we made**
+
+- **Both the merchant's words and a tidy version are kept.** We considered filing every damage
+  and defect wording under a fixed set of categories. We only have two wordings of each, from
+  five claims, and we have never seen ShipBob's form, so a fixed set would have been our guess
+  at their list rather than their list. Instead the merchant's exact words are always kept, and
+  a tidy version sits beside them only when the wording is one we have actually seen ShipBob
+  write. Anything else stays as words. That is the difference between recognising a category
+  and inventing one.
+- **An unlabelled fact has to be a sentence of its own.** Without a field name in front of it,
+  the words "damage due to carrier mishandling" could just as easily be part of a sentence
+  saying the carrier was *not* at fault. So an unlabelled fact is only read when it is the whole
+  sentence. A labelled one is read wherever it appears, because the field name is proof enough.
+- **Unlabelled defect wording is only recognised, never read freely.** The damage cause always
+  opens with the same few words, so an unfamiliar cause still comes through. A defect sentence
+  has no such marker, so without a label we can only spot wordings ShipBob itself has written. A
+  defect described in new words, with no label, is not read at all. Reporting nothing is better
+  than reporting a sentence we merely hoped was about the box.
+- **Two answers means no answer.** A description giving two different parcel numbers gets
+  neither. Picking one would invent the answer, and the two could be two different parcels.
+- **"Other" counts as a disagreement.** It is one of the options on ShipBob's own form and it
+  means "not listed", so nearly every claim raises this. We report it anyway: a claim filed
+  against an unnamed carrier while a real carrier actually carried the parcel is worth a
+  representative's attention, not worth hiding.
+- **Still undecided:** nobody has said what any of this should *do*. Whether a claim whose
+  description is about a different parcel should be stopped, escalated, or merely annotated is a
+  product decision, and this feature deliberately makes none of it.
+
+**When things go wrong** — Nothing here raises an error at a caller. A missing description, a
+description that says nothing, a date that is not a date, an answer given twice, an unfamiliar
+wording — every one of them comes back as a value that is simply absent, with a plain sentence
+saying why where there is something to say. If the shipment record could not be read, the
+description is still read in full but two of the four comparisons cannot be made; that shows up
+as those disagreements not being reported, which is silence about a check that never ran rather
+than a clean bill of health. A merchant's description is treated as untrusted writing throughout:
+nothing in it can make this do anything except fill in the values it was looking for.
+
+**Not ready for production**
+
+- **The tidy damage and defect categories have two entries each, from five claims.** They are
+  what we have seen, not ShipBob's list. Somebody at ShipBob needs to hand over the real one.
+- **Only dates written out in words are read.** A date written as numbers is left unread on
+  purpose, because 11/02/2026 is two different days depending on where it was typed and nothing
+  here can tell which. The sample data only ever writes dates in words, so this has not cost us
+  anything yet.
+- **A value containing a full stop is cut short**, because a full stop is how the end of an
+  answer is recognised. A carrier or product name with a full stop in it would come back
+  truncated.
+- **Only the four disagreements above are checked.** The description carries other things worth
+  comparing, and the case carries its own delivery date which is never compared with anything.
+- **Nothing reads the output yet.** The facts and the disagreements are produced and go nowhere:
+  no screen shows them and no decision uses them. Until something does, a disagreement found here
+  is a disagreement nobody sees.
+- **There is no limit on how much text is read.** The patterns cost time in proportion to the
+  length of the description and no more, so an enormous description is slow rather than
+  dangerous, but nothing stops one being submitted.
+
+**Where the code is** — `src/claim_agent/domain/case_facts.py`, with its tests in
+`tests/unit/test_domain_case_facts.py`.
+
+---
+### Comparing ShipBob's prices with the customer's receipt
+
+**What it does** — Puts ShipBob's own record of what a shipment was worth side by side with the
+prices on the document the merchant sent in — an order confirmation, a sales order, a till
+receipt — and reports every place the two disagree. It does not decide which of the two is right.
+
+**Why we need it** — A reimbursement is worked out against a price, and in all four sample claims
+that came with any evidence at all, ShipBob's price and the customer's receipt disagree. One claim
+is priced at $195.94 in ShipBob's records while the receipt shows the customer paid $134.99 after a
+discount; another shows two priced lines against a single line on the merchant's screenshot, in
+pounds rather than dollars. Until now nobody had ever held the two documents up against each other,
+so a claim could be settled from a figure the customer never paid and nothing would notice. No
+requirement covers this. It came out of reading the sample data. The nearest existing rules are the
+one that forbids narrowing two possible matches down to one (FR-1.13), the reimbursement cap and
+who sets the amount (FR-1.20, FR-1.21), and the promise that the same claim is judged the same way
+twice (NFR-1).
+
+**How it works**
+
+1. Both documents arrive already read. ShipBob's lines come from the order or the generated
+   invoice. The receipt's lines come from whatever looked at the picture. Nothing here reads an
+   image, and nothing here fetches anything.
+2. Lines are tied together by product code first, because a code is exact. Where one line on each
+   document carries the same code, that is a pair.
+3. Whatever is left is tried again by product name, under the same rule. Capitals and extra spaces
+   are ignored, because they are typing rather than meaning. Nothing looser than that is allowed: a
+   name that merely starts the same is not a match, and a code with an extra suffix on the end is a
+   different code.
+4. Anything a code or a name could describe more than once is reported as unresolved, with the
+   candidates named, and no choice is made between them.
+5. Each paired line is compared. The report gives both figures, how far apart they are, and that
+   gap as a share of ShipBob's figure, and flags the line when the share is bigger than the claim
+   policy allows. Lines only one document knows about are reported as exactly that — a receipt
+   normally carries shipping and tax that ShipBob's records never mention.
+6. The two documents are then compared as wholes: what each comes to, the gap between them, and
+   whether they even list the same number of lines.
+7. Finally it writes a few plain sentences a representative can read, ending — always — with the
+   fact that which price a claim should be settled against is not decided here.
+
+**What it connects to** — It reads the priced lines ShipBob already holds for a claim and a list of
+lines read off the merchant's evidence. It produces a per-line comparison, the two totals and the
+gap between them, and the written summary. Nothing depends on it yet; it is a reading tool for the
+investigation to call, and its findings are meant to reach the representative's report.
+
+**Choices we made**
+
+- **It never says which price is authoritative.** Nobody has decided whether ShipBob's catalogue
+  price or the price the customer actually paid should settle a claim, and answering it here would
+  be inventing money. Both figures are reported, the gap is reported, and the summary says a person
+  chooses. This is the single most important thing about this feature, and it is written into the
+  code's own documentation as well as here.
+- **A difference in the number of lines is a finding in its own right.** Two of the four sample
+  claims are exactly that — two lines against one, and one against three — and it usually means the
+  two documents are describing different things, which makes any comparison of their totals worth
+  very little until somebody has looked at why.
+- **No currency conversion.** A currency label can be passed in and is carried straight back out,
+  so a reader can see that one side is in pounds and the other in dollars. Nothing is multiplied by
+  a rate. ShipBob's records carry no currency field at all, so the usual answer to "are these two
+  figures in the same money?" is "nobody knows", and that is reported as "cannot tell" rather than
+  quietly as "yes".
+- **The receipt's printed total wins over the sum of its own lines.** A receipt showing a discount,
+  shipping or tax prints a total its lines do not add up to, and the printed figure is the money
+  that changed hands. Both figures are reported, and the report says which one was compared.
+- **How far apart is too far apart is a setting**, not a number buried in the code, because it is a
+  judgement about claims (FR-0.7, NFR-7). It starts at a tenth, and a gap sitting exactly on the
+  line is allowed rather than flagged.
+- **Turned down:** picking the closest match when two were possible, converting currencies with a
+  rate table, and preferring one document's price over the other. Each would have produced a
+  tidier-looking answer built on a decision nobody has made.
+- **Still undecided:** which price settles a claim; whether a receipt's own printed total
+  disagreeing with its own lines should be a finding here rather than somewhere else; and whether
+  the tenth is the right threshold.
+
+**When things go wrong** — Nothing here refuses to answer and nothing here raises an error. An
+empty document on either side, a receipt with a total but no legible lines, prices that make no
+sense together — each is reported as what it is, because a representative can act on a finding and
+cannot act on an error. Where ShipBob prices a line at nothing and the receipt charges for it, the
+gap cannot be written as a share of anything, so it is reported without one and flagged anyway: any
+gap from nothing is a complete one. Money is exact from end to end — every figure is read as text
+into an exact decimal and never passes through the kind of number where cents drift.
+
+**Not ready for production**
+
+- *Not implemented:* nothing calls this yet. It is a reading tool with no reader, so no claim is
+  currently checked against a customer's receipt.
+- *Not implemented:* the numbers on the receipt side have to be read off the picture by something
+  else, and that something else does not exist yet. Until it does, this can only be fed by hand.
+- *Not implemented:* quantities are reported from both documents but never compared. A receipt
+  charging for three where ShipBob shipped one shows up only as a price gap, and a reader has to
+  spot the reason themselves.
+- *Could break:* a receipt that prints the price of one item where ShipBob's line covers three will
+  read as a large disagreement, because the two documents are counting different things. That is
+  the honest reading, but it will look alarming and somebody will have to explain it.
+- *Could break:* the threshold, and the decision that a gap exactly on it is allowed, are ours and
+  have had no sign-off. Set too low, every claim reports a disagreement and representatives stop
+  reading; set too high, the sixty-dollar overpayment this feature exists to catch slips through.
+- *Would improve:* a rule for which price settles a claim would turn this from a report into an
+  answer. Somebody who owns the requirements has to make that call.
+- *Would improve:* matching is exact on codes and on names. Real receipts abbreviate, truncate and
+  misspell, so a stricter-than-human rule will report a lot of "only on the receipt" lines that a
+  person would have paired at a glance. Loosening it safely means deciding what to do when two
+  candidates are close, which is the judgement FR-1.13 forbids making alone.
+
+**Where the code is** — `src/claim_agent/domain/price_reconciliation.py`, tested in
+`tests/unit/test_domain_price_reconciliation.py`. The threshold lives with the other claim
+thresholds in `src/claim_agent/policy.py`.
+
+---
+### Matching a claimed product to the order it came from
+
+**What it does** — Looks at one product a merchant says was damaged and finds every product on
+the order it could plausibly be, with a score for how sure that is and a plain sentence saying why.
+
+**Why we need it** — The system already had a way to tie a claimed product to an order line, but it
+could only ever say "exactly one line matches" or "no line matches" or "more than one line
+matches" — useful for pricing, where a wrong guess would misprice a payout, but far too strict for
+working out what a merchant is even describing. The real sample data barely ever spells a product
+the same way twice: ShipBob calls one product `Blue Razz Liquid Carnitine`; the customer's own
+invoice calls it `liquid carnitine 3000`. ShipBob's `2.5LBS White Chocolate Raspberry Huge Whey`
+becomes `huge whey | protein powder` on a receipt. Product codes drift the same way — ShipBob's
+`A00299` shows up on a receipt as `A00299-LV-8-N`. None of those pairs match exactly, so the old
+rule would call every one of them "not on the order", which is the least useful answer there is.
+No requirement in REQUIREMENTS.md asks for this; it came from reading the sample cases, and the
+nearest ideas already in the requirements are FR-1.13 (never narrow two candidates to one) and
+FR-1a.2 (a claimed product has to be tied to a real one on the order).
+
+**How it works**
+
+1. The claimed product is checked against every line on the order, one at a time.
+2. If its product code matches a line's code exactly, that is certain — the strongest possible
+   answer.
+3. If the codes do not match exactly but one is the start of the other — ShipBob's `A00299` and a
+   receipt's `A00299-LV-8-N` — that counts too, just less certainly, since one system's code plainly
+   grew a suffix somewhere between the two records.
+4. If neither code check settles it, the two names are compared once capitals and extra spacing are
+   ignored. An exact match here is strong evidence, though not as strong as a matching code.
+5. If even that fails, the two names are broken into words, a short list of packaging words — sizes,
+   counts, "pack", "oz", "lbs" — is stripped out of each, and what is left is compared. Sharing two
+   or more real words, like "liquid" and "carnitine", is treated as a genuine, if weaker, signal.
+   Sharing only one word — which is exactly what two different products from the same brand always
+   do — is not enough on its own to count as a match at all.
+6. Every line that clears the confidence bar in policy is returned, scored and explained, ordered
+   strongest first.
+7. **If two or more lines tie for the strongest score, none of them is picked.** They are all
+   returned, each flagged as tied, so nobody downstream can quietly treat a coin flip as an answer.
+
+**What it connects to** — It reads a claimed product (however an investigation described it) and
+the order's own line items, and the confidence bar comes from the same claim policy every other
+threshold in this system reads from. It produces a list of candidate matches for a representative,
+or a future tool, to weigh — it does not decide anything on its own.
+
+**Choices we made**
+
+- **Every tier that applies gets checked independently for every line**, rather than stopping at the
+  first line that clears some bar, because the point of this module is surfacing every plausible
+  candidate, not the first one.
+- **A single shared word is deliberately scored below the ordinary confidence bar.** Two completely
+  different products from the same brand will always share the brand's name; if that alone counted,
+  every product in a merchant's catalogue would look like a candidate for every claim from that
+  merchant. Two shared words is required before word overlap counts as real evidence on its own.
+- **A code prefix has to be at least four characters before it means anything**, so two products
+  that merely start with the same one or two letters are not mistaken for the same code.
+- **Ties are never broken by any rule at all**, not even a coin flip dressed up as a tiebreaker.
+  That is what FR-1.13 already asks for elsewhere in this system, applied here too.
+- **Still undecided:** exactly where in the investigation this gets called from, and how a
+  representative sees the result on screen. This module only answers "which lines could this be";
+  wiring it into a tool the investigation can call, and into the report a rep reads, is separate
+  work.
+
+**When things go wrong** — There is no failure path as such: an order with no lines, or a claimed
+product that matches nothing at all, both come back as an empty list of candidates, which is a real
+answer rather than an error. Nothing here reaches the network, reads a clock, or can raise.
+
+**Not ready for production** — The packaging-word list and the code-prefix rule are both short,
+hand-picked lists built from the five sample cases; a product whose real name happens to be, say,
+"Pack" would be handled wrong, and nobody has checked that against ShipBob's full catalogue. The
+scoring tiers are fixed numbers chosen to make the sample cases behave sensibly, not numbers ShipBob
+has agreed to.
+
+**Where the code is** — `src/claim_agent/domain/item_matching.py`,
+`tests/unit/test_domain_item_matching.py`.
+
+---
+
+### Reading what the merchant actually asked for
+
+**What it does** — Reads the words a merchant used in their own claim and says, by a small set of
+fixed keyword rules, whether they recognisably asked for a refund, a replacement, a replacement
+part, or the order sent again.
+
+**Why we need it** — A damaged-in-transit claim defaults to a reimbursement recommendation, and
+that is not always the right question to answer. CASE-1004's merchant wrote: *"How can I get a lid
+replacement for my roller? It broke pretty quickly after receiving - thought I'd ask!"* — a request
+for one broken part, on a claim already closed, 73 days after delivery. Pricing out the whole roller
+answers a question nobody asked. CASE-1002's merchant wrote: *"please either refund me in its
+entirety or send me my package in its entirety it's your choice"* — two remedies, offered as
+alternatives, in their own words. No requirement covers this; it came from reading the sample cases,
+and the nearest existing idea is NFR-4 ("fail toward the human"): an unclear reading is reported as
+unclear rather than resolved by a guess.
+
+**How it works**
+
+1. The merchant's text — already read out of an email or a screenshot by something else — is
+   handed in, and only the first two thousand characters of it are ever looked at, since it is
+   untrusted input with no guaranteed limit on its length.
+2. Three independent checks run over it: one for a refund, one for a replacement, one for the order
+   being sent again. Each looks for a short, fixed list of words and phrases.
+3. The replacement check is the only one with a second step: if a word for a single part — "lid",
+   "cap", "handle" and a dozen others — appears close to the word "replace" or "replacement", the
+   request is read as being for that part, not for the whole item.
+4. Every check that finds something reports the exact words that triggered it, quoted from the
+   merchant's own text, never paraphrased.
+5. If nothing recognisable is found, the result says so plainly. That is treated as a correct
+   answer, not a failure — this system is not in the business of guessing what silence means.
+
+**What it connects to** — It reads a single piece of text, and nothing else. It produces a list of
+remedies the merchant's own words seem to ask for, each with the phrase that triggered it, meant for
+a representative to check against their own reading of the same claim.
+
+**Choices we made**
+
+- **This is deliberately shallow, and we are saying so rather than hiding it.** Keyword rules over
+  free text will miss politeness, sarcasm, and anything phrased indirectly. The model that already
+  read this text out of an image is better at understanding what somebody is asking for than a fixed
+  list of phrases ever will be.
+- **We are recommending this stay a rep-facing cross-check, not a tool the investigation calls
+  mid-run.** Feeding a shallow keyword signal back into the model's own reasoning risks anchoring it
+  on a wrong reading of text the model has already looked at once, more carefully. Where it earns
+  its keep is on the report a representative reads afterwards: a plain, checkable "here is exactly
+  the word that made this look like a refund request", sitting beside the model's own account of the
+  same claim, not instead of it. Whoever wires this in should treat that placement as a real design
+  decision, not a default.
+- **Only the first occurrence of "replace" in the whole message is read.** A message asking about
+  two different replacements will read as one, and needs a person regardless of what this says.
+- **Unclear is a first-class, correct outcome**, not an error state — a message that never mentions
+  any of these words is telling us something real.
+
+**When things go wrong** — There is no failure path: empty text, text with no recognisable remedy,
+and text past the length cap all produce an ordinary result rather than an error. A truncated
+message is flagged as such, so a representative knows the reading might be incomplete.
+
+**Not ready for production** — The keyword lists are short and built from the two cases that
+motivated this feature; a merchant using a word for "refund" or "replace" not on these lists will
+read as unclear, indistinguishable from a merchant who genuinely did not ask for anything. There is
+also an open question this fragment is not answering on its own behalf: whether this belongs in the
+investigation's tools at all, given the risk of anchoring described above.
+
+**Where the code is** — `src/claim_agent/domain/remedy.py`, `tests/unit/test_domain_remedy.py`.
+
+---
+
+### Whether there is enough evidence to recommend anything yet
+
+**What it does** — Looks at what was found for each of the four kinds of evidence a reimbursement
+decision needs, and says whether a recommendation can stand on it — and if not, exactly what to ask
+the merchant for.
+
+**Why we need it** — CASE-1005 has zero attachments, and its status is already "Waiting on
+Client" — nobody has sent anything yet. The right output for a case like that is not a priced
+verdict and not a vague "insufficient evidence"; it is a specific, sendable request naming exactly
+which of the four things is missing. This module adds no new judgement about any single piece of
+evidence — that already exists — it only assembles those judgements into the verdict a
+representative actually wants: can we recommend anything, and if not, what happens next. No
+requirement asks for this exact shape; FR-1.6 and FR-1.7 are the requirements it serves, and NFR-4
+is why a gap on our own side escalates instead of being asked of the merchant.
+
+**How it works**
+
+1. What was found for each of the four required kinds of evidence — an invoice, the customer's own
+   confirmation it arrived damaged, a photo of the damaged product, a photo of the outer box — is
+   handed in.
+2. A recommendation is supportable only if all four are present and can be relied on. Anything short
+   of that, for any reason at all, means no.
+3. Each gap is sorted into one of two buckets. A piece of evidence nobody sent, or one that arrived
+   too dark or blurry to use, is the merchant's to fix, and produces a specific, ready-to-send
+   sentence — "a photograph of the outer box the order arrived in", never "more evidence".
+4. A piece of evidence *we* failed to fetch or could not get an answer about goes in the other
+   bucket entirely. It is never turned into a request to the merchant, because asking them to fix our
+   own failure is a request they cannot act on. Any entry in this bucket means the claim needs a
+   person, regardless of how complete everything else is.
+5. A one- or two-sentence summary is put together for a representative who reads nothing else.
+
+**What it connects to** — It reads a set of evidence findings that already exist elsewhere in the
+system, and produces a verdict plus a set of ready-to-send requests. It adds nothing to the four
+kinds of evidence or their four possible states — it reuses exactly what is already there.
+
+**Choices we made**
+
+- **The distinction between "the merchant can fix this" and "we broke this" is treated as sacred**,
+  because `agent/tools.py`'s own docstring already says asking a merchant to fix our failure is worse
+  than no request at all. This module exists specifically to keep that boundary from blurring once
+  results are assembled into one list.
+- **A kind of evidence entirely absent from the findings counts as missing**, the same way the
+  underlying evidence rules already treat it, rather than requiring every caller to remember to
+  record the negative case explicitly.
+- **The request for unusable evidence quotes the actual, specific reason it could not be used**,
+  rather than a generic "please resend", so a representative can copy it straight into a reply.
+- **This module takes findings for one claim at a time and expects the caller to have already
+  combined the evidence shared across a whole claim with the evidence specific to one claimed
+  product**, rather than knowing about that split itself — keeping that judgement where the rest of
+  the evidence rules already live.
+
+**When things go wrong** — There is no failure path: an empty set of findings, a fully complete set,
+and every mixture in between all produce an ordinary, if different, result. Nothing here reaches the
+network or can raise.
+
+**Not ready for production** — The exact wording of each request is fixed in code rather than
+reviewed by anyone at ShipBob, and a representative cannot yet edit it before it goes out. Nothing
+yet calls this from the investigation or shows its output on a screen — it exists as a building
+block for both.
+
+**Where the code is** — `src/claim_agent/domain/evidence_sufficiency.py`,
+`tests/unit/test_domain_evidence_sufficiency.py`.
+
+---
+### Spotting the same photograph on two claims, and claims that are connected
+
+**What it does** — Notices when the same photograph appears more than once, and finds other claims
+tied to this one by shipment, order or merchant.
+
+**Why we need it** — Two of the sample claims carry the *same photograph*. It is byte-for-byte
+identical and sits at the same storage address, yet it is attached to claims from two different
+merchants. Nothing in the system noticed. A claim whose evidence is really somebody else's is a
+claim that can be settled on the wrong facts. Separately, ShipBob has a way to list every case, and
+nothing has ever called it — so the system cannot see that two claims name the same parcel.
+
+**No requirement asks for this.** It came from downloading the sample attachments and comparing
+them.
+
+**How it works**
+
+1. Photographs are compared first by their storage address, with the temporary signature stripped
+   off the end. Two attachments stored at the same address are the same file, and working that out
+   costs nothing but the addresses already in hand.
+2. Where the pictures have already been downloaded, they are compared by a fingerprint of their
+   contents as well, which catches a copy filed at a genuinely different address.
+3. Duplicates are grouped and reported twice over: those within one claim, and those shared across
+   claims.
+4. Separately, a claim can be compared with other claims already read, and reports what they share
+   — the same parcel, the same order, the same merchant, the same account.
+
+**What it connects to** — It reads the list of a claim's attachments, which the investigation
+already has, and the case records. The duplicate check is offered to the investigation as part of
+asking whether the evidence is enough.
+
+**Choices we made**
+
+- **A duplicate is never called fraud.** Merchants re-send photographs for innocent reasons all the
+  time, and a support tool that cried fraud would be worse than useless. It is put in front of a
+  person as something to look at.
+- **The comparison catches an identical file and not a re-saved one.** A picture cropped or saved
+  again would slip past. Catching that needs a different kind of fingerprint and a new dependency,
+  which a demonstration does not earn — but it is worth knowing that the check is exact rather than
+  approximate.
+- **Relating claims does no reading of its own.** ShipBob's list of cases carries only a summary —
+  no order, no shipment, no merchant — so relating claims properly means reading every candidate
+  case in full first. That cost belongs to whoever calls this, and stating it plainly is better
+  than hiding a request-per-case inside a function that looks cheap.
+
+**When things go wrong** — No attachments, no duplicates and no other claims are all ordinary
+answers rather than failures. Nothing here raises.
+
+**Not ready for production**
+
+- **Nothing calls the related-claims part yet.** It is built and tested, and no tool or screen
+  reaches it, because doing so would mean reading every case in full on every claim. With five
+  sample claims that is five extra requests; with fifty thousand it is not a thing you would do at
+  all. It needs a search ShipBob does not offer.
+- The duplicate check only compares a claim against itself in practice, for the same reason — the
+  cross-claim comparison works, but nothing gathers other claims' attachments to feed it.
+- Comparing by fingerprint requires the pictures to have been downloaded already, so a duplicate is
+  usually caught by its address or not at all.
+
+**Where the code is** — `src/claim_agent/domain/evidence_integrity.py`,
+`tests/unit/test_domain_evidence_integrity.py`.
 
 ---
 
@@ -1562,6 +2450,60 @@ corner or spot a risk — writing it down is what separates a known limitation f
 finds in production.
 
 ### Not implemented
+
+- **Four of the eight investigation tools answer no requirement.** Currency, the document
+  arithmetic check, the case-description reader and the price comparison all came from reading
+  ShipBob's sample data rather than from REQUIREMENTS.md. Nobody at ShipBob has agreed that any of
+  them is the right behaviour, and they are tracked in this document only — TODO.md holds
+  requirement ids and these have none. If ShipBob disagrees with any of them, the tool is wrong,
+  not the requirement.
+- **The exchange rates are invented and nothing refreshes them.** They sit in the claim settings
+  with the date they were written beside them. A rate a year old will quietly mis-measure every
+  non-dollar claim against the limit, and the only warning anyone gets is that printed date.
+- **Nothing decides which price is authoritative.** ShipBob's catalogue price and the customer's
+  receipt disagree on every sample claim, and the system reports both and picks neither. Until
+  somebody decides, a representative has to choose on every claim where the two differ.
+- **Six more tools from the same review were specified but not built.** Checking whether a case is
+  even answerable (one sample case is `Closed`, another is `Waiting on Client` with no
+  attachments); reading a date that could be two dates; spotting the same photograph attached to
+  two different claims; finding other claims on the same shipment or merchant; proving a document
+  in a photograph belongs to this claim at all; and matching a damaged product to an invoice line
+  when the names differ. Each is a real gap visible in the sample data. The claim settings they
+  would read are already in place; nothing reads them yet.
+- **The currency of a claim is a tool the model may or may not call.** It should be worked out
+  before the investigation starts, the way precedent already is, so that two runs of the same claim
+  cannot differ purely in whether the model thought to check. As it stands, they can.
+
+- **Anything behind a report being sent back.** A representative can say what is wrong and the
+  report is parked with their words kept, and then nothing happens: the stage that would rework a
+  report around what they said is not built. A report sent back waits for somebody to approve it
+  instead. It is the one action on the screen that leads nowhere.
+
+- **Any sign-in on approving a report.** Anyone who can reach the service can approve a claim, and
+  the record cannot say who did — it has a space for the name and leaves it empty on purpose,
+  because guessing would be worse. This is the most serious gap in the whole system now that
+  approving exists: it is what releases a payment, and it is unguarded. It is worse than the same
+  gap on the rules screen, which at least only changes what later claims are judged by.
+
+- **How long a review took is never measured.** The figure is accepted from whoever calls and is
+  nothing by default. Every saving worked out from it is therefore an upper bound, and the
+  business screen should not be believed on that number until something actually times a review.
+
+- **The step-by-step record of a run is not kept.** What the investigation did and saw in order
+  travels in the reply and is then gone. So a report can be re-read but the working behind how it
+  was reached cannot, and the ordered history of a case the requirements ask for is still missing.
+  The same goes for which past claims a run was shown: they are not pinned to it, so the same
+  claim investigated twice could be shown a store that has grown in between.
+
+- **A claim stopped by the quick checks is only written down if somebody asks for it to be
+  investigated.** The screening request on its own keeps nothing, and the screen only asks for an
+  investigation when a claim passes — so a stopped claim looked at from the browser produces
+  nothing to approve. Asking the investigation about it directly does write it down.
+
+- **A claim whose products could not be told apart produces no report.** Nothing was established
+  about any product, so there is nothing to recommend and nothing to approve, and the only place
+  it is said is the reply as it streams. The claim still needs a person and there is nowhere for
+  them to act on it.
 
 - **Any test at all for the screen.** The Python side has 224 tests; the web page has none, and
   it is not covered by the checks that run before every push either. Both were deliberate — it is
@@ -1594,13 +2536,14 @@ finds in production.
   requirement that a representative's corrections improve the next claim from that merchant is
   still entirely unmet, even though the screen now has the edit that would feed it.
 
-- **Stages 2, 3 and 4 of the claim pipeline.** The triage that splits a claim into products, the
-  per-product investigation, the report the AI produces, the revision loop, and the post-approval
-  sending are all still empty. Only the quick checks exist.
-- **Anywhere to keep a screening.** The answer exists only in the reply to the request that asked
-  for it. A representative cannot fetch it again, nothing records what was decided or when, and a
-  restart loses everything — which also means there is no ordered history of a claim, something
-  the requirements ask for outright.
+- **The revision loop, and the sending that follows an approval.** Splitting a claim into
+  products, investigating each one, and the report a person decides from all exist now. Reworking
+  a report around what a representative said, and sending an approved email or paying anything,
+  do not.
+- **Anywhere to keep a screening asked for on its own.** Investigating a claim writes a report
+  down, and a screening request does not — so a claim the checks turn away is only kept if
+  somebody asks for it to be investigated. Nothing records what a run did step by step either, so
+  the ordered history of a claim the requirements ask for is still missing.
 - **Nothing writes down a representative's corrections.** Merchant memory can be read and can be
   written, and the screen reads it, but no part of the system puts anything in it yet, because
   the part that would is in a later stage. In practice the system does not yet learn between
@@ -1667,7 +2610,68 @@ finds in production.
   those today. A model that starts to would produce something readable but untidy rather
   than something broken.
 
+- **Every figure on the analysis screen is invented, and nothing on screen says so.** The screen
+  carries the numbers itself rather than reading them from anywhere, because nothing records a
+  real decision — the stage where a representative decides is not built — and a dashboard that is
+  blank until somebody runs a command demonstrates nothing. So a viewer has no way to tell these
+  figures from measured ones. This is the same trade the send button makes, and it has the same
+  mitigation: it is written down here, in UI-TODO.md, and in the docstring of
+  `web/src/analysis/demoFigures.ts`, and nowhere else. Nobody should carry a number off that
+  screen into a decision. Fixing it means building the review stage, not the screen.
+
+- **The service behind the analysis screen has no caller.** The record, the store, the arithmetic
+  and `GET /analysis/performance` are all built and tested, and nothing uses them: the screen was
+  pointed at a file instead. They are not dead code — the address works and answers correctly
+  against the real store — but they are unexercised outside the tests, and the longer that lasts
+  the more likely they are to drift away from what the screen actually wants.
+
+- **The store of decisions is half a feature.** It reads and it writes, and nothing in the service
+  calls the writing. That is the same position merchant memory has been in since it was built, and
+  it has the same consequence: the code is exercised only by tests and by a demonstration tool, so
+  the first real caller will be the first thing to find out whether it is right.
+
+- **The hourly rate and the cost of investigating are numbers we chose.** Every saving in dollars
+  on the analysis screen rests on them. They are shown on screen, marked provisional, with the
+  service's own explanation beside them, which is the most that can honestly be done until
+  somebody with the authority to say supplies real ones.
+
+- **How long a review takes is recorded but never measured.** The figure comes from the invented
+  data. Nothing in the system times a representative, and there is nowhere for a real duration to
+  come from until the review stage exists.
+
 ### Could break
+
+- **A claim whose money is not in dollars can still be measured against a dollar limit.** The
+  currency tool exists, but nothing forces the investigation to use it. A run that does not call it
+  prices a pound claim as though it were dollars, and the answer looks exactly like a correct one.
+- **The investigation now has eight tools where it had four.** More choices make it likelier that
+  the model reaches for the wrong one, or forgets a relevant one. Nothing measures this, and there
+  is no evaluation that would catch the recommendation getting worse rather than better.
+- **The case-description reader is built on patterns matched against merchant prose.** The sample
+  descriptions come in two shapes and it handles both, but a third shape ShipBob starts writing
+  tomorrow would silently read as "the description said nothing" rather than as a failure.
+- **Reading the money off a photograph is still the model's job.** Everything downstream — the
+  currency, the arithmetic check, the price comparison — is exact and repeatable, and all of it is
+  fed by a figure a model transcribed from an image. A misread digit produces a confident, wrong,
+  and perfectly self-consistent answer.
+
+- **The report is prose, so nothing can lay out its parts.** That was asked for and it is what
+  makes a report one thing somebody can copy to a colleague. The cost is that a screen can only
+  show the writing: it cannot put the evidence in one panel and the figure in another, cannot
+  fold a section away, and cannot sort or filter anything inside a report. The requirement asking
+  for structured data rather than prose is knowingly unmet, and going back on it later means
+  writing the report a second way rather than adjusting this one.
+
+- **A report's words are fixed when it is written.** Changing how reports read improves the next
+  one and leaves every stored one exactly as it was. That is right for a record — a representative
+  who approved a report should be able to see what they approved — but it means two reports on a
+  screen can be worded differently for no reason a reader can see, and there is nothing marking
+  which is which.
+
+- **A report and the claim it is about can drift apart.** The report copies what the claim was
+  worth, who carried it and what the merchant said, and nothing goes back to check them. If
+  ShipBob's own record changes afterwards, the report keeps saying what was true when it was
+  written and nothing says so.
 
 - **The stand-in for ShipBob is not ShipBob.** It serves nine claims from the same sample records
   the tests use. Anything the real API does that those records do not show — a field with an
@@ -1695,6 +2699,15 @@ finds in production.
   this screen shows and what the system does, and the only defence against it is that it is
   written down here and in the design notes beside the code. It would go away entirely if the
   service reported its stages as it went — see **Would improve**.
+- **The line between "consistent with a past claim" and "reasoning from one" is wording, not
+  structure.** Nothing another claim holds can reach an investigation as data: the claim it
+  answers about is fixed when its tools are built, and every image it can fetch belongs to that
+  claim. But the past claims it is *shown* are text, and text persuades — one run used a past
+  claim from another merchant to explain away a photograph on the claim in front of it, and put
+  that in the concerns a representative reads. The rules now forbid it in as many words and a
+  test holds that wording in place, which is a weaker thing than a door the model cannot open.
+  If it happens again the answer is to show fewer of a past claim's details, not to write
+  another sentence.
 - **Only the conversation holds a screening.** It was true before that nothing was stored, and it
   bites harder now: picking a second claim throws the first conversation away without asking, and
   takes any rewording of its email with it. There is no way back to it.
@@ -1811,7 +2824,40 @@ finds in production.
   question about the stream rather than the layout: a talkative model on a claim with several
   products makes a larger reply, and nothing anywhere says how large is too large.
 
+- **The confidence comparison is only as good as the data under it.** The analysis screen puts how
+  sure the system said it was next to how often a representative agreed, which is the check nobody
+  has ever run on that figure. On the invented data it shows the system flattering itself at the
+  top of the range. On real data it might show the opposite, or nothing at all, and the screen
+  would report that just as confidently. The panel is a way of asking the question, not an answer.
+
+- **The candidate rules could be read as an offer.** They are scored and labelled, there is no
+  switch beside any of them, the verdict carries no colour, and the caveat naming FR-2.9 travels
+  with the table. All four of those are load-bearing. A future change that sorted the rows by
+  coverage, coloured "meets bar" green, or put a button next to a row would turn a piece of
+  evidence into something that looks like permission, and the requirements say a person approving
+  is the only way a claim is ever released.
+
+- **The new table has no migration, like the others.** It is created only if it is absent, so
+  changing its columns later would silently do nothing on a database that already exists.
+
+- **A year of decisions is read into memory to answer one request.** Five thousand rows is
+  nothing; five million would not be. There is no paging and no pre-aggregation, and the first
+  sign of trouble would be the screen simply getting slower.
+
+- **The analysis is anchored to the moment it is asked.** Two people asking on either side of
+  midnight get windows a day apart, and the invented history is rewritten to end on the day the
+  seeding tool was last run. Neither matters for a demonstration and both would need thinking
+  about before anybody compared two reports.
+
 ### Would improve
+
+- **Work out the currency before the investigation starts** and hand it to the run as a fact, the
+  way precedent already is. That removes the "did it remember to check?" failure entirely.
+- **Have the investigation record currency symbols as it reads images**, so the strongest of the
+  three currency clues stops depending on the model choosing to mention it.
+- **Decide, once, whether a claim is priced from ShipBob's records or from the customer's receipt.**
+  Every claim where they differ currently costs a representative a judgement call, and two
+  representatives will not make it the same way.
 
 - **A record of every screening, and the ability to fetch one back.** This is the single biggest
   gap: it blocks an audit trail, protection against doing something twice, and a representative
@@ -1854,6 +2900,21 @@ finds in production.
   as a list.
 
 ### Questions for whoever owns the requirements
+
+- **May a representative pay more than the limit?** Nothing says. The limit is written as a limit
+  on what the *system* may recommend, and the revision rules say that where a person asks for
+  something the rules forbid the answer is to say so plainly rather than refuse. So a figure over
+  the limit is accepted, recorded as it was made, and flagged in the report. **That is our
+  reading**, and the opposite reading is just as available. If it should be refused, the rule
+  belongs beside the limit in the rules file rather than in the code that reviews a report.
+
+- **What should a stopped claim's report recommend?** Nothing, today. The four recommendations are
+  about a damaged product and a stopped claim has none, so its reasons are what it has to say. A
+  representative approving one is agreeing to close the claim, and the report does not put that in
+  so many words because nobody has said it should.
+
+- **Should a report be able to be sent back before there is anything that reworks it?** It can be
+  today, and nothing picks it up.
 
 - **May a claim be recommended for more than the goods cost?** Nothing decides this. The AI judges
   what the damage is worth and only the maximum limits it, so a badly damaged $12 item could in

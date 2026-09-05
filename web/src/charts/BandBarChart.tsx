@@ -71,6 +71,7 @@ export function BandBarChart({
     <ChartFrame
       title={title}
       summary={summary}
+      showSummary={false}
       height={height}
       axisBand={sublabels === null ? PLOT.axisBand : 42}
       count={bars.length}
@@ -81,7 +82,9 @@ export function BandBarChart({
       xFor={(plot, index) => bandCentre(plot, bars.length, index)}
       tipFor={(index) => ({
         heading: humanise(bars[index]?.label ?? ""),
-        rows: [{ token, name: "Figure", value: bars[index]?.text ?? "—" }] as readonly TipRow[],
+        rows: [
+          { token, name: "Accepted without changes", value: bars[index]?.text ?? "—" },
+        ] as readonly TipRow[],
       })}
     >
       {(surface) => (

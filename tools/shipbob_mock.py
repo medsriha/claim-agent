@@ -257,6 +257,33 @@ async def _answer(
     return Response(content=_to_json(record), media_type="application/json")
 
 
+@app.get("/cases", summary="List every support case")
+async def list_cases() -> Response:
+    """Return a short entry for every claim, the way ShipBob's own listing does.
+
+    **Only five fields per case, and that is the point.** ShipBob's listing does not carry
+    the order, the shipment, the merchant or the account name, so nothing can work out
+    which claims are related to one another from this alone — each one has to be read in
+    full afterwards. Serving a fuller record here would be more convenient and would
+    teach a caller something untrue about what the real API gives them.
+
+    The order is the order the records are declared in, so two runs of the demo list the
+    claims the same way (NFR-1).
+    """
+    listing = [
+        {
+            "case_id": case["case_id"],
+            "case_number": case["case_number"],
+            "status": case["status"],
+            "subject": case["subject"],
+            "created_date": case["created_date"],
+        }
+        for case in CASES
+    ]
+    await _hold_the_answer_back()
+    return Response(content=_to_json({"cases": listing}), media_type="application/json")
+
+
 @app.get("/cases/{case_id}", summary="Read one support case")
 async def get_case(case_id: str) -> Response:
     """Return the merchant's claim, or 404 if there is no such case."""

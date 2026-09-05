@@ -1958,3 +1958,191 @@ p {
     transition: none;
   }
 }
+
+/* --- A report a representative decides on (FR-2.1, FR-2.8) ---------------- */
+/*
+ * The frame follows a line report's: a card with a coloured edge saying what is recommended,
+ * so the two read as the same kind of thing. The document inside it is the service's own
+ * writing and is deliberately given room, because it is what a representative actually reads.
+ */
+.report-card {
+  padding: 0.9rem 1rem;
+  background: var(--sb-surface);
+  border: 1px solid var(--sb-line);
+  border-left: 4px solid var(--sb-brand);
+  border-radius: var(--sb-radius);
+  box-shadow: var(--sb-shadow);
+}
+
+.report-heading h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+.report-heading p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0;
+}
+
+.report-recommendation,
+.report-state {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--sb-brand-tint);
+  color: var(--sb-brand-strong);
+}
+
+.report-recommendation.is-approve {
+  background: var(--sb-pass-tint);
+  color: var(--sb-pass);
+}
+
+.report-recommendation.is-deny {
+  background: var(--sb-stop-tint);
+  color: var(--sb-stop);
+}
+
+.report-recommendation.is-request_info,
+.report-recommendation.is-escalate {
+  background: var(--sb-flag-tint);
+  color: var(--sb-flag);
+}
+
+.report-state.is-approved {
+  background: var(--sb-pass-tint);
+  color: var(--sb-pass);
+}
+
+.report-state.is-changes_requested {
+  background: var(--sb-flag-tint);
+  color: var(--sb-flag);
+}
+
+.report-amount {
+  font-weight: 700;
+}
+
+.report-decided {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--sb-flag);
+}
+
+/* The report's own writing, held apart from the controls under it and capped in height so a
+ * long report does not push the buttons off the screen. */
+.report-document {
+  max-height: 26rem;
+  overflow-y: auto;
+  margin: 0.8rem 0;
+  padding: 0.8rem;
+  background: var(--sb-canvas);
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius-small);
+}
+
+.report-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.report-email {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius-small);
+}
+
+.report-email legend {
+  padding: 0 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sb-ink-soft);
+}
+
+.report-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--sb-ink-soft);
+}
+
+.report-field output {
+  font-family: var(--sb-font-mono);
+  color: var(--sb-ink);
+}
+
+.report-body {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  color: var(--sb-ink);
+  background: var(--sb-surface);
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius-small);
+  resize: vertical;
+}
+
+.report-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.report-note,
+.report-settled {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--sb-ink-soft);
+}
+
+.report-settled {
+  padding: 0.6rem 0.7rem;
+  background: var(--sb-pass-tint);
+  border-radius: var(--sb-radius-small);
+  color: var(--sb-ink);
+}
+
+.report-problem {
+  margin: 0.6rem 0 0;
+  padding: 0.6rem 0.7rem;
+  background: var(--sb-stop-tint);
+  border-radius: var(--sb-radius-small);
+  color: var(--sb-stop);
+  font-size: 0.85rem;
+}
+
+/* A table inside a report. Scrolls inside its own frame so the page never scrolls sideways. */
+.md-table-frame {
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+
+.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.md-table th,
+.md-table td {
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--sb-line);
+}
+
+.md-table th {
+  color: var(--sb-ink-soft);
+  font-weight: 600;
+  white-space: nowrap;
+}

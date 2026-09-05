@@ -45,10 +45,17 @@ from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, ImageObservation
 from claim_agent.agent.tools import (
+    CHECK_CURRENCY,
+    CHECK_DOCUMENT_TOTALS,
+    CHECK_EVIDENCE_IS_ENOUGH,
+    COMPARE_PRICES,
     COMPUTE_REIMBURSEMENT,
     GENERATE_INVOICE,
     INSPECT_IMAGE,
     LIST_ATTACHMENTS,
+    MATCH_DAMAGED_PRODUCT,
+    READ_CASE_FACTS,
+    READ_REQUESTED_REMEDY,
     TOOL_NAMES,
     AmountCheck,
     AttachmentListing,
@@ -251,13 +258,17 @@ def serve_the_claim(api: respx.Router, *, images: dict[str, object] | None = Non
 # --- The structural guarantee (FR-1.2) --------------------------------------
 
 
-def test_the_investigation_is_given_exactly_four_read_and_reasoning_tools(
+def test_the_investigation_is_given_exactly_these_read_and_reasoning_tools(
     shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.2: the agent can list images, look at one, price a shipment, and check an amount.
+    """FR-1.2: every tool the agent holds only reads or works something out.
 
-    Asserted as an exact set rather than a length, so adding a fifth tool of any kind
-    fails here and has to be argued for against the requirement.
+    Asserted as an exact set rather than a length, so adding a tool of any kind fails
+    here and has to be argued for against the requirement. **The count is not the
+    guarantee and never was** — this list grew from four when reading ShipBob's sample
+    data turned up four ways a recommendation could be quietly wrong. What must not
+    change is that none of them writes anything, which the two tests below check by
+    name and by import graph.
     """
     run = build_run(shipbob_http, images_http)
 
@@ -266,6 +277,13 @@ def test_the_investigation_is_given_exactly_four_read_and_reasoning_tools(
         INSPECT_IMAGE,
         GENERATE_INVOICE,
         COMPUTE_REIMBURSEMENT,
+        CHECK_CURRENCY,
+        CHECK_DOCUMENT_TOTALS,
+        READ_CASE_FACTS,
+        COMPARE_PRICES,
+        CHECK_EVIDENCE_IS_ENOUGH,
+        MATCH_DAMAGED_PRODUCT,
+        READ_REQUESTED_REMEDY,
     }
     assert set(run.tools) == set(TOOL_NAMES)
 

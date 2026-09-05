@@ -152,6 +152,94 @@ class Policy(BaseSettings):
         json_schema_extra=NOT_ON_PANEL,
     )
 
+    # --- Values the investigation's reading tools use ----------------------
+    # Every value below is INVENTED. REQUIREMENTS.md does not mention currency, does
+    # not say what to do when ShipBob's price and the customer's receipt disagree, and
+    # does not say which case statuses are too far gone to answer. The defaults are our
+    # reading of the mock data, not ShipBob's rules, and they need sign-off before any
+    # of them decides real money. DESIGN.md records each one and what it costs.
+    usd_conversion_rates: dict[str, Decimal] = Field(
+        default={
+            "USD": Decimal("1.00"),
+            "GBP": Decimal("1.27"),
+            "EUR": Decimal("1.08"),
+            "CAD": Decimal("0.74"),
+            "AUD": Decimal("0.66"),
+        },
+        description="What one unit of each currency is worth in dollars, for holding a claim "
+        "to the cap when the money is not in dollars. A fixed table rather than a live rate, "
+        "so the same claim is judged the same way twice. INVENTED and PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    conversion_rates_as_of: str = Field(
+        default="2026-09-04",
+        description="The day the rates above were written down, so a reader can see how stale "
+        "they are. INVENTED and PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    assume_usd_when_currency_unknown: bool = Field(
+        default=False,
+        description="Whether a figure whose currency nobody could establish is treated as "
+        "dollars. False sends the claim to a person instead, which is the safer of the two and "
+        "the reason this exists. INVENTED and PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    default_date_region: str = Field(
+        default="US",
+        description="How to read a date like 11/02/2026 when nothing else settles it: US puts "
+        "the month first, GB the day. Only used when the claim itself gives no better hint. "
+        "INVENTED and PROVISIONAL.",
+        json_schema_extra={**NOT_ON_PANEL, "options": ["US", "GB"]},
+    )
+    price_divergence_fraction: Decimal = Field(
+        default=Decimal("0.10"),
+        ge=Decimal("0"),
+        description="How far ShipBob's price may sit from the price on the customer's own "
+        "receipt before it is worth telling a representative about, as a fraction. INVENTED "
+        "and PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    document_total_tolerance: Decimal = Field(
+        default=Decimal("0.01"),
+        ge=Decimal("0"),
+        description="How far a document's own printed total may sit from the sum of its lines "
+        "before the document is called inconsistent. Covers ordinary rounding, nothing more. "
+        "INVENTED and PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    unanswerable_case_statuses: tuple[str, ...] = Field(
+        default=("Closed", "Waiting on Client"),
+        description="Case statuses where a recommendation is probably the wrong thing to "
+        "produce — the case is finished, or the merchant has already been asked something and "
+        "nobody has replied. INVENTED and PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    internal_email_domain: str = Field(
+        default="shipbob.com",
+        description="Mail to this domain reaches ShipBob rather than a merchant. Every case in "
+        "the sample data carries one, so a drafted email would go to staff. INVENTED and "
+        "PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    min_order_reference_confidence: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="How sure the system must be that an order number read off a photograph "
+        "belongs to this claim before the document is treated as this claim's. INVENTED and "
+        "PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+    min_item_match_confidence: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="How closely a damaged product must match an invoice line before that line "
+        "is offered as its price. Below it the candidates are shown and nothing is chosen "
+        "(FR-1.13). INVENTED and PROVISIONAL.",
+        json_schema_extra=NOT_ON_PANEL,
+    )
+
 
 @lru_cache
 def get_policy() -> Policy:

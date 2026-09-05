@@ -432,3 +432,58 @@ export interface ClaimInvestigation {
   recommended_total_usd: string;
   claim_cap_applied: boolean;
 }
+
+/** Where a report has got to in its review. Approved is final (FR-2.9). */
+export type ReportState = "awaiting_review" | "changes_requested" | "approved";
+
+/** Which part of the service produced the thing a representative is looking at. */
+export type ReportStage = "screening" | "investigation";
+
+/** An outcome and an amount — what was advised, or what a representative settled on. */
+export interface Proposal {
+  readonly outcome: Recommendation | null;
+  readonly amount_usd: string | null;
+}
+
+/**
+ * One report a representative decides on (FR-2.1).
+ *
+ * Almost everything they read is in `markdown`. The fields beside it are the ones this screen
+ * has to work with rather than read: a row in a claim's list, and the wording of an email it
+ * can offer for rewording. Reading any of that back out of the writing would be the screen
+ * taking data out of prose.
+ *
+ * `amount_usd` is **text**, like every other figure the service sends. Nothing here parses it.
+ */
+export interface Report {
+  readonly report_id: string;
+  readonly version: number;
+  readonly case_id: string;
+  readonly claim_line_id: string | null;
+  readonly product_name: string | null;
+  readonly user_id: string | null;
+  readonly stage: ReportStage;
+  readonly state: ReportState;
+  readonly recommendation: Recommendation | null;
+  readonly amount_usd: string | null;
+  readonly confidence: number | null;
+  readonly carrier: string | null;
+  readonly defect_type: string | null;
+  readonly damage_type: string | null;
+  readonly order_value_usd: string | null;
+  readonly decided: Proposal | null;
+  readonly decisions_taken: number;
+  readonly drafted_email: DraftedEmail | null;
+  readonly markdown: string;
+  readonly created_at: string;
+}
+
+/** What a representative sends when they approve a report (FR-2.8, action 1). */
+export interface Approval {
+  readonly outcome?: Recommendation;
+  /** Text, never a number — a figure that went through a float is one nobody can trust. */
+  readonly amount_usd?: string;
+  /** Subject and wording only. The recipient comes from the claim and is not sendable. */
+  readonly email?: { readonly subject: string; readonly body: string };
+  readonly rep_words?: string;
+}

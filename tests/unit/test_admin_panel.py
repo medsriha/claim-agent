@@ -60,10 +60,13 @@ def test_every_policy_value_is_on_the_panel_exactly_once() -> None:
 def test_the_values_left_off_the_panel_are_still_part_of_the_policy() -> None:
     """FR-0.7: off the panel is not gone — they are read, and set from the environment.
 
-    Seven of them belong to the AI investigation, which is being built but is not yet
-    reachable, so changing one from a screen would do nothing anybody could see. The
-    eighth is the shortest acceptable description, which the checks do read; it is kept
-    off the panel because it is not a knob for demonstrating anything.
+    They fall into three groups. Seven belong to the AI investigation, which is being
+    built but is not yet reachable, so changing one from a screen would do nothing
+    anybody could see. One is the shortest acceptable description, which the checks do
+    read; it is off the panel because it is not a knob for demonstrating anything. The
+    last ten are the reading tools' values, and they are off the panel for a plainer
+    reason: several are a table or a list rather than a single figure, and the panel
+    draws one control per value. A conversion rate table needs a screen of its own.
     """
     view = describe_policy(in_force())
 
@@ -77,6 +80,16 @@ def test_the_values_left_off_the_panel_are_still_part_of_the_policy() -> None:
         "precedent_results_per_line",
         "min_precedent_similarity",
         "cap_applies_to_whole_claim",
+        "usd_conversion_rates",
+        "conversion_rates_as_of",
+        "assume_usd_when_currency_unknown",
+        "default_date_region",
+        "price_divergence_fraction",
+        "document_total_tolerance",
+        "unanswerable_case_statuses",
+        "internal_email_domain",
+        "min_order_reference_confidence",
+        "min_item_match_confidence",
     }
     assert Policy().max_agent_steps == 12
 

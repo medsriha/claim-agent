@@ -46,14 +46,13 @@ export function ReadinessPanel({ readiness }: { readiness: Readiness }): React.J
                   )}
                 </span>
                 <span className="readiness-figure">{row.ready.text}</span>
-                <span className="readiness-volume">{row.volume.text} decisions</span>
+                <span className="readiness-volume">{row.volume.text} decisions reviewed</span>
               </li>
             ))}
           </ul>
         </div>
       ))}
 
-      <p className="chart-readout">{readiness.summary}</p>
     </section>
   );
 }

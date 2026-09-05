@@ -176,6 +176,7 @@ src/claim_agent/
   preflight/      Layer 0 — deterministic screening
   admin/          the policy panel's view of policy.py, and what it sends back
   agent/          Layers 1a, 1b, R — the LangGraph agent
+  report/         Layer 2 — the report a rep decides from, and the two review actions
   execution/      Layer 3 — post-approval email and reimbursement
   storage/        reports, versions, feedback, merchant memory, audit trail
 tests/unit/       fast, no I/O
@@ -456,13 +457,28 @@ Open engineering choices — decide with the user, then record the outcome here:
   not solved at all for anything else. A UI served from a real address would need either
   cross-origin middleware or the same origin as the service, and that decision waits until there
   is somewhere to deploy either of them.
-- **How the Layer 0 report and the Layer 2 report reconcile.** The report shape the UI renders
-  today is scoped to Layer 0. Layer 2 has its own requirements (FR-2.1–FR-2.10) that nobody has
-  built; TODO.md's FR-0.4 note says the two will need reconciling rather than one being extended.
-  A UI written tightly against today's shape will need rework then.
 
 Decided:
 
+- **The Layer 0 report and the Layer 2 report are one report.** A shared head — which claim, which
+  product, what is recommended, how much, and where its review has got to — and one written
+  document for the rest. A claim the quick checks stopped names no product, which is what FR-C.1
+  asks for; an investigated one names exactly one. Neither `TerminalReport` nor `LineInvestigation`
+  was rewritten: both are read from, and neither is extended.
+- **The report is a markdown document, not structured fields.** The AI answers in fixed fields as
+  it always did, and a pure function turns those into what a representative reads. **FR-2.10 is
+  knowingly unmet** and stays unticked — this was asked for, and the cost is that a screen can show
+  the writing and cannot lay out its parts. Never quietly "fix" that by adding a second structured
+  shape beside the document; it is a decision, and reversing it means changing the requirement.
+- **A representative may pay more than the cap.** The cap limits what the *system* recommends. An
+  over-cap figure a person chooses is accepted, recorded, and flagged in the report, following
+  FR-R.8's instruction to say so plainly rather than refuse, and FR-C.4's rule that losing a
+  decision is worse than losing the record. Our reading, listed in DESIGN.md's open questions.
+- **Approving is final and idempotent.** `approved` is terminal: the same approval again changes
+  nothing and records nothing, a different one is refused. Two *different* notes sent back on one
+  report are two decisions and both are kept.
+- **Only the investigation writes a report.** `POST /cases/{case_id}/preflight` stays a pure read.
+  A claim stopped at the gates gets its report when somebody asks for it to be investigated.
 - **Persistence backend: SQLite**, one file, path from `DATABASE_PATH`. Chosen for merchant
   memory in Layer 0. Reports, versions, feedback, and the audit trail still have no schema.
 - **The UI lives in `web/`**, React and TypeScript on Vite, in this repo. Demo-grade on purpose,
