@@ -1,14 +1,3 @@
-"""The bounds that stop an investigation running forever (FR-1.3, FR-1.16).
-
-The budget is a plain counter over numbers that have already been read, so these
-tests build a policy directly and call it. Nothing reaches the network, no model
-is involved, and no stand-in API is needed.
-
-The limits used here are small ones of our own, not the policy defaults, so that
-a test can spend a whole allowance in three lines and say plainly what it is
-about. Where a default matters, the test says which default it means.
-"""
-
 from __future__ import annotations
 
 import pytest

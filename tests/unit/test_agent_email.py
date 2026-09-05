@@ -1,14 +1,3 @@
-"""Finishing the merchant email: putting the real figure in, and refusing invented ones.
-
-Nothing here reaches a model. Every test hands in a conclusion of its own making —
-the shape the model would have filled in — because what is under test is what
-happens to that wording afterwards, not how it was produced.
-
-Two halves matter equally, and both are covered on purpose. Money the model wrote
-has to be caught, or an invented figure reaches a merchant. Numbers that are not
-money have to be left alone, or a good claim is sent to a person over "2 bottles".
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal

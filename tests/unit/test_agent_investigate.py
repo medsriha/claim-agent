@@ -1,22 +1,3 @@
-"""Investigating one claim: what it decides, what it refuses, and how it fails.
-
-Every model here answers from a script the test wrote beforehand, so nothing reaches a
-network or a model provider and no key is needed. That is also what makes these tests
-about the investigation rather than about the model: the answers are fixed, so what is
-left to observe is what the code does with them.
-
-Two groups of tests are worth finding quickly.
-
-**The four questions that decide a payment** are exercised one at a time — evidence that
-is short, an image we could not read, a shaky answer, a run that ran out of steps — and
-each of them checks that the recommendation moved *away* from paying and never towards
-it.
-
-**The whole-claim tests (FR-1b.1, FR-1b.3, FR-1b.4)** are the ones the layer exists for:
-one run answers for every damaged product, gives one recommendation and one email
-covering all of them, and a single product that cannot be priced withholds the claim.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

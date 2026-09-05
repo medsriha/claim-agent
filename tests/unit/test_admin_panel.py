@@ -1,11 +1,3 @@
-"""Describing claim thresholds for the panel, and checking what it sends back (FR-0.7).
-
-Two things are being pinned here. First, that the panel is drawn from the policy file
-itself, so a value added there cannot be quietly missing from the screen. Second, that
-a change is all or nothing: one bad value and the whole submission is refused, with a
-complaint the person who typed it can act on (NFR-4).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

@@ -1,10 +1,3 @@
-"""Fetching a merchant's attached pictures — and every way that can go wrong.
-
-Every request here is answered by a stand-in running in the same process, so nothing
-reaches the network, and every file written goes to a throwaway directory belonging to
-the one test that asked for it.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
