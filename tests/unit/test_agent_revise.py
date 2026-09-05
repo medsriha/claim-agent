@@ -35,7 +35,11 @@ from claim_agent.agent.events import EventStream
 from claim_agent.agent.images import ImageFetcher
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.prompts import EarlierExchange
-from claim_agent.agent.revise import LineRevision, ReportUnderReview, rework_line
+from claim_agent.agent.revise import (
+    ClaimFindingsRevision,
+    ReportUnderReview,
+    rework_claim_findings,
+)
 from claim_agent.agent.schemas import (
     AssessmentJudgement,
     DamagedItem,
@@ -163,7 +167,7 @@ def an_amount(figure: str = "40.00") -> AmountDerivation:
 def a_report_under_review(**overrides: object) -> ReportUnderReview:
     """A sound approval report, as it stands when a representative sends it back."""
     fields: dict[str, object] = {
-        "line": a_claim_for_the_collagen(),
+        "lines": (a_claim_for_the_collagen(),),
         "context": CONTEXT,
         "attachments": IMAGES,
         "recommendation": Recommendation.APPROVE,
@@ -241,7 +245,7 @@ async def rework(
     feedback: str = "The amount looks wrong to me.",
     policy: Policy | None = None,
     events: EventStream | None = None,
-) -> LineRevision:
+) -> ClaimFindingsRevision:
     """Rework one report, with everything a test does not care about defaulted.
 
     The HTTP clients are real ones aimed at a name only a stand-in answers to, so a request
@@ -253,7 +257,7 @@ async def rework(
         httpx.AsyncClient(base_url=SHIPBOB, timeout=1.0) as shipbob_http,
         httpx.AsyncClient() as images_http,
     ):
-        return await rework_line(
+        return await rework_claim_findings(
             under_review=under_review if under_review is not None else a_report_under_review(),
             feedback=feedback,
             record=RECORD,
@@ -271,16 +275,16 @@ def a_run_that_concludes(answer: RevisionConclusion) -> ScriptedModel:
     return scripted("I have read the note and the report.", answer)
 
 
-def finding(result: LineRevision, kind: EvidenceKind) -> EvidenceFinding:
+def finding(result: ClaimFindingsRevision, kind: EvidenceKind) -> EvidenceFinding:
     """What the reworked findings say about one of the four pieces of evidence."""
-    assert result.investigation is not None
-    return findings_by_kind(result.investigation.evidence)[kind]
+    assert result.findings is not None
+    return findings_by_kind(result.findings.evidence)[kind]
 
 
-def answered(result: LineRevision) -> Sequence[AssessmentName]:
+def answered(result: ClaimFindingsRevision) -> Sequence[AssessmentName]:
     """Which of the four questions the reworked report has answers to."""
-    assert result.investigation is not None
-    return [answer.name for answer in result.investigation.assessments]
+    assert result.findings is not None
+    return [answer.name for answer in result.findings.assessments]
 
 
 # --- What a rework produces (FR-R.9, FR-R.10, FR-R.11) ----------------------
@@ -291,10 +295,10 @@ async def test_fr_r_9_a_rework_produces_a_whole_report_not_a_patch() -> None:
     result = await rework(a_run_that_concludes(a_rework()))
 
     assert result.reworked
-    assert result.investigation is not None
-    assert len(result.investigation.evidence) == len(REQUIRED_EVIDENCE)
-    assert len(result.investigation.assessments) == len(REQUIRED_ASSESSMENTS)
-    assert result.investigation.outcome.recommendation is Recommendation.APPROVE
+    assert result.findings is not None
+    assert len(result.findings.evidence) == len(REQUIRED_EVIDENCE)
+    assert len(result.findings.assessments) == len(REQUIRED_ASSESSMENTS)
+    assert result.findings.outcome.recommendation is Recommendation.APPROVE
 
 
 async def test_fr_r_10_what_changed_and_what_was_left_alone_both_come_back() -> None:
@@ -310,8 +314,8 @@ async def test_fr_r_11_the_merchant_email_is_rewritten_to_match_the_reworked_rep
     """FR-R.11: a revised recommendation with a stale email is an inconsistent state."""
     result = await rework(a_run_that_concludes(a_rework()))
 
-    assert result.investigation is not None
-    email = result.investigation.drafted_email
+    assert result.findings is not None
+    email = result.findings.drafted_email
     assert email is not None
     assert "again" in email.body
     # The figure that reached the merchant is the one that survived the cap, added by code.
@@ -332,8 +336,8 @@ async def test_fr_r_11_an_outcome_that_now_addresses_the_representative_carries_
         )
     )
 
-    assert result.investigation is not None
-    assert result.investigation.drafted_email is None
+    assert result.findings is not None
+    assert result.findings.drafted_email is None
 
 
 async def test_a_question_for_the_representative_is_marked_as_one() -> None:
@@ -384,8 +388,8 @@ async def test_fr_r_5_questions_the_rework_did_not_answer_carry_forward() -> Non
     result = await rework(a_run_that_concludes(a_rework(assessments=only_one)))
 
     assert list(answered(result)) == list(REQUIRED_ASSESSMENTS)
-    assert result.investigation is not None
-    assert result.investigation.outcome.recommendation is Recommendation.APPROVE
+    assert result.findings is not None
+    assert result.findings.outcome.recommendation is Recommendation.APPROVE
 
 
 async def test_fr_r_5_a_rework_that_speaks_about_a_finding_replaces_it() -> None:
@@ -418,9 +422,9 @@ async def test_a_correction_to_the_evidence_moves_the_outcome_away_from_paying()
         feedback="The packaging photo is the box, not the product.",
     )
 
-    assert result.investigation is not None
-    assert result.investigation.outcome.recommendation is not Recommendation.APPROVE
-    assert OverrideReason.EVIDENCE_INCOMPLETE in result.investigation.outcome.overrides
+    assert result.findings is not None
+    assert result.findings.outcome.recommendation is not Recommendation.APPROVE
+    assert OverrideReason.EVIDENCE_INCOMPLETE in result.findings.outcome.overrides
 
 
 # --- The rules still bind (FR-R.7, FR-R.8) ----------------------------------
@@ -433,17 +437,17 @@ async def test_fr_r_7_a_reconsidered_figure_is_held_to_the_same_cap() -> None:
         feedback="Pay them the whole order value, they have been waiting weeks.",
     )
 
-    assert result.investigation is not None
-    assert result.investigation.amount.amount_usd == Policy().reimbursement_cap_usd
-    assert result.investigation.amount.cap_applied
+    assert result.findings is not None
+    assert result.findings.amount.amount_usd == Policy().reimbursement_cap_usd
+    assert result.findings.amount.cap_applied
 
 
 async def test_fr_r_7_no_figure_the_rework_wrote_reaches_the_merchant() -> None:
     """FR-1.21, FR-R.7: the only money in a sent email is the figure that survived the cap."""
     result = await rework(a_run_that_concludes(a_rework(recommended_amount_usd="450.00")))
 
-    assert result.investigation is not None
-    email = result.investigation.drafted_email
+    assert result.findings is not None
+    email = result.findings.drafted_email
     assert email is not None
     assert "450" not in email.body
     assert "$100.00" in email.body
@@ -455,8 +459,8 @@ async def test_fr_r_7_a_figure_that_cannot_be_read_as_money_sends_it_to_a_person
         a_run_that_concludes(a_rework(recommended_amount_usd="about fifty dollars"))
     )
 
-    assert result.investigation is not None
-    assert result.investigation.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert result.findings is not None
+    assert result.findings.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
 
 
 async def test_fr_r_8_feedback_cannot_talk_an_answered_no_into_a_payment() -> None:
@@ -466,9 +470,9 @@ async def test_fr_r_8_feedback_cannot_talk_an_answered_no_into_a_payment() -> No
         feedback="Just pay it, this merchant is a good customer.",
     )
 
-    assert result.investigation is not None
-    assert result.investigation.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert result.investigation.outcome.recommended_by_agent is Recommendation.APPROVE
+    assert result.findings is not None
+    assert result.findings.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert result.findings.outcome.recommended_by_agent is Recommendation.APPROVE
 
 
 # --- No write tools, ever (FR-R.6) ------------------------------------------
@@ -574,27 +578,39 @@ async def test_a_first_rework_shows_no_conversation_at_all() -> None:
 # --- Evidence the whole claim shares (FR-R.1a) ------------------------------
 
 
-async def test_fr_r_1a_a_correction_to_shared_evidence_names_the_other_products() -> None:
-    """FR-R.1a: correcting shared evidence bears on every line, and this says so."""
+async def test_fr_r_1a_a_correction_to_shared_evidence_is_made_once_for_the_claim() -> None:
+    """FR-R.1a: one report covers the claim, so there is nothing to propagate to.
+
+    A note about the outer packaging photograph used to need carrying across a report per
+    product, and the agent flagged it so a representative could go and send the others
+    back by hand. There is one report now: the correction lands on it, and every product
+    on the claim is reworked with it.
+    """
     result = await rework(
-        a_run_that_concludes(a_rework(concerns_shared_evidence=True)),
-        under_review=a_report_under_review(siblings=(the_ampoule_beside_it(),)),
+        a_run_that_concludes(
+            a_rework(
+                evidence=judgements(outer_packaging_photo=EvidenceState.MISSING),
+                assessments=(),
+                recommendation=Recommendation.REQUEST_INFO,
+                requested_details=("a photograph of the outer shipping box",),
+                recommended_amount_usd=None,
+                amount_reasoning=None,
+            )
+        ),
+        under_review=a_report_under_review(
+            lines=(a_claim_for_the_collagen(), the_ampoule_beside_it())
+        ),
         feedback="The packaging photo is the box, not the product.",
     )
 
-    assert result.investigation is not None
-    assert any(AMPOULE in concern for concern in result.investigation.concerns)
-
-
-async def test_a_claim_with_one_product_has_nobody_to_propagate_a_correction_to() -> None:
-    """A claim of one product gains no note about siblings, because there are none."""
-    result = await rework(
-        a_run_that_concludes(a_rework(concerns_shared_evidence=True)),
-        feedback="The packaging photo is the box, not the product.",
+    assert result.findings is not None
+    assert sorted(line.product_name for line in result.findings.lines) == sorted(
+        [AMPOULE, COLLAGEN]
     )
-
-    assert result.investigation is not None
-    assert not any("sent back separately" in concern for concern in result.investigation.concerns)
+    assert finding(result, EvidenceKind.OUTER_PACKAGING_PHOTO).state is EvidenceState.MISSING
+    # No note telling a representative to go and send a neighbouring report back, because
+    # there is no neighbouring report.
+    assert not any("sent back separately" in concern for concern in result.findings.concerns)
 
 
 # --- Failing toward the person (NFR-4) --------------------------------------
@@ -605,7 +621,7 @@ async def test_a_model_that_cannot_be_reached_leaves_the_report_as_it_was() -> N
     result = await rework(scripted(ModelConnectionError("the provider is down")))
 
     assert not result.reworked
-    assert result.investigation is None
+    assert result.findings is None
     assert "nothing in it has changed" in result.reply
 
 
@@ -665,9 +681,9 @@ async def test_a_representative_directing_an_approval_gets_one() -> None:
         feedback="The customer sent the box photo to me by email. Approve it.",
     )
 
-    assert result.investigation is not None
-    assert result.investigation.outcome.recommendation is Recommendation.APPROVE
-    assert result.investigation.amount.amount_usd == Decimal("52.00")
+    assert result.findings is not None
+    assert result.findings.outcome.recommendation is Recommendation.APPROVE
+    assert result.findings.amount.amount_usd == Decimal("52.00")
 
 
 async def test_a_directed_approval_records_every_rule_it_set_aside() -> None:
@@ -682,8 +698,8 @@ async def test_a_directed_approval_records_every_rule_it_set_aside() -> None:
         feedback="Approve it.",
     )
 
-    assert result.investigation is not None
-    outcome = result.investigation.outcome
+    assert result.findings is not None
+    outcome = result.findings.outcome
     assert outcome.directed_by_representative
     assert OverrideReason.EVIDENCE_INCOMPLETE in outcome.waived
     assert outcome.overrides == ()
@@ -699,8 +715,8 @@ async def test_a_directed_approval_still_gets_the_email_with_the_checked_figure(
         feedback="Pay it in full.",
     )
 
-    assert result.investigation is not None
-    email = result.investigation.drafted_email
+    assert result.findings is not None
+    email = result.findings.drafted_email
     assert email is not None
     assert "$100.00" in email.body
     assert "450" not in email.body
@@ -723,8 +739,8 @@ async def test_a_directed_approval_with_nothing_payable_asks_instead_of_paying_n
         feedback="Just approve it.",
     )
 
-    assert result.investigation is not None
-    assert result.investigation.outcome.recommendation is not Recommendation.APPROVE
+    assert result.findings is not None
+    assert result.findings.outcome.recommendation is not Recommendation.APPROVE
 
 
 async def test_an_ordinary_rework_is_still_held_to_every_rule() -> None:
@@ -736,10 +752,10 @@ async def test_an_ordinary_rework_is_still_held_to_every_rule() -> None:
         feedback="Have another look at the box.",
     )
 
-    assert result.investigation is not None
-    assert result.investigation.outcome.recommendation is not Recommendation.APPROVE
-    assert OverrideReason.EVIDENCE_INCOMPLETE in result.investigation.outcome.overrides
-    assert not result.investigation.outcome.directed_by_representative
+    assert result.findings is not None
+    assert result.findings.outcome.recommendation is not Recommendation.APPROVE
+    assert OverrideReason.EVIDENCE_INCOMPLETE in result.findings.outcome.overrides
+    assert not result.findings.outcome.directed_by_representative
 
 
 async def test_the_wording_tells_the_agent_to_do_what_it_is_told() -> None:

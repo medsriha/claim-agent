@@ -103,7 +103,6 @@ CREATE TABLE IF NOT EXISTS reports (
     report_id TEXT NOT NULL,
     version INTEGER NOT NULL,
     case_id TEXT NOT NULL,
-    claim_line_id TEXT,
     stage TEXT NOT NULL,
     state TEXT NOT NULL,
     created_at TEXT NOT NULL,

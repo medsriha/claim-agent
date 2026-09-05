@@ -171,7 +171,7 @@ def investigation_text(**overrides: object) -> str:
         "order": an_order(),
         "attachments": some_attachments(),
         "context": a_context(),
-        "claim_line": a_claim_line(),
+        "claim_lines": (a_claim_line(),),
     }
     arguments.update(overrides)
     return _spoken(build_investigation_messages(**arguments))  # type: ignore[arg-type]
@@ -189,7 +189,7 @@ def investigation_question(**overrides: object) -> str:
         "order": an_order(),
         "attachments": some_attachments(),
         "context": a_context(),
-        "claim_line": a_claim_line(),
+        "claim_lines": (a_claim_line(),),
     }
     arguments.update(overrides)
     return _spoken(build_investigation_messages(**arguments)[-1:])  # type: ignore[arg-type]
@@ -518,7 +518,7 @@ def test_a_question_always_carries_the_shared_rules_first() -> None:
             order=an_order(),
             attachments=some_attachments(),
             context=a_context(),
-            claim_line=a_claim_line(),
+            claim_lines=(a_claim_line(),),
         ),
     ):
         assert isinstance(messages[0], SystemMessage)
@@ -544,7 +544,7 @@ def test_the_wording_a_pass_repeats_is_marked_to_be_kept_warm() -> None:
         order=an_order(),
         attachments=some_attachments(),
         context=a_context(),
-        claim_line=a_claim_line(),
+        claim_lines=(a_claim_line(),),
     )
 
     for message in messages:
@@ -611,38 +611,46 @@ def test_an_order_that_could_not_be_read_is_said_plainly() -> None:
     assert "could not be read" in said
 
 
-# --- One product answered for, the whole claim seen (FR-1b.1, FR-1b.2) ------
+# --- Every product answered for, in one question (FR-1b.1, FR-1b.2) ---------
 
 
-def test_the_investigation_names_the_one_product_it_answers_for() -> None:
-    """FR-1b.1: each run assesses, recommends and drafts for its own claim line only."""
+def test_fr_1b_1_the_investigation_names_every_product_it_answers_for() -> None:
+    """FR-1b.1: one run answers for the whole claim, so every product is described to it."""
     said = investigation_text()
 
-    assert "THE PRODUCT YOU ARE ANSWERING FOR" in said
+    assert "THE PRODUCTS YOU ARE ANSWERING FOR" in said
     assert "Claim line CASE-1002-1." in said
     assert "ATT-CASE-1002-02" in said
     assert "not a conclusion" in said
 
 
-def test_the_investigation_shows_the_other_products_as_context_only() -> None:
-    """FR-1b.2, FR-1b.3: it sees the whole claim, and a weak line must not drag down a good one."""
+def test_fr_1b_3_a_claim_of_several_products_is_told_it_answers_for_all_of_them() -> None:
+    """FR-1b.3: one recommendation, one amount and one email, however many products."""
     other = a_claim_line().model_copy(update={"claim_line_id": "CASE-1002-2"})
 
-    said = investigation_text(other_lines=(other,))
+    said = investigation_text(claim_lines=(a_claim_line(), other))
 
-    assert "THE OTHER PRODUCTS ON THIS CLAIM" in said
-    assert "Context only." in said
-    assert "CASE-1002-2" in said
+    assert "All 2 of them, together." in said
+    assert "one recommendation, one amount and one email covering the lot" in said
+    assert "CASE-1002-1." in said
+    assert "CASE-1002-2." in said
 
 
 def test_a_single_product_claim_says_so_rather_than_showing_an_empty_list() -> None:
     """FR-1a.5: one product is one claim line, through exactly the same machinery."""
-    assert "This claim covers one product, and it is yours." in investigation_text()
+    assert "This one product is the whole claim." in investigation_text()
+
+
+def test_a_claim_with_no_products_established_asks_who_can_settle_it() -> None:
+    """FR-1a.4: nothing may be priced while it is unclear what the claim is for."""
+    said = investigation_text(claim_lines=())
+
+    assert "nothing to price" in said
 
 
 def test_a_product_that_could_be_two_different_order_lines_is_never_priced() -> None:
     """FR-1.13, FR-1a.4: choosing between candidates at different prices invents the payout."""
-    said = investigation_text(claim_line=a_claim_line(MatchOutcome.AMBIGUOUS))
+    said = investigation_text(claim_lines=(a_claim_line(MatchOutcome.AMBIGUOUS),))
 
     assert "More than one line on the order could be this product" in said
     assert "nothing here can be priced" in said
@@ -653,7 +661,7 @@ def test_a_product_that_could_be_two_different_order_lines_is_never_priced() -> 
 
 def test_a_product_that_is_on_no_order_line_is_reported_rather_than_dropped() -> None:
     """FR-1a.2: a claim for something never ordered is a finding a rep needs to see."""
-    said = investigation_text(claim_line=a_claim_line(MatchOutcome.NOT_ON_ORDER))
+    said = investigation_text(claim_lines=(a_claim_line(MatchOutcome.NOT_ON_ORDER),))
 
     assert "No line on the order is this product" in said
     assert "worth reporting rather than an error" in said

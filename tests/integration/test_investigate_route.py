@@ -191,10 +191,10 @@ async def test_a_stopped_claim_is_explained_and_never_reaches_the_agent(
     # representative can come back and approve it (FR-0.4, FR-2.9b).
     assert names(messages) == ["progress", "progress", "result", "done"]
     assert "cannot be processed" in messages[0][1]
-    assert "report(s) ready for review" in messages[1][1]
+    assert "The report is ready for review." in messages[1][1]
     result = json.loads(messages[2][1])
-    assert set(result) == {"reports", "reports_unavailable_reason"}
-    assert result["reports"][0]["content"]["reasons"] == ["claim_too_old"]
+    assert set(result) == {"report", "report_unavailable_reason"}
+    assert result["report"]["content"]["reasons"] == ["claim_too_old"]
     # The whole point: its photographs were never touched, and no invoice was priced.
     assert images.call_count == 0
     assert invoicing.call_count == 0
@@ -296,7 +296,7 @@ async def test_the_stream_carries_the_claim_split_and_says_what_was_unclear(
     # Nothing is guessed while the split is unsettled. A claim-level report asks the rep
     # for clarification and deliberately carries no merchant email.
     result = json.loads(next(data for name, data in messages if name == "result"))
-    (report,) = result["reports"]
+    report = result["report"]
     assert report["recommendation"] == "request_rep_clarification"
     assert report["confidence"] is None
     assert report["drafted_email"] is None
@@ -363,11 +363,11 @@ async def test_a_stopped_claim_keeps_its_write_up_so_it_can_be_approved_later(
         response = await http.post("/cases/CASE-1004/investigate")
 
     result = json.loads(dict(read_stream(response.text))["result"])
-    assert set(result) == {"reports", "reports_unavailable_reason"}
-    assert result["reports_unavailable_reason"] is None
-    (kept,) = result["reports"]
+    assert set(result) == {"report", "report_unavailable_reason"}
+    assert result["report_unavailable_reason"] is None
+    kept = result["report"]
     assert kept["stage"] == "screening"
-    assert kept["claim_line_id"] is None
+    assert kept["product_names"] == []
     # And it is really there afterwards, not only in the reply that announced it.
     assert len(reports.for_case("CASE-1004").reports) == 1
 
@@ -413,8 +413,8 @@ async def test_a_store_that_cannot_be_written_still_reports_what_was_found(
     result = json.loads(messages["result"])
     # The canonical structured report still arrived. What is missing is only the keeping of
     # it, and the reply says which — a rep told merely that something failed would go looking.
-    assert result["reports"][0]["content"]["reasons"] == ["claim_too_old"]
-    assert "cannot be approved yet" in result["reports_unavailable_reason"]
+    assert result["report"]["content"]["reasons"] == ["claim_too_old"]
+    assert "cannot be approved yet" in result["report_unavailable_reason"]
 
 
 async def test_a_split_nobody_could_settle_keeps_a_clarification_report(
@@ -434,10 +434,10 @@ async def test_a_split_nobody_could_settle_keeps_a_clarification_report(
         response = await http.post("/cases/CASE-1001/investigate")
 
     result = json.loads(dict(read_stream(response.text))["result"])
-    (report,) = result["reports"]
+    report = result["report"]
     assert report["recommendation"] == "request_rep_clarification"
     assert report["drafted_email"] is None
-    assert result["reports_unavailable_reason"] is None
+    assert result["report_unavailable_reason"] is None
     (kept,) = reports.for_case("CASE-1001").reports
     assert kept.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert kept.drafted_email is None
@@ -459,7 +459,7 @@ async def test_a_merchant_resolvable_split_returns_a_request_and_email(
         response = await http.post("/cases/CASE-1001/investigate")
 
     result = json.loads(dict(read_stream(response.text))["result"])
-    (report,) = result["reports"]
+    report = result["report"]
     detail = "a clear photograph showing the damaged product's front label"
     assert report["recommendation"] == "request_info"
     assert report["content"]["requested_details"] == [detail]
@@ -570,10 +570,10 @@ async def test_a_claim_that_reaches_a_recommendation_keeps_a_report_per_product(
         kept = (await http.get("/cases/CASE-1001/reports")).json()
 
     result = json.loads(dict(read_stream(response.text))["result"])
-    assert result["reports_unavailable_reason"] is None
-    (report,) = result["reports"]
+    assert result["report_unavailable_reason"] is None
+    report = result["report"]
     assert report["stage"] == "investigation"
-    assert report["product_name"] == "Liposomal Tripeptide Collagen"
+    assert report["product_names"] == ["Liposomal Tripeptide Collagen"]
     assert report["recommendation"] == "request_info"
     requested_details = report["content"]["requested_details"]
     assert "a photo of the outer shipping box the order arrived in, damaged or not" in (
@@ -603,9 +603,7 @@ async def test_a_kept_report_can_then_be_approved(
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         response = await http.post("/cases/CASE-1001/investigate")
-        report_id = json.loads(dict(read_stream(response.text))["result"])["reports"][0][
-            "report_id"
-        ]
+        report_id = json.loads(dict(read_stream(response.text))["result"])["report"]["report_id"]
         approved = await http.post(f"/reports/{report_id}/approve", json={"amount_usd": "31.20"})
 
     assert approved.status_code == 200

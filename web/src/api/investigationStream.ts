@@ -23,10 +23,10 @@ export type InvestigationMessage =
   /** Everything a representative decides from. Sent once, near the end. */
   | {
       readonly kind: "result";
-      /** The reports the service kept, ready to be decided on. Empty when it kept none. */
-      readonly reports: readonly Report[];
+      /** The claim's report, ready to be decided on. Null when none was produced. */
+      readonly report: Report | null;
       /** Why the findings could not be kept, or null when they were. */
-      readonly reportsUnavailable: string | null;
+      readonly reportUnavailable: string | null;
     }
   /** It went wrong, and this is the service's own account of why. */
   | { readonly kind: "failed"; readonly code: string; readonly message: string }
@@ -165,13 +165,13 @@ function readOneMessage(block: string): InvestigationMessage | null {
       return { kind: "progress", event: payload as RunEvent };
     case "result": {
       const sent = payload as {
-        reports?: Report[];
-        reports_unavailable_reason?: string | null;
+        report?: Report | null;
+        report_unavailable_reason?: string | null;
       };
       return {
         kind: "result",
-        reports: sent.reports ?? [],
-        reportsUnavailable: sent.reports_unavailable_reason ?? null,
+        report: sent.report ?? null,
+        reportUnavailable: sent.report_unavailable_reason ?? null,
       };
     }
     case "failed": {

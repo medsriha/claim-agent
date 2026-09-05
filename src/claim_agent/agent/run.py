@@ -1,10 +1,6 @@
-"""Investigating a whole claim: split it, look into each product, then check the total."""
+"""Investigating a whole claim: split it into products, then look into all of them at once."""
 
 from __future__ import annotations
-
-import asyncio
-from collections.abc import Mapping, Sequence
-from decimal import Decimal
 
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, ConfigDict
@@ -12,15 +8,13 @@ from pydantic import BaseModel, ConfigDict
 from claim_agent.agent.budget import RunBudget
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
-from claim_agent.agent.investigate import LineInvestigation, investigate_line
+from claim_agent.agent.investigate import ClaimFindings, investigate_claim_lines
 from claim_agent.agent.ledger import RunLedger
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.observations import ObservationCache
-from claim_agent.agent.precedent_context import precedent_for_line
+from claim_agent.agent.precedent_context import precedent_for_claim
 from claim_agent.agent.triage import ClaimTriage, triage_claim
-from claim_agent.domain.claim_line import ClaimLine
-from claim_agent.domain.models import Case, Invoice
-from claim_agent.domain.outcome import OutcomeDecision, OverrideReason, Recommendation
+from claim_agent.domain.models import Invoice
 from claim_agent.errors import ClaimAgentError
 from claim_agent.observability import get_logger
 from claim_agent.policy import Policy
@@ -32,16 +26,18 @@ logger = get_logger(__name__)
 
 
 class ClaimInvestigation(BaseModel):
-    """Everything an investigation established about one claim, product by product."""
+    """Everything an investigation established about one claim (FR-1b.1).
+
+    `findings` is `None` only when nothing could be investigated, which happens when the
+    claim could not be split into products at all — guessing a split is what FR-1a.4
+    forbids, so there is nothing to have found.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     case_id: str
     triage: ClaimTriage
-    lines: tuple[LineInvestigation, ...] = ()
-    claim_concerns: tuple[str, ...] = ()
-    recommended_total_usd: Decimal = Decimal("0.00")
-    claim_cap_applied: bool = False
+    findings: ClaimFindings | None = None
 
 
 async def investigate_claim(
@@ -57,7 +53,7 @@ async def investigate_claim(
     cache: ObservationCache | None = None,
     precedent_store: PrecedentStore | None = None,
 ) -> ClaimInvestigation:
-    """Investigate every damaged product on one claim (FR-1a.*, FR-1b.*)."""
+    """Split a claim into products, then investigate all of them in one run (FR-1a.*, FR-1b.*)."""
     shared_cache = cache if cache is not None else ObservationCache()
 
     triage = await triage_claim(
@@ -83,213 +79,80 @@ async def investigate_claim(
 
     invoice = await invoice_for_claim(record=record, evidence=evidence, cache=shared_cache)
 
-    # Looked up before the products fan out: the store is a file on disk and reading it
-    # blocks. It also means every run starts with its precedent already in hand, which is
-    # what FR-S.6 asks for — precedent arrives with the claim, never fetched on a whim.
-    precedent = _precedent_for_each(
-        store=precedent_store, case=record.case, lines=triage.claim_lines, policy=policy
+    # Looked up before the run starts: the store is a file on disk and reading it blocks. It
+    # also means the run begins with its precedent already in hand, which is what FR-S.6 asks
+    # for — precedent arrives with the claim, never fetched on a whim.
+    precedent = _precedent_for_the_claim(
+        store=precedent_store, record=record, triage=triage, policy=policy
     )
-    await _say_what_precedent_was_found(precedent, lines=triage.claim_lines, events=events)
+    await _say_what_precedent_was_found(precedent, events=events)
 
-    # Each product gets its own investigation, and they run together. Nothing is
-    # shared between them but read-only facts: the same records, the same settled
-    # evidence, and one memo of what has already been looked at.
-    finished = await asyncio.gather(
-        *(
-            investigate_line(
-                line=line,
-                record=record,
-                context=context,
-                attachments=triage.attachments,
-                invoice=invoice,
-                evidence=evidence,
-                fetcher=fetcher,
-                chat=chat,
-                structured=structured,
-                cache=shared_cache,
-                events=events,
-                policy=policy,
-                shared_evidence=triage.shared_evidence,
-                siblings=tuple(other for other in triage.claim_lines if other is not line),
-                precedent=precedent.get(line.claim_line_id),
-            )
-            for line in triage.claim_lines
-        )
-    )
-
-    return await _check_the_claim_total(
-        case_id=triage.case_id,
-        triage=triage,
-        lines=finished,
+    findings = await investigate_claim_lines(
+        lines=triage.claim_lines,
+        record=record,
+        context=context,
+        attachments=triage.attachments,
+        invoice=invoice,
+        evidence=evidence,
+        fetcher=fetcher,
+        chat=chat,
+        structured=structured,
+        cache=shared_cache,
         events=events,
         policy=policy,
+        shared_evidence=triage.shared_evidence,
+        precedent=precedent,
     )
 
+    return ClaimInvestigation(case_id=triage.case_id, triage=triage, findings=findings)
 
-def _precedent_for_each(
+
+def _precedent_for_the_claim(
     *,
     store: PrecedentStore | None,
-    case: Case,
-    lines: Sequence[ClaimLine],
+    record: CaseRecord,
+    triage: ClaimTriage,
     policy: Policy,
-) -> dict[str, PrecedentSet]:
-    """Look up the closed claims most like each product, before any of them is investigated."""
+) -> PrecedentSet | None:
+    """Look up the closed claims most like this one, before it is investigated (FR-S.5)."""
     if store is None:
-        return {}
-    return {
-        line.claim_line_id: precedent_for_line(
-            store=store,
-            case=case,
-            line=line,
-            policy=policy,
-            shared_evidence=(),
-        )
-        for line in lines
-    }
+        return None
+    return precedent_for_claim(
+        store=store,
+        case=record.case,
+        lines=triage.claim_lines,
+        policy=policy,
+        shared_evidence=(),
+    )
 
 
 async def _say_what_precedent_was_found(
-    precedent: Mapping[str, PrecedentSet],
-    *,
-    lines: Sequence[ClaimLine],
-    events: EventStream,
+    precedent: PrecedentSet | None, *, events: EventStream
 ) -> None:
-    """Tell whoever is watching what comparable past claims were found, product by product."""
-    for line in lines:
-        found = precedent.get(line.claim_line_id)
-
-        if found is None:
-            summary = "No past claims were looked up for this product."
-            outcome = "not_looked_up"
-            count = 0
-        elif not found.was_read:
-            summary = (
-                "Past claims could not be read for this product, so nothing is known "
-                "about how claims like it were handled."
-            )
-            outcome = "unreadable"
-            count = 0
-        elif not found.retrieved:
-            summary = "No past claim close enough to this product was found."
-            outcome = "none_alike"
-            count = 0
-        else:
-            count = len(found.retrieved)
-            summary = (
-                f"Found {count} past claim(s) like this product, out of "
-                f"{found.considered} looked at."
-            )
-            outcome = "found"
-
-        await events.emit(
-            EventKind.PRECEDENT_GATHERED,
-            summary,
-            claim_line_id=line.claim_line_id,
-            outcome=outcome,
-            found=str(count),
+    """Tell whoever is watching what comparable past claims were found."""
+    if precedent is None:
+        summary = "No past claims were looked up for this claim."
+        outcome = "not_looked_up"
+        count = 0
+    elif not precedent.was_read:
+        summary = (
+            "Past claims could not be read, so nothing is known about how claims like "
+            "this one were handled."
         )
-
-
-class ClaimCapVerdict(BaseModel):
-    """What the cap makes of a whole claim, once each product has been judged alone."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    lines: tuple[LineInvestigation, ...]
-    total_usd: Decimal
-    applied: bool
-    complaint: str | None = None
-
-
-def apply_claim_cap(lines: Sequence[LineInvestigation], *, policy: Policy) -> ClaimCapVerdict:
-    """Add up what is being recommended and apply the cap across the whole claim (FR-1.20)."""
-    total = sum(
-        (line.amount.amount_usd for line in lines if line.outcome.recommendation.is_approval),
-        start=Decimal("0.00"),
-    )
-
-    if not (policy.cap_applies_to_whole_claim and total > policy.reimbursement_cap_usd):
-        return ClaimCapVerdict(lines=tuple(lines), total_usd=total, applied=False)
-
-    complaint = (
-        f"The products recommended for payment come to {total} between them, over the "
-        f"{policy.reimbursement_cap_usd} a claim may be reimbursed. Each was judged "
-        "sound on its own evidence; what to pay across the claim is a decision for a "
-        "representative."
-    )
-    return ClaimCapVerdict(
-        lines=tuple(_held_back_by_the_claim_cap(line, complaint) for line in lines),
-        total_usd=total,
-        applied=True,
-        complaint=complaint,
-    )
-
-
-async def _check_the_claim_total(
-    *,
-    case_id: str,
-    triage: ClaimTriage,
-    lines: Sequence[LineInvestigation],
-    events: EventStream,
-    policy: Policy,
-) -> ClaimInvestigation:
-    """Add up what is being recommended and apply the cap across the whole claim (FR-1.20)."""
-    verdict = apply_claim_cap(lines, policy=policy)
-
-    if not verdict.applied:
-        return ClaimInvestigation(
-            case_id=case_id,
-            triage=triage,
-            lines=verdict.lines,
-            recommended_total_usd=verdict.total_usd,
+        outcome = "unreadable"
+        count = 0
+    elif not precedent.retrieved:
+        summary = "No past claim close enough to this one was found."
+        outcome = "none_alike"
+        count = 0
+    else:
+        count = len(precedent.retrieved)
+        summary = (
+            f"Found {count} past claim(s) like this one, out of {precedent.considered} looked at."
         )
+        outcome = "found"
 
-    complaint = verdict.complaint or ""
-    total = verdict.total_usd
-    logger.info(
-        "claim_over_the_cap",
-        case_id=case_id,
-        recommended_total=str(total),
-        cap=str(policy.reimbursement_cap_usd),
-    )
-    await events.emit(
-        EventKind.LINE_FINISHED,
-        complaint,
-        outcome="claim_cap_exceeded",
-        recommended_total=str(total),
-    )
-
-    return ClaimInvestigation(
-        case_id=case_id,
-        triage=triage,
-        lines=tuple(_held_back_by_the_claim_cap(line, complaint) for line in lines),
-        claim_concerns=(complaint,),
-        recommended_total_usd=total,
-        claim_cap_applied=True,
-    )
-
-
-def _held_back_by_the_claim_cap(line: LineInvestigation, complaint: str) -> LineInvestigation:
-    """Turn one product's recommended payment into an representative clarification request, keeping
-    everything else.
-    """
-    if not line.outcome.recommendation.is_approval:
-        return line
-
-    return line.model_copy(
-        update={
-            "outcome": OutcomeDecision(
-                recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
-                recommended_by_agent=line.outcome.recommended_by_agent,
-                overrides=(*line.outcome.overrides, OverrideReason.CLAIM_CAP_EXCEEDED),
-                explanation=complaint,
-            ),
-            "concerns": (*line.concerns, complaint),
-            # The email said a figure would be paid. It no longer would be, and a draft
-            # that promises money nobody has approved must not survive the change.
-            "drafted_email": None,
-        }
-    )
+    await events.emit(EventKind.PRECEDENT_GATHERED, summary, outcome=outcome, found=str(count))
 
 
 async def invoice_for_claim(
@@ -322,5 +185,5 @@ def _a_budget_for_the_split(policy: Policy) -> RunBudget:
 
 
 def _a_ledger_for_the_split() -> RunLedger:
-    """A fresh record for the triage pass, kept apart from each product's own."""
+    """A fresh record for the triage pass, kept apart from the investigation's own."""
     return RunLedger()

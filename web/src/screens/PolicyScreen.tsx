@@ -16,10 +16,9 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiFailure } from "../api/failure";
 import { FailureNotice } from "../components/FailureNotice";
 import { PolicyValueRow } from "../components/PolicyValueRow";
-import { fetchPolicy, forgetCorrections, resetPolicy, savePolicy } from "../api/policyClient";
-import { PAGE_WORDS } from "../chat/pageWords";
+import { fetchPolicy, forgetEverything, resetPolicy, savePolicy } from "../api/policyClient";
 import { formatMoment } from "../display";
-import type { PolicyValue, PolicyView, SubmittedValues } from "../api/policyTypes";
+import type { ClearedStores, PolicyValue, PolicyView, SubmittedValues } from "../api/policyTypes";
 import type { ValueProblem } from "../api/failure";
 
 export function PolicyScreen(): React.JSX.Element {
@@ -168,13 +167,21 @@ export function PolicyScreen(): React.JSX.Element {
         </div>
       </section>
 
-      <PastCorrections />
+      <EverythingRemembered />
     </main>
   );
 }
 
+/** What each count in the service's answer is called on screen, in the order it answers with. */
+const STORES: readonly (readonly [keyof ClearedStores, string])[] = [
+  ["corrections", "Merchant corrections"],
+  ["reports", "Reports, every version"],
+  ["decisions", "Recorded decisions"],
+  ["past_claims", "Past claims"],
+];
+
 /**
- * Emptying the store of what representatives have corrected.
+ * Emptying everything the service remembers.
  *
  * Sits apart from the policy form because it is not a policy value: the form changes what
  * later claims are judged by, and this throws away what the system has already learned. It is
@@ -183,18 +190,18 @@ export function PolicyScreen(): React.JSX.Element {
  * It keeps its own state rather than sharing the form's. The two have nothing to do with each
  * other, and a failure to forget must not read as a failure to save.
  */
-function PastCorrections(): React.JSX.Element {
+function EverythingRemembered(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
-  const [forgotten, setForgotten] = useState<number | null>(null);
+  const [cleared, setCleared] = useState<ClearedStores | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
   const forget = (): void => {
     setBusy(true);
     setFailure(null);
-    setForgotten(null);
-    forgetCorrections()
+    setCleared(null);
+    forgetEverything()
       .then((answer) => {
-        setForgotten(answer.forgotten);
+        setCleared(answer);
       })
       .catch((error: unknown) => {
         setFailure(
@@ -210,19 +217,31 @@ function PastCorrections(): React.JSX.Element {
 
   return (
     <section className="panel">
-      <h2 className="panel-title">Past rep corrections</h2>
-      <p className="policy-note">{PAGE_WORDS.forgettingCorrections}</p>
+      <h2 className="panel-title">
+        Permanently delete all reports, feedback, decisions, corrections, and claim history
+      </h2>
 
       <div className="policy-actions">
         <button className="button-secondary" type="button" disabled={busy} onClick={forget}>
-          {busy ? "Working…" : "Forget them all"}
+          {busy ? "Working…" : "Forget it all"}
         </button>
       </div>
 
-      {forgotten !== null && (
-        <p className="policy-saved" role="status">
-          {forgotten === 0 ? "There were none to forget." : `Forgot ${String(forgotten)}.`}
-        </p>
+      {cleared !== null && (
+        <div className="policy-saved" role="status">
+          {STORES.every(([field]) => cleared[field] === 0) ? (
+            <p className="cleared-nothing">There was nothing to forget.</p>
+          ) : (
+            <ul className="cleared-stores">
+              {STORES.map(([field, label]) => (
+                <li key={field}>
+                  <span>{label}</span>
+                  <strong>{String(cleared[field])}</strong>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
       {failure !== null && (
         <p className="policy-refusal" role="alert">

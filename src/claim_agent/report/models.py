@@ -41,7 +41,11 @@ class EmailWording(BaseModel):
 
 
 class InvestigationReportContent(BaseModel):
-    """Settled findings for one damaged product, ready for a UI to lay out.
+    """Settled findings for one claim, ready for a UI to lay out (FR-1b.1, FR-2.9a).
+
+    `lines` is every damaged product the claim covers. There is one outcome, one amount and
+    one email across all of them; what each product contributed to the figure is in
+    `amount.components` (FR-1b.4).
 
     `finding_summary` keeps the investigation's concise decision basis separate from the
     itemized merchant request. It is optional so reports stored before this field was added
@@ -51,7 +55,7 @@ class InvestigationReportContent(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: Literal["investigation"] = "investigation"
-    line: ClaimLine
+    lines: tuple[ClaimLine, ...]
     context: ClaimContext
     attachments: tuple[Attachment, ...] = ()
     evidence: tuple[EvidenceFinding, ...]
@@ -139,9 +143,9 @@ class RevisionTurn(BaseModel):
         reworked: Whether anything about the report actually changed. False covers a run that
             could not be completed and an answer that was only an answer — a representative
             asking a question and being told something does not make the report different.
-        reinvestigated: Whether this round caused the whole claim to be investigated again.
-            That happens when a representative settles what an unsettled claim is for, and it
-            produces a report per damaged product beside this one (FR-1a.4).
+        reinvestigated: Whether this round caused the claim to be investigated again. That
+            happens when a representative settles what an unsettled claim is for, and the
+            findings become this report's own next version (FR-1a.4).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -157,25 +161,20 @@ class RevisionTurn(BaseModel):
     reinvestigated: bool = False
 
 
-class SiblingLine(BaseModel):
-    """One other damaged product on the same claim, looked up at read time."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    claim_line_id: str
-    product_name: str
-    recommendation: Recommendation | None
-    amount_usd: Decimal | None
-    state: ReportState
-
-
 class Report(BaseModel):
     """The canonical structured handoff and its review state.
+
+    One report per claim, covering every damaged product on it (FR-1b.1, FR-2.9b).
 
     `content` is everything a UI needs to construct the report. The scalar fields beside it
     support claim lists, review actions, and analysis without making those callers understand
     the complete content shape. `drafted_email` is a single structured field so it can be
     rendered and edited exactly once.
+
+    `product_names` is every damaged product the claim covers, in the order the investigation
+    established them, and empty for a claim that names none — one the quick checks stopped, or
+    one nobody could split. It is the summary of `content`; the claim lines themselves, with
+    their prices and how each matched the order, are inside it.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -183,8 +182,7 @@ class Report(BaseModel):
     report_id: str
     version: int
     case_id: str
-    claim_line_id: str | None
-    product_name: str | None
+    product_names: tuple[str, ...]
     account_name: str | None
     user_id: str | None
     stage: DecisionStage
@@ -239,7 +237,7 @@ class Report(BaseModel):
         if self.stage is DecisionStage.SCREENING:
             if not isinstance(self.content, ScreeningReportContent):
                 raise ValueError("A screening report needs screening content.")
-            if self.claim_line_id is not None or self.product_name is not None:
+            if self.product_names:
                 raise ValueError("A claim stopped by the quick checks has no damaged product.")
             if self.recommendation is not None or self.amount_usd is not None:
                 raise ValueError("A claim stopped by the quick checks recommends nothing.")
@@ -248,12 +246,10 @@ class Report(BaseModel):
             if not self.content.requires_rep_clarification and self.drafted_email is None:
                 raise ValueError("A merchant-facing screening report needs an email draft.")
         elif isinstance(self.content, InvestigationReportContent):
-            if self.claim_line_id is None or self.product_name is None:
-                raise ValueError("An investigated report has to name its product.")
-            if self.claim_line_id != self.content.line.claim_line_id:
-                raise ValueError("The report and its content must name the same claim line.")
-            if self.product_name != self.content.line.product_name:
-                raise ValueError("The report and its content must name the same product.")
+            if not self.product_names:
+                raise ValueError("An investigated report has to name what was damaged.")
+            if self.product_names != tuple(line.product_name for line in self.content.lines):
+                raise ValueError("The report and its content must name the same products.")
             if self.recommendation is not self.content.outcome.recommendation:
                 raise ValueError("The report and its content must carry the same recommendation.")
             expected_amount = (
@@ -268,7 +264,7 @@ class Report(BaseModel):
                 raise ValueError(
                     "An investigated report needs investigation or clarification content."
                 )
-            if self.claim_line_id is not None or self.product_name is not None:
+            if self.product_names:
                 raise ValueError("A claim-level clarification must not invent a settled product.")
             if self.recommendation not in (
                 Recommendation.REQUEST_INFO,
@@ -332,18 +328,14 @@ class Report(BaseModel):
 
 
 class ClaimView(BaseModel):
-    """Every current report on one claim (FR-2.9b)."""
+    """The report on one claim, if it has one yet (FR-2.9b).
+
+    A claim has at most one report, so this holds none or one. It is kept as a list rather
+    than a single optional field because "nobody has asked for this claim to be investigated"
+    is an ordinary answer, and an empty list says it without a caller having to read a null.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     case_id: str
     reports: tuple[Report, ...] = ()
-
-
-class ReportForReview(BaseModel):
-    """One report and the other products on the same claim beside it (FR-2.9a)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    report: Report
-    siblings: tuple[SiblingLine, ...] = ()

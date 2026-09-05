@@ -27,7 +27,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
 
-from claim_agent.agent.investigate import LineInvestigation
+from claim_agent.agent.investigate import ClaimFindings
 from claim_agent.domain.assessment import Assessment
 from claim_agent.domain.decision import Proposal, RepAction
 from claim_agent.domain.evidence import EvidenceFinding
@@ -61,18 +61,18 @@ _ACTION_IN_WORDS: dict[RepAction, str] = {
 """What a representative did, written the way somebody reading the report afterwards would say it."""
 
 
-def render_investigated_product(
+def render_investigated_claim(
     *,
-    line: LineInvestigation,
+    findings: ClaimFindings,
     context: ClaimContext,
     case: Case,
 ) -> str:
-    """Write the report for one damaged product that was investigated (FR-2.1 to FR-2.7).
+    """Write the report for a claim that was investigated (FR-2.1 to FR-2.7).
 
     Args:
-        line: Everything that product's investigation established — the evidence, the four
-            questions, what stands after the rules ran, the working behind the figure, the
-            concerns and the drafted email.
+        findings: Everything the claim's investigation established — the damaged products, the
+            evidence, the four questions, what stands after the rules ran, the working behind
+            the figure, the concerns and the drafted email.
         context: What was worked out before the AI ran: what the order was worth, whether it
             counts as high value, and what this merchant has been corrected about before (FR-0.5).
         case: The claim itself, read for the merchant's name and the claim's own identifier.
@@ -83,14 +83,14 @@ def render_investigated_product(
         because a gap a representative cannot see is a gap they will not check (FR-2.5).
     """
     sections = [
-        _title(f"Damaged product: {line.line.product_name}", case),
-        _what_is_recommended(line),
-        _concerns(line.concerns),
-        _claim_context(context, considered=_corrections_considered(line)),
-        _evidence(line.evidence),
-        _assessments(line.assessments),
-        _how_the_amount_was_reached(line.amount, line.outcome.recommendation),
-        _the_merchant_email(line.drafted_email),
+        _title(f"Damaged: {_products(findings)}", case),
+        _what_is_recommended(findings),
+        _concerns(findings.concerns),
+        _claim_context(context, considered=_corrections_considered(findings)),
+        _evidence(findings.evidence),
+        _assessments(findings.assessments),
+        _how_the_amount_was_reached(findings.amount, findings.outcome.recommendation),
+        _the_merchant_email(findings.drafted_email),
     ]
     return "\n\n".join(section for section in sections if section)
 
@@ -216,26 +216,33 @@ def _title(heading: str, case: Case) -> str:
     return f"# {heading}\n\nClaim `{case.case_id}`, for {merchant}."
 
 
-def _what_is_recommended(line: LineInvestigation) -> str:
+def _products(findings: ClaimFindings) -> str:
+    """Every damaged product on the claim, named in the heading (FR-2.9a)."""
+    if not findings.lines:
+        return "no product established"
+    return ", ".join(line.product_name for line in findings.lines)
+
+
+def _what_is_recommended(findings: ClaimFindings) -> str:
     """Lead with the recommendation, the figure, and how the rules got there (FR-2.1, NFR-3).
 
     Written as something a representative is deciding on rather than as something that has
     happened, because nothing here has happened: no email has gone and no money has moved
     (FR-1.17, FR-3.1).
     """
-    recommended = _RECOMMENDATION_IN_WORDS[line.outcome.recommendation]
+    recommended = _RECOMMENDATION_IN_WORDS[findings.outcome.recommendation]
     lines = ["## Recommendation", "", f"**{recommended}.**"]
 
-    if line.outcome.recommendation.is_approval:
-        lines += ["", f"**Amount recommended: {_money(line.amount.amount_usd)}.**"]
+    if findings.outcome.recommendation.is_approval:
+        lines += ["", f"**Amount recommended: {_money(findings.amount.amount_usd)}.**"]
 
-    lines += ["", line.outcome.explanation]
+    lines += ["", findings.outcome.explanation]
 
-    if line.outcome.was_overridden:
-        stepped_in = ", ".join(_in_words(str(reason)) for reason in line.outcome.overrides)
+    if findings.outcome.was_overridden:
+        stepped_in = ", ".join(_in_words(str(reason)) for reason in findings.outcome.overrides)
         lines += [
             "",
-            f"The investigation itself recommended `{line.outcome.recommended_by_agent}`. "
+            f"The investigation itself recommended `{findings.outcome.recommended_by_agent}`. "
             f"Rules that stepped in: {stepped_in}.",
         ]
 
@@ -551,13 +558,13 @@ def _or_dash(value: str | None) -> str:
     return f"`{value}`" if value else "—"
 
 
-def _corrections_considered(line: LineInvestigation) -> tuple[str, ...]:
+def _corrections_considered(findings: ClaimFindings) -> tuple[str, ...]:
     """Which earlier claims' corrections the investigation says changed its conclusion (FR-2.6).
 
     Empty when none did, and empty when the run never reached a conclusion at all. The two are
     the same answer here — nothing was carried forward — and neither is worth telling apart on a
     report.
     """
-    if line.conclusion is None:
+    if findings.conclusion is None:
         return ()
-    return line.conclusion.corrections_considered
+    return findings.conclusion.corrections_considered

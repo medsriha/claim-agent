@@ -22,11 +22,10 @@ A_MOMENT = datetime(2026, 3, 21, 10, 4, 11, tzinfo=UTC)
 
 
 def investigated(**overrides: Any) -> DecisionRecord:
-    """One investigated product a representative approved exactly as it stood."""
+    """One investigated claim a representative approved exactly as it stood."""
     fields: dict[str, Any] = {
-        "decision_id": "DEC-CASE-9001-L01-01",
+        "decision_id": "DEC-CASE-9001-01",
         "case_id": "CASE-9001",
-        "claim_line_id": "CASE-9001-L01",
         "stage": DecisionStage.INVESTIGATION,
         "report_version": 1,
         "action": RepAction.APPROVED,
@@ -50,13 +49,12 @@ def investigated(**overrides: Any) -> DecisionRecord:
 def screened(**overrides: Any) -> DecisionRecord:
     """One claim the quick checks stopped, approved as it stood.
 
-    No claim line, no outcome on either side, and no statement of how sure anything was — a
-    stopped claim never reaches the AI (FR-C.1).
+    No outcome on either side, and no statement of how sure anything was — a stopped claim
+    never reaches the AI (FR-C.1).
     """
     fields: dict[str, Any] = {
         "decision_id": "DEC-CASE-9002-01",
         "case_id": "CASE-9002",
-        "claim_line_id": None,
         "stage": DecisionStage.SCREENING,
         "report_version": 1,
         "action": RepAction.APPROVED,

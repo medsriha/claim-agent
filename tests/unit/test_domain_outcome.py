@@ -15,6 +15,7 @@ alone or alongside five others (FR-1b.4, NFR-1).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 
 from claim_agent.domain.assessment import Assessment, AssessmentName
@@ -147,7 +148,7 @@ def decide(
     *,
     evidence: tuple[EvidenceFinding, ...] | None = None,
     assessments: tuple[Assessment, ...] | None = None,
-    line: ClaimLine | None = None,
+    lines: Sequence[ClaimLine] | None = None,
     amount: AmountDerivation | None = PAYABLE_AMOUNT,
     policy: Policy | None = None,
     budget_exhausted: bool = False,
@@ -168,7 +169,7 @@ def decide(
         recommended,
         evidence=all_evidence_present() if evidence is None else evidence,
         assessments=all_questions_answered() if assessments is None else assessments,
-        line=matched_line() if line is None else line,
+        lines=(matched_line(),) if lines is None else lines,
         amount=amount,
         policy=Policy() if policy is None else policy,
         budget_exhausted=budget_exhausted,
@@ -190,7 +191,7 @@ def test_fr_1_14_a_well_evidenced_approval_is_left_exactly_as_it_was_recommended
     assert decision.recommended_by_agent is Recommendation.APPROVE
     assert decision.overrides == ()
     assert not decision.was_overridden
-    assert "paying this line" in decision.explanation
+    assert "paying this claim" in decision.explanation
     assert "none of the rules changed that" in decision.explanation
 
 
@@ -200,7 +201,7 @@ def test_fr_1_14_a_request_for_rep_clarification_passes_through_untouched() -> N
         Recommendation.REQUEST_REP_CLARIFICATION,
         evidence=(),
         assessments=(),
-        line=unmatched_line(MatchOutcome.NOT_ON_ORDER),
+        lines=(unmatched_line(MatchOutcome.NOT_ON_ORDER),),
         amount=None,
     )
 
@@ -502,7 +503,7 @@ def test_an_investigation_that_assessed_nothing_is_incomplete() -> None:
 def test_fr_1_13_a_product_matching_two_order_lines_is_never_priced_by_choosing_one() -> None:
     """CleanBoss's order holds two 24oz bottles at two prices; a photograph cannot separate them."""
     decision = decide(
-        Recommendation.APPROVE, line=unmatched_line(MatchOutcome.AMBIGUOUS), amount=None
+        Recommendation.APPROVE, lines=(unmatched_line(MatchOutcome.AMBIGUOUS),), amount=None
     )
 
     assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
@@ -513,7 +514,7 @@ def test_fr_1_13_a_product_matching_two_order_lines_is_never_priced_by_choosing_
 def test_fr_1a_2_a_product_that_is_not_on_the_order_cannot_be_reimbursed() -> None:
     """A claim for something never bought is a finding, and never a payment."""
     decision = decide(
-        Recommendation.APPROVE, line=unmatched_line(MatchOutcome.NOT_ON_ORDER), amount=None
+        Recommendation.APPROVE, lines=(unmatched_line(MatchOutcome.NOT_ON_ORDER),), amount=None
     )
 
     assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
@@ -562,7 +563,7 @@ def test_fr_1_20_an_item_the_invoice_prices_at_nothing_goes_to_a_person() -> Non
     )
 
     assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert "prices the damaged product at nothing" in decision.explanation
+    assert "prices the damaged goods at nothing" in decision.explanation
 
 
 # ---------------------------------------------------------------------------
@@ -604,7 +605,7 @@ def test_nfr_3_every_rule_that_stepped_in_is_reported_and_not_only_the_first() -
         Recommendation.APPROVE,
         evidence=evidence,
         assessments=answers,
-        line=unmatched_line(MatchOutcome.NOT_ON_ORDER),
+        lines=(unmatched_line(MatchOutcome.NOT_ON_ORDER),),
         amount=None,
         budget_exhausted=True,
     )
@@ -797,7 +798,7 @@ def test_fr_c_7_a_payment_a_representative_directed_is_labelled_too() -> None:
         Recommendation.APPROVE,
         evidence=evidence_with(EvidenceKind.INVOICE, EvidenceState.MISSING),
         assessments=all_questions_answered(),
-        line=matched_line(),
+        lines=(matched_line(),),
         amount=expensive_goods("600.00"),
         policy=Policy(),
         directed_by_representative=True,

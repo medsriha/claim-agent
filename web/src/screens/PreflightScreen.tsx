@@ -118,8 +118,6 @@ async function investigate(
   caseId: string,
   setConversation: React.Dispatch<React.SetStateAction<Conversation | null>>,
 ): Promise<void> {
-  const productNames = new Map<string, string>();
-
   const add = (messages: TranscriptMessage[], stillWorking: boolean): void => {
     setConversation((current) =>
       current === null || current.caseId !== caseId
@@ -153,24 +151,16 @@ async function investigate(
     await investigateCase(caseId, (message) => {
       switch (message.kind) {
         case "progress":
-          if (
-            message.event.claim_line_id !== null &&
-            message.event.detail.product !== undefined
-          ) {
-            productNames.set(message.event.claim_line_id, message.event.detail.product);
-          }
           // Screening was already replayed above. Every later SSE action, including model
           // thinking, tool calls, and image analysis, updates the activity bar and is kept
           // in the log revealed when the representative expands it.
           if (message.event.kind !== "screened") {
-            showLatestAction(
-              stepMessage(message.event, (id) => productNames.get(id) ?? null),
-            );
+            showLatestAction(stepMessage(message.event));
           }
           return;
 
         case "result":
-          add(reportMessages(message.reports, message.reportsUnavailable), true);
+          add(reportMessages(message.report, message.reportUnavailable), true);
           return;
 
         case "failed":

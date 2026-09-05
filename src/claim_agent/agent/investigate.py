@@ -1,4 +1,4 @@
-"""Layer 1b — look into one damaged product and hand a representative a decision."""
+"""Layer 1b — look into one whole claim and hand a representative a decision (FR-1b.1)."""
 
 from __future__ import annotations
 
@@ -48,15 +48,15 @@ logger = get_logger(__name__)
 AnyConclusion = TypeVar("AnyConclusion", bound=InvestigationConclusion)
 # What the run is asked once it has stopped looking at things.
 CLOSING_REQUEST = (
-    "Now give your conclusion for this one product: what each of the four pieces of "
-    "evidence showed, your answers to the four questions if the evidence was all there, "
-    "which products should be paid for, your next action, and — only when "
-    "that action addresses the merchant — the email draft."
+    "Now give your conclusion for this claim: what each of the four pieces of evidence "
+    "showed, your answers to the four questions if the evidence was all there, every "
+    "product that should be paid for, your next action, and — only when that action "
+    "addresses the merchant — the email draft."
 )
 # Each recommendation as a representative would say it, for the message on a screen.
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
-    Recommendation.APPROVE: "pay this product",
-    Recommendation.APPROVE_HIGH_VALUE: "pay this product, and look again at what it cost",
+    Recommendation.APPROVE: "pay this claim",
+    Recommendation.APPROVE_HIGH_VALUE: "pay this claim, and look again at what it cost",
     Recommendation.REQUEST_INFO: "go back to the merchant",
     Recommendation.REQUEST_REP_CLARIFICATION: "ask the representative for clarification",
 }
@@ -64,12 +64,17 @@ _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
 _NOTHING_ESTABLISHED = "Nothing was established about this piece of evidence."
 
 
-class LineInvestigation(BaseModel):
-    """Everything one damaged product's investigation established, ready to be reported on."""
+class ClaimFindings(BaseModel):
+    """Everything one claim's investigation established, ready to be reported on (FR-1b.1).
+
+    `lines` is every damaged product the claim covers, and there is one `outcome`, one
+    `amount` and one `drafted_email` across all of them (FR-1b.3). What each product
+    contributed to the figure is in `amount.components`.
+    """
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    line: ClaimLine
+    lines: tuple[ClaimLine, ...]
     evidence: tuple[EvidenceFinding, ...]
     assessments: tuple[Assessment, ...]
     outcome: OutcomeDecision
@@ -87,9 +92,9 @@ class LineInvestigation(BaseModel):
         return None
 
 
-async def investigate_line(
+async def investigate_claim_lines(
     *,
-    line: ClaimLine,
+    lines: Sequence[ClaimLine],
     record: CaseRecord,
     context: ClaimContext,
     attachments: Sequence[Attachment],
@@ -102,22 +107,20 @@ async def investigate_line(
     events: EventStream,
     policy: Policy,
     shared_evidence: Sequence[EvidenceFinding] = (),
-    siblings: Sequence[ClaimLine] = (),
     precedent: PrecedentSet | None = None,
-) -> LineInvestigation:
-    """Investigate one damaged product and produce everything a representative needs."""
+) -> ClaimFindings:
+    """Investigate one claim and produce everything a representative needs (FR-1b.1)."""
     case = record.case
-    # One budget and one record per run, built here rather than taken as arguments, so
-    # two products can never end up sharing an allowance: a claim with four products has
-    # four budgets, not one split between them (FR-1.3).
+    # One budget and one record for the run, built here rather than taken as arguments, so a
+    # claim can never end up sharing an allowance with the triage pass that preceded it
+    # (FR-1.3).
     budget = RunBudget(policy)
     ledger = RunLedger()
 
     await events.emit(
-        EventKind.LINE_STARTED,
-        f"Looking into {line.product_name}.",
-        claim_line_id=line.claim_line_id,
-        product=line.product_name,
+        EventKind.INVESTIGATION_STARTED,
+        f"Looking into this claim: {_named(lines)}.",
+        products=str(len(lines)),
     )
 
     outcome = await run_agent_pass(
@@ -126,8 +129,7 @@ async def investigate_line(
             order=record.order,
             attachments=attachments,
             context=context,
-            claim_line=line,
-            other_lines=_the_other_products(siblings, line),
+            claim_lines=lines,
             shared_evidence=shared_evidence,
             precedent=precedent,
         ),
@@ -145,7 +147,6 @@ async def investigate_line(
             ledger=ledger,
             events=events,
             policy=policy,
-            claim_line_id=line.claim_line_id,
         ),
         concludes_with=InvestigationConclusion,
         closing_request=CLOSING_REQUEST,
@@ -154,12 +155,11 @@ async def investigate_line(
         budget=budget,
         ledger=ledger,
         events=events,
-        claim_line_id=line.claim_line_id,
     )
 
     investigated = settle_conclusion(
         outcome,
-        line=line,
+        lines=lines,
         shared_evidence=shared_evidence,
         invoice=invoice,
         policy=policy,
@@ -167,18 +167,17 @@ async def investigate_line(
     )
 
     logger.info(
-        "claim_line_investigated",
+        "claim_investigated",
         case_id=case.case_id,
-        claim_line_id=line.claim_line_id,
+        products=len(lines),
         recommendation=investigated.outcome.recommendation.value,
         recommended_by_agent=investigated.outcome.recommended_by_agent.value,
         gave_up=outcome.gave_up,
     )
     await events.emit(
-        EventKind.LINE_FINISHED,
-        f"Finished with {line.product_name}. The recommendation is to "
+        EventKind.INVESTIGATION_FINISHED,
+        "Finished with this claim. The recommendation is to "
         f"{_RECOMMENDATION_IN_WORDS[investigated.outcome.recommendation]}.",
-        claim_line_id=line.claim_line_id,
         recommendation=investigated.outcome.recommendation.value,
     )
     return investigated
@@ -187,17 +186,17 @@ async def investigate_line(
 def settle_conclusion(
     outcome: LoopOutcome[AnyConclusion],
     *,
-    line: ClaimLine,
+    lines: Sequence[ClaimLine],
     shared_evidence: Sequence[EvidenceFinding],
     invoice: Invoice | None,
     policy: Policy,
     contact_email: str | None,
     directed_by_representative: bool = False,
-) -> LineInvestigation:
-    """Turn what one run came back with into the write-up a representative reads."""
+) -> ClaimFindings:
+    """Turn what the run came back with into the write-up a representative reads."""
     if outcome.answer is None:
         return _a_run_that_gave_up(
-            outcome, line=line, shared=shared_evidence, invoice=invoice, policy=policy
+            outcome, lines=lines, shared=shared_evidence, invoice=invoice, policy=policy
         )
 
     conclusion = outcome.answer
@@ -211,7 +210,7 @@ def settle_conclusion(
         conclusion.recommendation,
         evidence=evidence,
         assessments=assessments,
-        line=line,
+        lines=lines,
         amount=amount,
         policy=policy,
         requested_details=requested_details,
@@ -236,17 +235,16 @@ def settle_conclusion(
             # report keeps the investigation's conclusion and explains why no email was made.
             logger.warning(
                 "drafted_email_refused",
-                claim_line_id=line.claim_line_id,
                 recommendation=decision.recommendation.value,
             )
-            return LineInvestigation(
-                line=line,
+            return ClaimFindings(
+                lines=tuple(lines),
                 evidence=evidence,
                 assessments=assessments,
                 outcome=_hand_it_to_a_person(
                     evidence=evidence,
                     assessments=assessments,
-                    line=line,
+                    lines=lines,
                     amount=amount,
                     policy=policy,
                 ),
@@ -259,8 +257,8 @@ def settle_conclusion(
                 requested_details=(),
             )
 
-    return LineInvestigation(
-        line=line,
+    return ClaimFindings(
+        lines=tuple(lines),
         evidence=evidence,
         assessments=assessments,
         outcome=decision,
@@ -287,22 +285,22 @@ def _requested_details(
 def _a_run_that_gave_up(
     outcome: LoopOutcome[AnyConclusion],
     *,
-    line: ClaimLine,
+    lines: Sequence[ClaimLine],
     shared: Sequence[EvidenceFinding],
     invoice: Invoice | None,
     policy: Policy,
-) -> LineInvestigation:
+) -> ClaimFindings:
     """Write up a run that stopped before it could conclude (FR-1.16, NFR-4)."""
     evidence = _what_the_evidence_shows((), shared)
     amount = _no_amount_at_all(invoice=invoice, policy=policy)
-    return LineInvestigation(
-        line=line,
+    return ClaimFindings(
+        lines=tuple(lines),
         evidence=evidence,
         assessments=(),
         outcome=_hand_it_to_a_person(
             evidence=evidence,
             assessments=(),
-            line=line,
+            lines=lines,
             amount=amount,
             policy=policy,
             budget_exhausted=_ran_out_of_steps(outcome),
@@ -352,17 +350,17 @@ def _hand_it_to_a_person(
     *,
     evidence: Sequence[EvidenceFinding],
     assessments: Sequence[Assessment],
-    line: ClaimLine,
+    lines: Sequence[ClaimLine],
     amount: AmountDerivation,
     policy: Policy,
     budget_exhausted: bool = False,
 ) -> OutcomeDecision:
-    """Settle a line that has to go to a person, still through the ordinary rules."""
+    """Settle a claim that has to go to a person, still through the ordinary rules."""
     return decide_outcome(
         Recommendation.REQUEST_REP_CLARIFICATION,
         evidence=evidence,
         assessments=assessments,
-        line=line,
+        lines=lines,
         amount=amount,
         policy=policy,
         budget_exhausted=budget_exhausted,
@@ -374,11 +372,11 @@ def _ran_out_of_steps(outcome: LoopOutcome[AnyConclusion]) -> bool:
     return outcome.gave_up and BudgetLimit.STEPS in outcome.budget.limits_reached
 
 
-def _the_other_products(siblings: Sequence[ClaimLine], line: ClaimLine) -> tuple[ClaimLine, ...]:
-    """The claim's other products, in a fixed order, with nothing that could sway this run."""
-    others = [other for other in siblings if other.claim_line_id != line.claim_line_id]
-    in_order = sorted(others, key=lambda other: (other.product_name, other.claim_line_id))
-    return tuple(other.model_copy(update={"damage_attachment_ids": ()}) for other in in_order)
+def _named(lines: Sequence[ClaimLine]) -> str:
+    """The claim's damaged products, written out for a message on a screen."""
+    if not lines:
+        return "no product could be established"
+    return ", ".join(line.product_name for line in lines)
 
 
 def _what_the_evidence_shows(

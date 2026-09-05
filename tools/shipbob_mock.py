@@ -61,6 +61,9 @@ from tests.fixtures.shipbob import (
     CONSTRUCTED_LOST_IN_TRANSIT_CASE,
     CONSTRUCTED_LOST_IN_TRANSIT_ORDER,
     CONSTRUCTED_LOST_IN_TRANSIT_SHIPMENT,
+    CONSTRUCTED_REPEAT_MERCHANT_CASE,
+    CONSTRUCTED_REPEAT_MERCHANT_ORDER,
+    CONSTRUCTED_REPEAT_MERCHANT_SHIPMENT,
     ORDER_1001,
     ORDER_1002,
     ORDER_1003,
@@ -85,6 +88,7 @@ CASES = [
     CONSTRUCTED_LOST_IN_TRANSIT_CASE,
     CONSTRUCTED_INSURED_SUBCATEGORY_CASE,
     CONSTRUCTED_HIGH_VALUE_CASE,
+    CONSTRUCTED_REPEAT_MERCHANT_CASE,
 ]
 
 SHIPMENTS = [
@@ -97,6 +101,7 @@ SHIPMENTS = [
     CONSTRUCTED_LOST_IN_TRANSIT_SHIPMENT,
     CONSTRUCTED_INSURED_SUBCATEGORY_SHIPMENT,
     CONSTRUCTED_HIGH_VALUE_SHIPMENT,
+    CONSTRUCTED_REPEAT_MERCHANT_SHIPMENT,
 ]
 
 ORDERS = [
@@ -109,6 +114,7 @@ ORDERS = [
     CONSTRUCTED_LOST_IN_TRANSIT_ORDER,
     CONSTRUCTED_INSURED_SUBCATEGORY_ORDER,
     CONSTRUCTED_HIGH_VALUE_ORDER,
+    CONSTRUCTED_REPEAT_MERCHANT_ORDER,
 ]
 
 
@@ -141,12 +147,18 @@ ATTACHMENTS_BY_CASE_ID: dict[str, dict[str, object]] = {
     "CASE-1005": ATTACHMENTS_1005,
 }
 
-# What the four constructed cases answer with. ShipBob supplied no images for cases we
+# What the five constructed cases answer with. ShipBob supplied no images for cases we
 # made up, and inventing addresses for them would put fabricated evidence in front of an
 # investigation — once an image is fetched, nothing distinguishes one we invented from a
 # photograph a merchant really took. An empty listing is the honest answer, and it is an
-# ordinary answer rather than a failure (FR-1.6). It costs those cases nothing: each one
-# exists to be turned away by pre-flight, which happens before any image is read.
+# ordinary answer rather than a failure (FR-1.6). It costs four of them nothing: they exist
+# to be turned away by pre-flight, which happens before any image is read.
+#
+# CASE-9005 is the exception and it is meant to be. It passes the gates and is investigated,
+# so an empty listing is what the investigation actually works from and the only honest
+# recommendation is to go back to the merchant. That is enough for what it demonstrates —
+# a correction carried across from the merchant's earlier claim (FR-C.8) — and giving it
+# invented photographs to reach a payment instead is the exact trade this comment refuses.
 EMPTY_ATTACHMENT_LISTING = attachments_payload()
 
 

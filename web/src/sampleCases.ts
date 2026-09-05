@@ -18,4 +18,5 @@ export const SAMPLE_CASE_IDS = [
   "CASE-9002",
   "CASE-9003",
   "CASE-9004",
+  "CASE-9005",
 ];

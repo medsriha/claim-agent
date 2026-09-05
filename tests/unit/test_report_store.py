@@ -46,7 +46,7 @@ def test_money_survives_being_stored_as_an_exact_amount(store: ReportStore) -> N
     """FR-1.21: a figure that went through a floating point number is one nobody can trust."""
     store.record(a_report(amount_usd=Decimal("0.10")))
 
-    read_back = store.get("RPT-CASE-1001-L01")
+    read_back = store.get("RPT-CASE-1001")
 
     assert read_back is not None
     assert read_back.amount_usd == Decimal("0.10")
@@ -79,7 +79,7 @@ def test_preparing_the_database_twice_changes_nothing(tmp_path: Path) -> None:
     store.record(a_report())
     initialise(database)
 
-    assert store.get("RPT-CASE-1001-L01") == a_report()
+    assert store.get("RPT-CASE-1001") == a_report()
 
 
 # --- Writing the same report again (FR-C.4) ----------------------------------
@@ -123,7 +123,7 @@ def test_every_version_of_a_report_is_kept(store: ReportStore) -> None:
     store.record(a_report(version=1))
     store.record(a_report(version=2))
 
-    versions = store.versions_of("RPT-CASE-1001-L01")
+    versions = store.versions_of("RPT-CASE-1001")
 
     assert [version.version for version in versions] == [1, 2]
 
@@ -133,7 +133,7 @@ def test_the_version_in_force_is_the_one_that_comes_back_by_default(store: Repor
     store.record(a_report(version=1))
     store.record(a_report(version=2))
 
-    latest = store.get("RPT-CASE-1001-L01")
+    latest = store.get("RPT-CASE-1001")
 
     assert latest is not None
     assert latest.version == 2
@@ -144,7 +144,7 @@ def test_an_earlier_version_can_still_be_read_back(store: ReportStore) -> None:
     store.record(a_report(version=1))
     store.record(a_report(version=2))
 
-    earlier = store.get("RPT-CASE-1001-L01", version=1)
+    earlier = store.get("RPT-CASE-1001", version=1)
 
     assert earlier is not None
     assert earlier.version == 1
@@ -154,7 +154,7 @@ def test_a_version_that_was_never_written_comes_back_as_nothing(store: ReportSto
     """FR-R.13: asking for a telling that does not exist is not the same as a store failing."""
     store.record(a_report(version=1))
 
-    assert store.get("RPT-CASE-1001-L01", version=9) is None
+    assert store.get("RPT-CASE-1001", version=9) is None
 
 
 def test_versions_of_a_report_nobody_wrote_is_empty(store: ReportStore) -> None:
@@ -162,27 +162,29 @@ def test_versions_of_a_report_nobody_wrote_is_empty(store: ReportStore) -> None:
     assert store.versions_of("RPT-NOBODY") == []
 
 
-# --- A claim's reports, the way a rep works (FR-2.9b) ------------------------
+# --- A claim's report, the way a rep works (FR-2.9b) -------------------------
 
 
-def test_a_claim_comes_back_as_all_of_its_reports(store: ReportStore) -> None:
-    """FR-2.9b: a rep works from a case, not from a list of disconnected products."""
-    store.record(a_report(report_id="RPT-CASE-1001-L01", claim_line_id="CASE-1001-L01"))
-    store.record(a_report(report_id="RPT-CASE-1001-L02", claim_line_id="CASE-1001-L02"))
+def test_fr_2_9b_a_claim_comes_back_as_its_one_report(store: ReportStore) -> None:
+    """FR-2.9b: a claim has one report, covering every damaged product on it."""
+    store.record(
+        a_report(product_names=("Liposomal Tripeptide Collagen", "Blue Razz Liquid Carnitine"))
+    )
 
     view = store.for_case("CASE-1001")
 
     assert view.case_id == "CASE-1001"
-    assert {report.claim_line_id for report in view.reports} == {
-        "CASE-1001-L01",
-        "CASE-1001-L02",
-    }
+    assert len(view.reports) == 1
+    assert view.reports[0].product_names == (
+        "Liposomal Tripeptide Collagen",
+        "Blue Razz Liquid Carnitine",
+    )
 
 
-def test_a_claim_shows_each_product_once_however_many_versions_it_has(
+def test_a_claim_shows_its_report_once_however_many_versions_it_has(
     store: ReportStore,
 ) -> None:
-    """FR-2.9b: a product reworked twice is still one product on the claim."""
+    """FR-2.9b: a claim reworked twice is still one claim with one report on it."""
     store.record(a_report(version=1))
     store.record(a_report(version=2))
 
@@ -204,13 +206,13 @@ def test_a_stopped_claim_appears_on_its_claim_like_any_other_report(store: Repor
     view = store.for_case("CASE-1004")
 
     assert len(view.reports) == 1
-    assert view.reports[0].claim_line_id is None
+    assert view.reports[0].product_names == ()
 
 
 def test_two_reads_of_one_claim_always_agree(store: ReportStore) -> None:
     """NFR-1: a screen that draws the same claim differently twice cannot be relied on."""
-    store.record(a_report(report_id="RPT-CASE-1001-L02", claim_line_id="CASE-1001-L02"))
-    store.record(a_report(report_id="RPT-CASE-1001-L01", claim_line_id="CASE-1001-L01"))
+    store.record(a_report(version=1))
+    store.record(a_report(version=2))
 
     assert store.for_case("CASE-1001") == store.for_case("CASE-1001")
 
@@ -247,4 +249,4 @@ def test_a_database_path_that_cannot_be_used_is_reported_as_a_handled_failure(
     store = ReportStore(blocking_file / "claims.db")
 
     with pytest.raises(StorageError):
-        store.get("RPT-CASE-1001-L01")
+        store.get("RPT-CASE-1001")

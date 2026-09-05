@@ -1,4 +1,4 @@
-"""Investigating one damaged product: what it decides, what it refuses, and how it fails.
+"""Investigating one claim: what it decides, what it refuses, and how it fails.
 
 Every model here answers from a script the test wrote beforehand, so nothing reaches a
 network or a model provider and no key is needed. That is also what makes these tests
@@ -12,10 +12,9 @@ is short, an image we could not read, a shaky answer, a run that ran out of step
 each of them checks that the recommendation moved *away* from paying and never towards
 it.
 
-**The isolation tests (FR-1b.4)** are the ones the layer exists for: the same product
-with the same evidence reaches the same answer whether it was claimed alone or beside
-five others, and the question the model is asked does not change when the other products
-arrive in a different order.
+**The whole-claim tests (FR-1b.1, FR-1b.3, FR-1b.4)** are the ones the layer exists for:
+one run answers for every damaged product, gives one recommendation and one email
+covering all of them, and a single product that cannot be priced withholds the claim.
 """
 
 from __future__ import annotations
@@ -35,7 +34,7 @@ from tests.fixtures.shipbob import CASE_1001, ORDER_1001, SHIPMENT_1001
 from claim_agent.agent.budget import BudgetLimit
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
-from claim_agent.agent.investigate import LineInvestigation, investigate_line
+from claim_agent.agent.investigate import ClaimFindings, investigate_claim_lines
 from claim_agent.agent.ledger import StepKind
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.observations import ObservationCache
@@ -145,17 +144,13 @@ def five_other_products() -> tuple[ClaimedProduct, ...]:
     )
 
 
-def the_collagen_beside(
-    others: Sequence[ClaimedProduct],
-) -> tuple[ClaimLine, tuple[ClaimLine, ...]]:
-    """Split a claim covering the collagen and some other products, and pick the collagen out.
+def the_collagen_beside(others: Sequence[ClaimedProduct]) -> tuple[ClaimLine, ...]:
+    """Split a claim covering the collagen and some other products (FR-1b.1, FR-1b.2).
 
-    Returns the collagen's own claim line and the rest of them, which is exactly what one
-    run is given: the product it answers for, and the others as context (FR-1b.2).
+    Returns every claim line, which is exactly what one run is given: the whole claim, and
+    one answer covering all of it.
     """
-    lines = claim_lines(ClaimedProduct(name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU), *others)
-    mine = next(line for line in lines if line.product_name == COLLAGEN)
-    return mine, tuple(line for line in lines if line is not mine)
+    return claim_lines(ClaimedProduct(name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU), *others)
 
 
 # --- Writing the answers the model gives ------------------------------------
@@ -249,16 +244,15 @@ def an_email_with_no_figure(**overrides: object) -> dict[str, object]:
 async def investigate(
     model: ScriptedModel,
     *,
-    line: ClaimLine | None = None,
-    siblings: Sequence[ClaimLine] = (),
+    lines: Sequence[ClaimLine] | None = None,
     shared_evidence: Sequence[EvidenceFinding] = (),
     invoice: Invoice | None = INVOICE,
     order: Order = ORDER,
     policy: Policy | None = None,
     events: EventStream | None = None,
     precedent: PrecedentSet | None = None,
-) -> LineInvestigation:
-    """Investigate one claim line, with everything a test does not care about defaulted.
+) -> ClaimFindings:
+    """Investigate one claim, with everything a test does not care about defaulted.
 
     The HTTP clients are real ones aimed at a name that only a stand-in answers to, so a
     request that escaped a test would fail loudly rather than reach a machine. Most tests
@@ -269,8 +263,8 @@ async def investigate(
         httpx.AsyncClient(base_url=SHIPBOB, timeout=1.0) as shipbob_http,
         httpx.AsyncClient() as images_http,
     ):
-        return await investigate_line(
-            line=line if line is not None else a_claim_for_the_collagen(order),
+        return await investigate_claim_lines(
+            lines=lines if lines is not None else (a_claim_for_the_collagen(order),),
             record=CaseRecord(case=CASE, shipment=SHIPMENT, order=order),
             context=CONTEXT,
             attachments=IMAGES,
@@ -283,7 +277,6 @@ async def investigate(
             events=events if events is not None else EventStream(),
             policy=policy if policy is not None else Policy(),
             shared_evidence=shared_evidence,
-            siblings=siblings,
             precedent=precedent,
         )
 
@@ -304,7 +297,7 @@ def settled(kind: EvidenceKind, state: EvidenceState) -> EvidenceFinding:
     )
 
 
-def state_of(result: LineInvestigation, kind: EvidenceKind) -> EvidenceState:
+def state_of(result: ClaimFindings, kind: EvidenceKind) -> EvidenceState:
     """What the finished investigation says about one of the four pieces of evidence."""
     return findings_by_kind(result.evidence)[kind].state
 
@@ -587,7 +580,7 @@ async def test_a_product_that_could_be_either_of_two_order_lines_is_never_priced
 
     result = await investigate(
         a_run_that_concludes(conclusion),
-        line=line,
+        lines=(line,),
         order=order,
         invoice=Invoice(invoice_id="INV-342578703", line_items=order.line_items),
     )
@@ -615,7 +608,7 @@ async def test_an_ambiguous_product_is_judged_against_the_order_and_not_against_
 
     result = await investigate(
         a_run_that_concludes(a_conclusion(**an_email_with_no_figure())),
-        line=line,
+        lines=(line,),
         order=order,
         invoice=Invoice(invoice_id="INV-342578703", line_items=order.line_items),
     )
@@ -639,7 +632,7 @@ async def test_a_product_that_is_not_on_the_order_cannot_be_paid_for() -> None:
         **an_email_with_no_figure(),
     )
 
-    result = await investigate(a_run_that_concludes(conclusion), line=line)
+    result = await investigate(a_run_that_concludes(conclusion), lines=(line,))
 
     assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.PRODUCT_NOT_PRICEABLE in result.outcome.overrides
@@ -686,7 +679,7 @@ async def test_the_amount_is_capped() -> None:
 
     result = await investigate(
         a_run_that_concludes(conclusion),
-        line=line,
+        lines=(line,),
         order=order,
         invoice=Invoice(invoice_id="INV-337761802", line_items=(whey,)),
     )
@@ -801,103 +794,149 @@ async def test_the_photographs_of_the_damage_are_this_product_s_own() -> None:
     assert result.outcome.recommendation is Recommendation.APPROVE
 
 
-# --- One product, whatever else was claimed (FR-1b.1, FR-1b.2, FR-1b.4) -----
+# --- One claim, every product on it (FR-1b.1, FR-1b.2, FR-1b.3, FR-1b.4) ----
 
 
-async def test_the_run_sees_the_whole_claim_and_answers_for_one_product() -> None:
-    """FR-1b.2: the merchant's account, the order and the other products all go in.
+async def test_fr_1b_1_one_run_sees_the_whole_claim_and_answers_for_all_of_it() -> None:
+    """FR-1b.1, FR-1b.2: the merchant's account, the order and every product all go in.
 
     A photograph can show two broken items and the description is the only account
-    anybody has of what happened, so the run is shown everything — and answers for the
-    product it was given.
+    anybody has of what happened, so the run is shown everything — and answers for all
+    of it, once.
     """
-    mine, others = the_collagen_beside(five_other_products())
+    lines = the_collagen_beside(five_other_products())
     model = a_run_that_concludes(a_conclusion())
 
-    result = await investigate(model, line=mine, siblings=others)
+    result = await investigate(model, lines=lines)
 
     asked = model.asked[0].text
     assert "1 order affected" in asked
     assert AMPOULE in asked
     assert "Duck Neck Crunchies" in asked
-    assert result.line.claim_line_id == mine.claim_line_id
-    assert result.line.product_name == COLLAGEN
+    assert result.lines == lines
 
 
-async def test_a_product_reaches_the_same_answer_alone_as_it_does_beside_five_others() -> None:
-    """FR-1b.4: what else was claimed changes nothing about this product's own answer.
+async def test_fr_1b_3_a_claim_of_six_products_gets_one_recommendation_and_one_email() -> None:
+    """FR-1b.3: one next action, one figure and one merchant email, however many products.
 
-    The same product with the same evidence is investigated twice — once as the only
-    thing on the claim, once beside five other damaged products. The evidence, the
-    judgements, the recommendation and the figure all come out identical.
-
-    What this shows is that nothing in our own code carries another product's facts into
-    this one's answer. It cannot show that a real model would answer identically: the two
-    runs are asked slightly different questions, because the requirements insist the
-    other products are named (FR-1b.2). What is pinned down is that the difference stops
-    at the question.
+    This is the fault the merged run exists to fix. Six damaged products used to mean six
+    investigations and six emails to one merchant about one parcel; now the claim is
+    answered once.
     """
-    mine, others = the_collagen_beside(five_other_products())
+    lines = the_collagen_beside(five_other_products())
 
-    alone = await investigate(a_run_that_concludes(a_conclusion()))
-    crowded = await investigate(a_run_that_concludes(a_conclusion()), line=mine, siblings=others)
+    result = await investigate(a_run_that_concludes(a_conclusion()), lines=lines)
 
-    assert alone.evidence == crowded.evidence
-    assert alone.assessments == crowded.assessments
-    assert alone.outcome.recommendation == crowded.outcome.recommendation
-    assert alone.amount == crowded.amount
-    assert alone.drafted_email == crowded.drafted_email
-    assert alone.concerns == crowded.concerns
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert len(result.lines) == 6
+    # Five of the six are not on the order, so nothing on the claim can be priced and the
+    # whole claim goes to a person rather than part of it being paid.
+    assert OverrideReason.PRODUCT_NOT_PRICEABLE in result.outcome.overrides
 
 
-async def test_the_order_the_other_products_arrive_in_changes_nothing_that_is_asked() -> None:
-    """FR-1b.4, NFR-1: the question is fixed, so it cannot depend on how a list was built.
+async def test_fr_1b_3_one_unpriceable_product_withholds_the_whole_claim() -> None:
+    """FR-1b.3, FR-1.13: a claim recommends one figure, so part of it having no price stops it.
 
-    The same six-product claim is handed over twice with the other five in opposite
-    orders. The words put to the model are identical, down to the character.
+    The collagen on its own is perfectly payable. Beside a product that is on no line of
+    the order, there is no honest figure for the claim — and paying for the collagen alone
+    would settle a claim nobody has established the shape of.
     """
-    mine, others = the_collagen_beside(five_other_products())
-
-    forwards = a_run_that_concludes(a_conclusion())
-    backwards = a_run_that_concludes(a_conclusion())
-    await investigate(forwards, line=mine, siblings=others)
-    await investigate(backwards, line=mine, siblings=tuple(reversed(others)))
-
-    assert forwards.asked[0].text == backwards.asked[0].text
-
-
-async def test_a_product_is_never_listed_among_its_own_siblings() -> None:
-    """FR-1b.4: handing over the whole claim asks the same question as handing over the rest.
-
-    A caller that passes every line of the claim, this one included, must not have the
-    product described to the run twice — once as its own and once as somebody else's.
-    """
-    mine, others = the_collagen_beside(five_other_products())
-
-    given_the_others = a_run_that_concludes(a_conclusion())
-    given_everything = a_run_that_concludes(a_conclusion())
-    await investigate(given_the_others, line=mine, siblings=others)
-    await investigate(given_everything, line=mine, siblings=(mine, *others))
-
-    assert given_the_others.asked[0].text == given_everything.asked[0].text
-
-
-async def test_another_product_s_photographs_never_reach_this_run_s_question() -> None:
-    """FR-1b.4: which images were tied to a product depends on how the claim was split.
-
-    It is the one fact about another product that can change with the split, so it is the
-    one fact left out of what this run is told about them.
-    """
-    mine, others = the_collagen_beside(five_other_products())
-    with_photographs = tuple(
-        other.model_copy(update={"damage_attachment_ids": ("ATT-ONLY-ON-THE-OTHER-PRODUCT",)})
-        for other in others
+    lines = claim_lines(
+        ClaimedProduct(name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU),
+        ClaimedProduct(name="Beef Trachea Chews", quantity=1),
+    )
+    conclusion = a_conclusion(
+        damaged_items=(
+            DamagedItem(product_name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU),
+            DamagedItem(product_name="Beef Trachea Chews", quantity=1),
+        ),
     )
 
-    model = a_run_that_concludes(a_conclusion())
-    await investigate(model, line=mine, siblings=with_photographs)
+    result = await investigate(a_run_that_concludes(conclusion), lines=lines)
 
-    assert "ATT-ONLY-ON-THE-OTHER-PRODUCT" not in model.asked[0].text
+    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert OverrideReason.PRODUCT_NOT_PRICEABLE in result.outcome.overrides
+    assert "Beef Trachea Chews is not on the order" in result.outcome.explanation
+    assert result.drafted_email is None
+
+
+async def test_fr_1b_4_the_report_names_every_product_and_what_each_cost() -> None:
+    """FR-1b.4, FR-2.4: one figure does not mean one undifferentiated total.
+
+    Two damaged products, both on the order, both priced. The claim recommends a single
+    amount and the working names each product separately, so a representative can see
+    which product the money is for.
+    """
+    lines = claim_lines(
+        ClaimedProduct(name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU),
+        ClaimedProduct(name=AMPOULE, quantity=1, sku="AMPOULE1"),
+    )
+    conclusion = a_conclusion(
+        damaged_items=(
+            DamagedItem(product_name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU),
+            DamagedItem(product_name=AMPOULE, quantity=1, sku="AMPOULE1"),
+        ),
+        recommended_amount_usd="70.00",
+    )
+
+    result = await investigate(a_run_that_concludes(conclusion), lines=lines)
+
+    assert sorted(line.product_name for line in result.lines) == sorted([COLLAGEN, AMPOULE])
+    assert [component.product_name for component in result.amount.components] == [
+        COLLAGEN,
+        AMPOULE,
+    ]
+    assert result.amount.items_total_usd == Decimal("90.00")
+    assert result.amount.amount_usd == Decimal("70.00")
+
+
+async def test_fr_1b_3_the_claim_cap_applies_to_the_whole_claim_by_being_one_figure() -> None:
+    """FR-1.20 with FR-1b.3: three products at fifty each are a claim capped at a hundred.
+
+    The old shape had to add three separate figures up afterwards and then withdraw the
+    approvals it had already granted. One run proposes one figure and the cap holds it,
+    which is the whole reason the reading of FR-1.20 is now settled.
+    """
+    tubs = OrderLineItem(
+        name="2.5LBS White Chocolate Raspberry Huge Whey",
+        sku="0159",
+        quantity=3,
+        unit_price=Decimal("50.00"),
+    )
+    order = Order(order_id="337761802", user_id="334430", line_items=(tubs,))
+    lines = claim_lines(ClaimedProduct(name=tubs.name, quantity=3, sku="0159"), order=order)
+    conclusion = a_conclusion(
+        damaged_items=(DamagedItem(product_name=tubs.name, quantity=3, sku="0159"),),
+        recommended_amount_usd="150.00",
+    )
+
+    result = await investigate(
+        a_run_that_concludes(conclusion),
+        lines=lines,
+        order=order,
+        invoice=Invoice(invoice_id="INV-337761802", line_items=(tubs,)),
+    )
+
+    assert result.amount.proposed_usd == Decimal("150.00")
+    assert result.amount.amount_usd == Decimal("100.00")
+    assert result.amount.cap_applied is True
+    assert result.outcome.recommendation.is_approval
+
+
+async def test_nfr_1_the_order_the_products_arrive_in_is_the_order_they_are_described_in() -> None:
+    """NFR-1: the question is built from the split, so the same split asks the same question.
+
+    Nothing here re-sorts the products. The split settles their order and the wording
+    follows it, which is what makes the same claim ask identically twice.
+    """
+    lines = the_collagen_beside(five_other_products())
+
+    once = a_run_that_concludes(a_conclusion())
+    again = a_run_that_concludes(a_conclusion())
+    await investigate(once, lines=lines)
+    await investigate(again, lines=lines)
+
+    assert once.asked[0].text == again.asked[0].text
 
 
 # --- The same claim, twice (NFR-1) ------------------------------------------
@@ -919,22 +958,23 @@ async def test_the_same_claim_investigated_twice_produces_the_same_write_up() ->
 # --- Narrating the run (NFR-3) ----------------------------------------------
 
 
-async def test_the_run_says_which_product_it_started_and_what_it_recommends() -> None:
-    """NFR-3: somebody watching can tell which product is being worked on, and how it ended.
+async def test_the_run_says_what_it_started_on_and_what_it_recommends() -> None:
+    """NFR-3: somebody watching can tell what is being worked on, and how it ended.
 
-    Several products are investigated at once, so every message names the product it
-    belongs to. No message carries a figure: money reaches a screen only in a finished
-    write-up, where it was arithmetic rather than wording.
+    No message carries a figure: money reaches a screen only in a finished write-up, where
+    it was arithmetic rather than wording.
     """
     events = EventStream()
 
-    result = await investigate(a_run_that_concludes(a_conclusion()), events=events)
+    await investigate(a_run_that_concludes(a_conclusion()), events=events)
 
     said = {event.kind: event for event in events.events()}
-    assert said[EventKind.LINE_STARTED].claim_line_id == result.line.claim_line_id
-    assert COLLAGEN in said[EventKind.LINE_STARTED].summary
-    assert said[EventKind.LINE_FINISHED].detail["recommendation"] == Recommendation.APPROVE.value
-    assert "52.00" not in said[EventKind.LINE_FINISHED].summary
+    assert COLLAGEN in said[EventKind.INVESTIGATION_STARTED].summary
+    assert (
+        said[EventKind.INVESTIGATION_FINISHED].detail["recommendation"]
+        == Recommendation.APPROVE.value
+    )
+    assert "52.00" not in said[EventKind.INVESTIGATION_FINISHED].summary
 
 
 # --- The run is told how alike claims were decided (FR-S.6) -----------------

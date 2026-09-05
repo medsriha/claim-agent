@@ -595,6 +595,54 @@ CONSTRUCTED_HIGH_VALUE_ORDER = order_payload(
 )
 
 
+# A second claim from the merchant behind CASE-1001, which is the only way carry-forward can
+# be shown at all (FR-C.8). The five sample cases belong to five different merchants, so no
+# sample claim ever sees a correction or a precedent produced by another one. This shares
+# CASE-1001's `user_id`, and nothing else about it is borrowed: a different order, a different
+# parcel, and a different product, so what carries across is the merchant and not the claim.
+CONSTRUCTED_REPEAT_MERCHANT_CASE = case_payload(
+    case_id="CASE-9005",
+    description=(
+        "Shipment ID: 990000005. Customer received order and product arrived damaged. "
+        "Bottle cracked in transit and leaked over the rest of the box. 1 order affected."
+    ),
+    order_id="990000005",
+    user_id="334430",
+    shipment_id="990000005",
+    delivered_date="2026-03-14T09:20:00.000+0000",
+    contact_email="sakukreja@shipbob.com",
+    account_name="Best Paw Nutrition",
+    created_date="2026-03-18T11:05:00.000+0000",
+)
+CONSTRUCTED_REPEAT_MERCHANT_SHIPMENT = shipment_payload(
+    shipment_id="990000005",
+    order_id="990000005",
+    carrier="Royal Mail Tracked 48",
+    tracking_number="TRK990000005",
+    delivered_date="2026-03-14T09:20:00.000+0000",
+)
+CONSTRUCTED_REPEAT_MERCHANT_ORDER = order_payload(
+    order_id="990000005",
+    user_id="334430",
+    line_items=[
+        order_line_item(
+            product_id="990000051",
+            name="Marine Collagen Peptides 250g",
+            sku="PEPT1",
+            quantity=1,
+            unit_price=44.00,
+        ),
+        order_line_item(
+            product_id="990000052",
+            name="Additional Collagen Ampoule Duo",
+            sku="AMP1",
+            quantity=2,
+            unit_price=38.00,
+        ),
+    ],
+    created_date="2026-03-10T08:00:00.000+0000",
+)
+
 # ---------------------------------------------------------------------------
 # Serving the records from a stand-in API
 # ---------------------------------------------------------------------------

@@ -222,24 +222,20 @@ export function failureTranscript(
 }
 
 /** Turn one live SSE event into the activity panel the next event will update. */
-export function stepMessage(
-  event: RunEvent,
-  labelFor: (claimLineId: string) => string | null,
-): TranscriptMessage {
-  const product = event.claim_line_id === null ? null : labelFor(event.claim_line_id);
+export function stepMessage(event: RunEvent): TranscriptMessage {
   const step: ActivityStep = {
     sequence: event.sequence,
     eventKind: event.kind,
     summary: event.summary,
     detail: event.detail,
-    label: product,
+    label: null,
   };
   return {
     // The activity bar is one persistent message. A stable key keeps it open while later
     // SSE events extend its log instead of remounting and collapsing it.
     id: "activity",
     speaker: "system",
-    label: product,
+    label: null,
     body: {
       kind: "step",
       eventKind: event.kind,
@@ -252,27 +248,30 @@ export function stepMessage(
 
 
 /**
- * One message per canonical report the service sent, in its original order (FR-2.9b).
+ * The claim's report, as the one message a representative decides from (FR-2.9b).
  *
- * A claim the checks stopped has one; an investigated claim has one per damaged product.
+ * One claim is one report, whether the checks stopped it or the investigation looked into
+ * every product on it.
  */
 export function reportMessages(
-  reports: readonly Report[],
+  report: Report | null,
   unavailableReason: string | null,
 ): TranscriptMessage[] {
-  if (reports.length === 0) {
+  if (report === null) {
     return [
       noteMessage(
         unavailableReason ?? "The investigation did not produce a report to review.",
       ),
     ];
   }
-  return reports.map((report) => ({
-    id: `report-${report.report_id}`,
-    speaker: "system",
-    label: "For your decision",
-    body: { kind: "report", report, unavailableReason },
-  }));
+  return [
+    {
+      id: `report-${report.report_id}`,
+      speaker: "system",
+      label: "For your decision",
+      body: { kind: "report", report, unavailableReason },
+    },
+  ];
 }
 
 /**

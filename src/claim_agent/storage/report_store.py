@@ -36,11 +36,10 @@ from claim_agent.storage.database import connect, initialise
 
 _UPSERT = """
 INSERT INTO reports
-    (report_id, version, case_id, claim_line_id, stage, state, created_at, record)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    (report_id, version, case_id, stage, state, created_at, record)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (report_id, version) DO UPDATE SET
     case_id = excluded.case_id,
-    claim_line_id = excluded.claim_line_id,
     stage = excluded.stage,
     state = excluded.state,
     created_at = excluded.created_at,
@@ -55,13 +54,8 @@ _SELECT_LATEST = "SELECT record FROM reports WHERE report_id = ? ORDER BY versio
 
 _SELECT_VERSIONS = "SELECT record FROM reports WHERE report_id = ? ORDER BY version"
 
-# One row per report — the highest version of each — and never every version of every one. A
-# claim's reports are asked for by claim, so without the grouping a claim reworked twice would
-# come back with the same product in it three times.
-#
-# Ordered by when it was written and then by its name, so two reads of one claim always agree.
-# Without the second part, two reports written in the same moment could come back either way
-# round and a screen would draw the same claim differently twice (NFR-1).
+# The highest version of the claim's report, and never every version of it. A claim has one
+# report, so without the grouping a claim reworked twice would come back three times over.
 _SELECT_FOR_CASE = """
 SELECT record
 FROM reports
@@ -118,7 +112,6 @@ class ReportStore:
                     report.report_id,
                     report.version,
                     report.case_id,
-                    report.claim_line_id,
                     report.stage.value,
                     report.state.value,
                     report.created_at.isoformat(timespec="microseconds"),
@@ -173,15 +166,14 @@ class ReportStore:
         return [Report.model_validate_json(row["record"]) for row in rows]
 
     def for_case(self, case_id: str) -> ClaimView:
-        """Every report on one claim, each at the version in force (FR-2.9b).
+        """The claim's report, at the version in force (FR-2.9b).
 
-        A representative works from a case rather than from a list of disconnected products, so
-        this is what a claim looks like: one row per damaged product, or a single row for a claim
-        the quick checks stopped before it ever had products in it.
+        A claim has at most one report, covering every damaged product on it, so this answers
+        with none or one.
 
         Returns:
-            The claim's reports. An empty list means nobody has asked about this claim yet, which
-            is an ordinary answer — a claim whose reports could not be read raises instead, so the
+            The claim's report. An empty list means nobody has asked about this claim yet, which
+            is an ordinary answer — a claim whose report could not be read raises instead, so the
             two can never be mistaken for one another.
 
         Raises:

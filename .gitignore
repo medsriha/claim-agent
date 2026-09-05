@@ -233,3 +233,11 @@ web/dist/
 
 # Downloaded claim attachments, cached so the same image is never fetched twice.
 .attachment-cache/
+
+# Claude Code dependencies
+ARCHITECTURE.md
+DESIGN.md
+REQUIREMENTS.md
+TODO.md
+UI-TODO.md
+CLAUDE.md

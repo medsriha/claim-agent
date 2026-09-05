@@ -1,15 +1,16 @@
 """Put a rep's past correction into merchant memory, so the demo has one to show.
 
-**Everything this writes is invented.** No part of the running system records a rep's
-corrections yet: the store can be read and can be written, the screen reads it, and the
-step that would write to it is specified but unbuilt — FR-3.8 says a correction is kept,
-and FR-C.1 and FR-C.2 say what writes one and from what. So on
-any fresh machine every claim honestly reports "None on file for this merchant", and the
-panel that would show a merchant's history is always empty.
+**Everything this writes is invented.** The running system does now record a rep's
+corrections — sending a report back stores their words, and approving after changing the
+figure stores the difference (FR-R.14, FR-C.2) — so this tool is no longer the only way to
+fill the panel. It stays because a fresh machine still starts with an empty store, and
+because a demonstration sometimes needs history to exist before it begins rather than being
+made during it.
 
-That is correct and it demonstrates nothing. This tool exists so someone showing the
-system can make that panel show something, **knowing** that what it shows was typed by
-hand rather than learned from a rep.
+**Which means what it writes can no longer be told apart from a real correction on screen.**
+Both are rows in the same store, put there through the same method, and nothing marks either.
+Anyone demonstrating this should say which they are looking at, or run `--clear` first and
+make a real one instead — CASE-9005 exists so that they can (FR-C.8).
 
 It writes one fixed correction rather than a different one each run: the merchant, the case
 number and the wording were all chosen by hand and never change, so that two people

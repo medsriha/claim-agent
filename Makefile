@@ -1,9 +1,21 @@
 .DEFAULT_GOAL := help
-.PHONY: help install hooks run mock seed-memory clear-memory seed-analysis clear-analysis analysis-figures \
-        test lint format typecheck check ui-install ui-dev ui-build ui-lint
+.PHONY: help up down logs install hooks run mock seed-memory clear-memory seed-analysis clear-analysis \
+        analysis-figures test lint format typecheck check ui-install ui-dev ui-build ui-lint
 
 help: ## Show available commands
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
+
+# The demonstration, in containers. Everything below this block runs on the machine
+# itself instead, which is what you want while writing code — the reload is faster than
+# a rebuild.
+up: ## Build and run the whole demo in containers — the screen is on :5173
+	docker compose up --build
+
+down: ## Stop the demo. Add `-v` by hand to throw away what it remembered
+	docker compose down
+
+logs: ## Follow the containers' logs
+	docker compose logs -f
 
 install: ## Install dependencies into .venv
 	uv sync

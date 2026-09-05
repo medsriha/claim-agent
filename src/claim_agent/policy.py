@@ -61,7 +61,8 @@ class Policy(BaseSettings):
     # Stated by REQUIREMENTS.md.
     reimbursement_cap_usd: Decimal = Field(
         default=Decimal("100.00"),
-        description="Maximum reimbursement (FR-1.20).",
+        description="Maximum reimbursement for one claim, however many products are on it "
+        "(FR-1.20).",
     )
 
     # Provisional — not specified by ShipBob.
@@ -126,10 +127,10 @@ class Policy(BaseSettings):
         "at an image is the costliest thing the system does (NFR-8). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
-    precedent_results_per_line: int = Field(
+    precedent_results_per_product: int = Field(
         default=5,
         gt=0,
-        description="Most similar past claims shown to the investigation, per product "
+        description="Most similar past claims shown to the investigation, per damaged product "
         "(FR-S.5). Every one costs the model something to read, and a long list buries the "
         "closest match among weaker ones. PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
@@ -141,13 +142,6 @@ class Policy(BaseSettings):
         description="How alike a past claim must be to be shown at all, from 0 to 1 (FR-S.5). "
         "Too low and unrelated claims are offered as precedent, which is worse than offering "
         "none. PROVISIONAL.",
-        json_schema_extra=NOT_ON_PANEL,
-    )
-    cap_applies_to_whole_claim: bool = Field(
-        default=True,
-        description="Whether the reimbursement cap limits the whole claim as well as each line. "
-        "REQUIREMENTS.md open question 2; when true, lines summing above the cap are sent for representative clarification "
-        "rather than trimmed (FR-1.20). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
 

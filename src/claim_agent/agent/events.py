@@ -22,10 +22,10 @@ class EventKind(StrEnum):
     EVIDENCE_SETTLED = "evidence_settled"
     CLAIM_SPLIT = "claim_split"
     PRECEDENT_GATHERED = "precedent_gathered"
-    LINE_STARTED = "line_started"
+    INVESTIGATION_STARTED = "investigation_started"
     TOOL_CALLED = "tool_called"
     THINKING = "thinking"
-    LINE_FINISHED = "line_finished"
+    INVESTIGATION_FINISHED = "investigation_finished"
     REPORT_READY = "report_ready"
     FAILED = "failed"
 
@@ -38,7 +38,6 @@ class RunEvent(BaseModel):
     sequence: int
     kind: EventKind
     summary: str
-    claim_line_id: str | None = None
     detail: Mapping[str, str] = Field(default_factory=dict)
 
 
@@ -59,8 +58,6 @@ class EventStream:
         self,
         kind: EventKind,
         summary: str,
-        *,
-        claim_line_id: str | None = None,
         **detail: str,
     ) -> RunEvent:
         """Say that something happened, and pass it to whoever is watching."""
@@ -69,7 +66,6 @@ class EventStream:
                 sequence=len(self._events) + 1,
                 kind=kind,
                 summary=summary,
-                claim_line_id=claim_line_id,
                 detail=dict(detail),
             )
             self._events.append(event)

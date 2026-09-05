@@ -18,12 +18,16 @@ from datetime import UTC, datetime
 import pytest
 import respx
 from httpx import AsyncClient
+from tests.fixtures.decisions import investigated
 from tests.fixtures.shipbob import CASE_1001, ORDER_1001, SHIPMENT_1001, mock_shipbob
+from tests.unit.test_report_models import a_report
 
 from claim_agent.domain.models import MerchantCorrection
 from claim_agent.policy import Policy
 from claim_agent.settings import Settings
+from claim_agent.storage.decision_store import DecisionStore
 from claim_agent.storage.merchant_memory import MerchantMemory
+from claim_agent.storage.report_store import ReportStore
 
 pytestmark = pytest.mark.integration
 
@@ -56,9 +60,8 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
         "max_agent_steps",
         "max_tool_retries",
         "max_image_analyses_per_run",
-        "precedent_results_per_line",
+        "precedent_results_per_product",
         "min_precedent_similarity",
-        "cap_applies_to_whole_claim",
         "usd_conversion_rates",
         "conversion_rates_as_of",
         "assume_usd_when_currency_unknown",
@@ -192,13 +195,13 @@ async def test_reset_puts_the_startup_thresholds_back(
     assert screened.json()["verdict"] == "proceed"
 
 
-# --- Forgetting what representatives corrected (a demonstration control) -----
+# --- Emptying every store (a demonstration control) --------------------------
 
 
-async def test_an_operator_can_empty_the_merchant_corrections(
+async def test_an_operator_can_empty_everything_the_service_remembers(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """FR-3.8: a demonstration sometimes has to start from a system that remembers nothing."""
+    """UI-47: a demonstration sometimes has to start from a system that remembers nothing."""
     memory = MerchantMemory(settings.database_path)
     memory.record_correction(
         MerchantCorrection(
@@ -208,17 +211,43 @@ async def test_an_operator_can_empty_the_merchant_corrections(
             recorded_at=datetime(2026, 3, 21, tzinfo=UTC),
         )
     )
+    ReportStore(settings.database_path).record(a_report())
+    DecisionStore(settings.database_path).record(investigated())
 
-    response = await client.post("/admin/corrections/forget")
+    response = await client.post("/admin/forget-everything")
 
     assert response.status_code == 200
-    assert response.json() == {"forgotten": 1}
+    assert response.json() == {
+        "corrections": 1,
+        "reports": 1,
+        "decisions": 1,
+        "past_claims": 0,
+    }
     assert memory.corrections_for("334430") == ()
+
+
+async def test_the_back_and_forth_on_a_report_goes_with_it(
+    client: AsyncClient, settings: Settings
+) -> None:
+    """UI-47: forgetting the corrections alone left a claim's whole reply history on screen."""
+    reports = ReportStore(settings.database_path)
+    reports.record(a_report(version=1))
+    reports.record(a_report(version=2))
+
+    response = await client.post("/admin/forget-everything")
+
+    assert response.json()["reports"] == 2
+    assert reports.versions_of("RPT-CASE-1001-L01") == []
 
 
 async def test_forgetting_when_there_is_nothing_to_forget_says_so(client: AsyncClient) -> None:
     """Zero and one look identical on a screen otherwise, and only one needs saying."""
-    response = await client.post("/admin/corrections/forget")
+    response = await client.post("/admin/forget-everything")
 
     assert response.status_code == 200
-    assert response.json() == {"forgotten": 0}
+    assert response.json() == {
+        "corrections": 0,
+        "reports": 0,
+        "decisions": 0,
+        "past_claims": 0,
+    }

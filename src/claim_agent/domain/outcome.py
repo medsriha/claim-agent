@@ -1,10 +1,13 @@
-"""The next actions that can be proposed for a claim line, and who gets to choose.
+"""The next actions that can be proposed for a claim, and who gets to choose.
 
-Every claim line ends in one of four actions and nothing else (FR-1.14, FR-C.7): approve
+Every claim ends in one of four actions and nothing else (FR-1.14, FR-C.7): approve
 it, approve it and say the damaged goods were expensive, ask the merchant for a specific
 detail, or ask the representative for clarification. Each is a **proposal to a rep**. None
 of them takes effect on its own, and no amount of confidence changes that (FR-1.17,
 FR-3.1).
+
+One claim gets one action, however many products are on it, and where the products point
+different ways the most cautious of them wins (FR-1b.3).
 
 Three of the four are the agent's to choose. It weighs the evidence, the assessments, and
 its confidence, then proposes the appropriate next action. Refusal and escalation are not
@@ -61,7 +64,7 @@ from claim_agent.policy import Policy
 
 
 class Recommendation(StrEnum):
-    """The next action the system proposes for one claim line (FR-1.14, FR-C.7).
+    """The next action the system proposes for one claim (FR-1.14, FR-C.7).
 
     `APPROVE` proposes paying the merchant. `APPROVE_HIGH_VALUE` proposes exactly the
     same payment, on the same evidence, and says as well that the damaged goods cost more
@@ -123,17 +126,16 @@ class OverrideReason(StrEnum):
     product could not be tied to exactly one line on the order, so there is no
     price to pay from (FR-1.13, FR-1a.2).
 
-    `CLAIM_CAP_EXCEEDED` is the odd one out, and worth understanding. Every other
-    reason here is decided from one product's own evidence. This one is decided from
-    the claim as a whole: the products being recommended for payment come to more
-    than the cap between them. It cannot be worked out per product, because three
-    products at fifty each are each fine and together are not — and a cap that only
-    ever looked at one product at a time could be got round by splitting a claim into
-    more of them, which is exactly what FR-1.20 warns about. So it is applied once,
-    after every product has been investigated on its own, and it is the single place
-    in this system where one product's outcome depends on what else was claimed
-    beside it. Nothing is trimmed to fit: the claim goes to a person, who decides
-    what to pay.
+    `PRODUCT_NOT_PRICEABLE` applies to the claim as a whole: if any one damaged
+    product cannot be tied to exactly one line on the order, nothing on the claim is
+    paid. Choosing the likelier candidate would invent the payout, and paying for the
+    products that did match while ignoring one that did not would settle a claim
+    nobody has established the shape of.
+
+    **There is deliberately no reason here for the reimbursement cap.** A claim
+    recommends one figure and the cap is applied where that figure is read, before
+    this function sees it (FR-1.20). Nothing is withheld by it — a proposal over the
+    cap becomes the cap and says so.
     """
 
     EVIDENCE_INCOMPLETE = "evidence_incomplete"
@@ -141,7 +143,6 @@ class OverrideReason(StrEnum):
     MERCHANT_DETAILS_UNSPECIFIED = "merchant_details_unspecified"
     EVIDENCE_UNREADABLE = "evidence_unreadable"
     INVESTIGATION_INCOMPLETE = "investigation_incomplete"
-    CLAIM_CAP_EXCEEDED = "claim_cap_exceeded"
     NOT_CONFIDENT_ENOUGH = "not_confident_enough"
     BUDGET_EXHAUSTED = "budget_exhausted"
     PRODUCT_NOT_PRICEABLE = "product_not_priceable"
@@ -188,8 +189,8 @@ class OutcomeDecision(BaseModel):
         """True when a rule stepped in and withheld what the investigation recommended.
 
         Not the same as the recommendation having changed, and the difference is
-        real: an investigation that already recommended handing the line to a
-        representative, on a line a rule would also have sent for clarification, has a rule recorded
+        real: an investigation that already recommended handing the claim to a
+        representative, on a claim a rule would also have sent for clarification, has a rule recorded
         here while `recommendation` and `recommended_by_agent` are identical. The
         rule did apply; it simply agreed. Compare the two fields directly if what
         you want to know is whether the answer moved.
@@ -201,7 +202,6 @@ _WITHHELD_RECOMMENDATION: dict[OverrideReason, Recommendation] = {
     OverrideReason.BUDGET_EXHAUSTED: Recommendation.REQUEST_REP_CLARIFICATION,
     OverrideReason.EVIDENCE_UNREADABLE: Recommendation.REQUEST_REP_CLARIFICATION,
     OverrideReason.INVESTIGATION_INCOMPLETE: Recommendation.REQUEST_REP_CLARIFICATION,
-    OverrideReason.CLAIM_CAP_EXCEEDED: Recommendation.REQUEST_REP_CLARIFICATION,
     OverrideReason.EVIDENCE_INCOMPLETE: Recommendation.REQUEST_INFO,
     OverrideReason.ASSESSMENT_FAILED: Recommendation.REQUEST_REP_CLARIFICATION,
     OverrideReason.MERCHANT_DETAILS_UNSPECIFIED: Recommendation.REQUEST_REP_CLARIFICATION,
@@ -217,8 +217,8 @@ about the merits and these are not judgements (FR-1.14).
 """
 
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
-    Recommendation.APPROVE: "paying this line",
-    Recommendation.APPROVE_HIGH_VALUE: "paying this line, with a second look at its value",
+    Recommendation.APPROVE: "paying this claim",
+    Recommendation.APPROVE_HIGH_VALUE: "paying this claim, with a second look at its value",
     Recommendation.REQUEST_INFO: "going back to the merchant",
     Recommendation.REQUEST_REP_CLARIFICATION: "asking the representative for clarification",
 }
@@ -230,7 +230,7 @@ def decide_outcome(
     *,
     evidence: Sequence[EvidenceFinding],
     assessments: Sequence[Assessment],
-    line: ClaimLine,
+    lines: Sequence[ClaimLine],
     amount: AmountDerivation | None,
     policy: Policy,
     budget_exhausted: bool = False,
@@ -238,7 +238,7 @@ def decide_outcome(
     confidence: float = 1.0,
     directed_by_representative: bool = False,
 ) -> OutcomeDecision:
-    """Settle what is recommended for one claim line, after the rules have had their say.
+    """Settle what is recommended for one claim, after the rules have had their say.
 
     The investigation has already decided what it would do. This applies the handful of
     requirements that are written as rules rather than judgements, and it can only ever
@@ -256,8 +256,8 @@ def decide_outcome(
 
     The rest apply only to a recommendation of payment: evidence that is not all in hand
     (FR-1.6), a question answered no (FR-1.12), a question never answered at all,
-    confidence under the threshold in the claim policy (FR-1.15), and a product that
-    cannot be tied to one price (FR-1.13, FR-1a.2).
+    confidence under the threshold in the claim policy (FR-1.15), and any damaged product
+    that cannot be tied to one price (FR-1.13, FR-1a.2).
 
     An approval that survives all of them is looked at once more, and labelled a
     high-value approval when the damaged goods cost more than the high-value figure
@@ -270,16 +270,14 @@ def decide_outcome(
     neither generates merchant wording, but the report preserves which one happened.
 
     **Every rule that applies is reported, not just the first.** A rep should see
-    everything that was wrong with the line rather than fixing one thing and discovering
+    everything that was wrong with the claim rather than fixing one thing and discovering
     the next, so the checks all run and their reasons are collected — the same habit the
     pre-flight screen has. Where several apply, the recommendation left standing is the
     most cautious of them: handing the claim to a person beats going back to the
     merchant, because a person can do either and the merchant cannot (NFR-4).
 
-    Nothing about the other claim lines in the claim reaches this function. That is what
-    makes a line reach the same recommendation whether it was claimed alone or alongside
-    five others (FR-1b.4), and there is no clock, no network and no model here either, so
-    the same line always decides the same way (NFR-1).
+    There is no clock, no network and no model here, so the same claim always decides the
+    same way (NFR-1).
 
     Args:
         recommended_by_agent: What the investigation concluded. Kept on the result
@@ -289,8 +287,11 @@ def decide_outcome(
             mentioned at all counts as not having it.
         assessments: The four judgements made once the evidence was in. May be short or
             empty, which is an unfinished investigation rather than a clean one.
-        line: The claim line, read for whether its product matched exactly one line on
-            the order. An unmatched product has no single price to pay from.
+        lines: Every damaged product on the claim, read for whether each matched exactly
+            one line on the order. One unmatched product withholds the whole claim: it has
+            no single price to pay from, and paying for its neighbours instead would settle
+            a claim nobody has established the shape of. Empty means nothing was
+            established as damaged, which is never a reason to pay.
         amount: What a payment would come to, as worked out by code. `None` when no
             amount was worked out at all, which is never a reason to pay.
         policy: Read for the lowest confidence a payment may be recommended on
@@ -302,7 +303,7 @@ def decide_outcome(
         confidence: The agent's confidence in its overall next action. Approval must
             clear the same threshold as each supporting assessment.
         directed_by_representative: True when a representative told the agent to approve
-            this line and it is carrying out that instruction rather than recommending
+            this claim and it is carrying out that instruction rather than recommending
             one of its own. **The rules that would have withheld the payment are then
             set aside**, and recorded in `waived` so the report can say what a person
             overruled. Never true on a first pass: nobody has said anything yet.
@@ -361,7 +362,7 @@ def decide_outcome(
         against_approval = _reasons_to_withhold_approval(
             evidence=evidence,
             assessments=assessments,
-            line=line,
+            lines=lines,
             amount=amount,
             policy=policy,
             confidence=confidence,
@@ -502,7 +503,7 @@ def _reasons_to_withhold_approval(
     *,
     evidence: Sequence[EvidenceFinding],
     assessments: Sequence[Assessment],
-    line: ClaimLine,
+    lines: Sequence[ClaimLine],
     amount: AmountDerivation | None,
     policy: Policy,
     confidence: float,
@@ -546,7 +547,7 @@ def _reasons_to_withhold_approval(
     if weakest < policy.min_assessment_confidence:
         withheld.append((OverrideReason.NOT_CONFIDENT_ENOUGH, _confidence_clause(weakest, policy)))
 
-    not_priceable = _why_not_priceable(line, amount)
+    not_priceable = _why_not_priceable(lines, amount)
     if not_priceable is not None:
         withheld.append((OverrideReason.PRODUCT_NOT_PRICEABLE, not_priceable))
 
@@ -583,20 +584,29 @@ def _confidence_clause(weakest: float | None, policy: Policy) -> str:
     return f"its lowest reported confidence was {weakest:.2f} against the {required} needed"
 
 
-def _why_not_priceable(line: ClaimLine, amount: AmountDerivation | None) -> str | None:
-    """Say why no payment can be worked out for this line, or `None` if one can.
+def _why_not_priceable(lines: Sequence[ClaimLine], amount: AmountDerivation | None) -> str | None:
+    """Say why no payment can be worked out for this claim, or `None` if one can.
 
     A product that matched no order line, or several, has no single price to pay from,
     and the requirements are explicit that the system must ask rather than pick the
-    likeliest candidate (FR-1.13, FR-1a.2). An amount of nothing is not payable either,
-    however it arose, and the reason it arose is worth stating: a rep can chase a missing
-    invoice, and nobody has ever said what a free item does to a claim.
+    likeliest candidate (FR-1.13, FR-1a.2). **One such product withholds the whole
+    claim**, because the claim recommends a single figure and there is no honest figure
+    while part of what it covers has no price.
+
+    A claim with no damaged products established is refused for the same reason: there is
+    nothing to pay for. An amount of nothing is not payable either, however it arose, and
+    the reason it arose is worth stating — a rep can chase a missing invoice, and nobody
+    has ever said what a free item does to a claim.
     """
-    if not line.is_matched:
-        if line.match is MatchOutcome.NOT_ON_ORDER:
-            return "the damaged product is not on the order"
+    if not lines:
+        return "no damaged product was established on this claim"
+
+    unpriceable = next((line for line in lines if not line.is_matched), None)
+    if unpriceable is not None:
+        if unpriceable.match is MatchOutcome.NOT_ON_ORDER:
+            return f"{unpriceable.product_name} is not on the order"
         return (
-            "the damaged product matches more than one line on the order, "
+            f"{unpriceable.product_name} matches more than one line on the order, "
             "and those lines can carry different prices"
         )
     if amount is None:
@@ -617,7 +627,7 @@ def _nothing_to_pay_clause(amount: AmountDerivation) -> str:
         return "there was no invoice to price it from"
     if not amount.components:
         return f"nothing could be priced from invoice {amount.priced_from}"
-    return "the invoice prices the damaged product at nothing"
+    return "the invoice prices the damaged goods at nothing"
 
 
 def _never_answered(assessments: Sequence[Assessment]) -> tuple[AssessmentName, ...]:

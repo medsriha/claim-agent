@@ -90,15 +90,14 @@ def test_sending_a_report_back_is_never_agreement() -> None:
 # --- A claim the quick checks stopped (FR-C.1) ---
 
 
-def test_a_stopped_claim_has_no_line_and_compares_no_outcomes() -> None:
-    """FR-C.1 says the record must be able to name a whole claim, with no line named.
+def test_a_stopped_claim_compares_no_outcomes() -> None:
+    """FR-C.1: a stopped claim records the same way as any other, with nothing invented.
 
-    A stopped claim never reaches the split into products, so there is no outcome on either side
-    to compare. It must not report a change it cannot have had.
+    It never reaches the split into products, so there is no outcome on either side to
+    compare. It must not report a change it cannot have had.
     """
     decision = screened()
 
-    assert decision.claim_line_id is None
     assert decision.stated_confidence is None
     assert not decision.outcome_changed
     assert decision.is_direct_approval

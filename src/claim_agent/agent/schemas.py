@@ -153,7 +153,7 @@ class AssessmentJudgement(_WithoutSubjectiveConfidence):
 
 
 class DamagedItem(BaseModel):
-    """A product this claim line should be reimbursed for, and how many of it."""
+    """A product this claim should be reimbursed for, and how many of it."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -163,7 +163,7 @@ class DamagedItem(BaseModel):
 
 
 class InvestigationConclusion(_WithoutSubjectiveConfidence):
-    """The conclusion of one claim line's investigation — the model's whole answer."""
+    """The conclusion of one claim's investigation — the model's whole answer (FR-1b.1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -179,11 +179,14 @@ class InvestigationConclusion(_WithoutSubjectiveConfidence):
     )
     damaged_items: tuple[DamagedItem, ...] = Field(
         default=(),
-        description="The products this claim line should be reimbursed for, if any.",
+        description=(
+            "Every product on this claim that should be reimbursed, if any. One entry per "
+            "product, however many the claim covers."
+        ),
     )
     is_ambiguous: bool = Field(
         default=False,
-        description="True if you cannot tell which product on the order was damaged.",
+        description="True if you cannot tell which products on the order were damaged.",
     )
     ambiguity: str | None = Field(
         default=None,
@@ -192,7 +195,9 @@ class InvestigationConclusion(_WithoutSubjectiveConfidence):
             "numbered analysis, or repeated merchant requests. Null if nothing is unclear."
         ),
     )
-    recommendation: Recommendation = Field(description="What you recommend doing about this line.")
+    recommendation: Recommendation = Field(
+        description="What you recommend doing about this claim, taken as a whole."
+    )
 
     @field_validator("recommendation")
     @classmethod
@@ -220,11 +225,11 @@ class InvestigationConclusion(_WithoutSubjectiveConfidence):
     recommended_amount_usd: str | None = Field(
         default=None,
         description=(
-            "What ShipBob should pay for this product, in dollars, written as digits with "
-            "at most two decimal places and no currency symbol — for example 31.20. Judge "
-            "it from how badly the product is damaged and from how comparable past claims "
-            "were settled; what the item cost is context, not the answer. Null unless you "
-            "are recommending approve."
+            "What ShipBob should pay for this whole claim, in dollars, written as digits "
+            "with at most two decimal places and no currency symbol — for example 31.20. "
+            "One figure covering every damaged product, judged from how badly each is "
+            "damaged and from how comparable past claims were settled; what the items cost "
+            "is context, not the answer. Null unless you are recommending approve."
         ),
     )
     amount_reasoning: str | None = Field(
@@ -306,7 +311,7 @@ class _RepliesToTheRepresentative(BaseModel):
 
 
 class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
-    """A reworked conclusion, after a representative said what was wrong (FR-R.9, FR-R.10)."""
+    """A reworked conclusion for a claim, after a representative wrote back (FR-R.9, FR-R.10)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -318,13 +323,6 @@ class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
             "'approve it', 'pay the two bottles', 'refund it'. Set it only alongside the "
             "recommendation and amount they asked for. If you cannot work out the amount or "
             "which product they mean, leave it false and ask them instead."
-        ),
-    )
-    concerns_shared_evidence: bool = Field(
-        default=False,
-        description=(
-            "True when the feedback is about the invoice, the customer confirmation or the "
-            "photograph of the outer box, which every product on this claim shares."
         ),
     )
 
@@ -380,8 +378,9 @@ class RevisedClaimReport(_RepliesToTheRepresentative):
         description=(
             "The products the representative has just told you this claim is for. Fill this in "
             "whenever they name one, however briefly — 'the 24oz multi surface cleaner is the "
-            "one' settles it. Each becomes a claim line that is looked into and priced on its "
-            "own. Empty when they have not said which products were damaged."
+            "one' settles it. Each becomes a claim line, and the claim is then investigated "
+            "with all of them in hand. Empty when they have not said which products were "
+            "damaged."
         ),
     )
     needs_fresh_investigation: bool = Field(

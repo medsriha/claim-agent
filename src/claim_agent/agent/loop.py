@@ -73,7 +73,6 @@ async def run_agent_pass(
     budget: RunBudget,
     ledger: RunLedger,
     events: EventStream,
-    claim_line_id: str | None = None,
 ) -> LoopOutcome[Answer]:
     """Run one AI pass: ask, use tools, ask again, then conclude (FR-1.1, FR-1.3)."""
     _refuse_a_used_budget(budget)
@@ -87,7 +86,6 @@ async def run_agent_pass(
             snapshot = budget.snapshot()
             logger.info(
                 "agent_pass_out_of_steps",
-                claim_line_id=claim_line_id,
                 form=concludes_with.__name__,
                 steps_used=snapshot.steps_used,
             )
@@ -112,7 +110,6 @@ async def run_agent_pass(
                     concludes_with=concludes_with,
                     budget=budget,
                     ledger=ledger,
-                    claim_line_id=claim_line_id,
                 )
             }
         except ModelError as exc:
@@ -127,11 +124,10 @@ async def run_agent_pass(
                     concludes_with=concludes_with,
                     budget=budget,
                     ledger=ledger,
-                    claim_line_id=claim_line_id,
                 )
             }
 
-        await _pass_on_what_the_model_said(reply, events=events, claim_line_id=claim_line_id)
+        await _pass_on_what_the_model_said(reply, events=events)
         return {"messages": [*state["messages"], reply]}
 
     async def act(state: _PassState) -> dict[str, object]:
@@ -144,7 +140,6 @@ async def run_agent_pass(
                 budget=budget,
                 ledger=ledger,
                 events=events,
-                claim_line_id=claim_line_id,
             )
             for tool_call in cast(AIMessage, asked_for).tool_calls
         ]
@@ -160,7 +155,6 @@ async def run_agent_pass(
                 structured=structured,
                 budget=budget,
                 ledger=ledger,
-                claim_line_id=claim_line_id,
             )
         }
 
@@ -213,7 +207,6 @@ async def _conclude(
     structured: StructuredModel,
     budget: RunBudget,
     ledger: RunLedger,
-    claim_line_id: str | None,
 ) -> LoopOutcome[Answer]:
     """Ask the model to fill in the form this pass ends on (NFR-2)."""
     closing = [*messages, HumanMessage(content=closing_request)]
@@ -233,7 +226,6 @@ async def _conclude(
         )
         logger.warning(
             "agent_conclusion_unusable",
-            claim_line_id=claim_line_id,
             form=concludes_with.__name__,
         )
         return _gave_up(exc.message, budget=budget, ledger=ledger)
@@ -260,7 +252,6 @@ async def _carry_out(
     budget: RunBudget,
     ledger: RunLedger,
     events: EventStream,
-    claim_line_id: str | None,
 ) -> ToolMessage:
     """Do the one thing the model asked for, and put the result into words for it."""
     # The model should always give a call an id, and the id it gives is the right
@@ -288,7 +279,6 @@ async def _carry_out(
         await events.emit(
             EventKind.TOOL_CALLED,
             f"The investigation asked for a tool called {name}, which it does not have.",
-            claim_line_id=claim_line_id,
             tool=name,
             outcome="unknown_tool",
         )
@@ -299,9 +289,7 @@ async def _carry_out(
     # here as well would put every successful call in the record twice.
     entries_before = len(ledger)
 
-    result = await _try_until_out_of_retries(
-        tool, tool_call, call_id=call_id, budget=budget, claim_line_id=claim_line_id
-    )
+    result = await _try_until_out_of_retries(tool, tool_call, call_id=call_id, budget=budget)
 
     if len(ledger) > entries_before:
         # The tool spoke for itself. Nothing to add.
@@ -324,7 +312,6 @@ async def _carry_out(
         f"Used the {_readable(name)} tool."
         if succeeded
         else f"The {_readable(name)} tool could not answer.",
-        claim_line_id=claim_line_id,
         tool=name,
         outcome="answered" if succeeded else "failed",
     )
@@ -337,7 +324,6 @@ async def _try_until_out_of_retries(
     *,
     call_id: str,
     budget: RunBudget,
-    claim_line_id: str | None,
 ) -> ToolMessage:
     """Use one tool, trying again while this call still has retries left (FR-1.3)."""
     while True:
@@ -355,7 +341,6 @@ async def _try_until_out_of_retries(
                 budget.spend_retry(call_id)
                 logger.warning(
                     "tool_call_failed_trying_again",
-                    claim_line_id=claim_line_id,
                     tool=tool.name,
                     failure=type(exc).__name__,
                 )
@@ -363,7 +348,6 @@ async def _try_until_out_of_retries(
 
             logger.warning(
                 "tool_call_failed",
-                claim_line_id=claim_line_id,
                 tool=tool.name,
                 failure=type(exc).__name__,
             )
@@ -381,13 +365,11 @@ async def _try_until_out_of_retries(
             )
 
 
-async def _pass_on_what_the_model_said(
-    reply: AIMessage, *, events: EventStream, claim_line_id: str | None
-) -> None:
+async def _pass_on_what_the_model_said(reply: AIMessage, *, events: EventStream) -> None:
     """Show a representative the model's own account of what it is doing."""
     said = reply.text.strip()
     if said:
-        await events.emit(EventKind.THINKING, said, claim_line_id=claim_line_id)
+        await events.emit(EventKind.THINKING, said)
 
 
 def _refuse_a_used_budget(budget: RunBudget) -> None:
@@ -406,7 +388,6 @@ def _model_turn_failed(
     concludes_with: type[BaseModel],
     budget: RunBudget,
     ledger: RunLedger,
-    claim_line_id: str | None,
 ) -> LoopOutcome[Answer]:
     """Write down a turn the model could not answer, and end the pass on it."""
     ledger.record(
@@ -418,7 +399,6 @@ def _model_turn_failed(
     )
     logger.warning(
         "agent_turn_failed",
-        claim_line_id=claim_line_id,
         form=concludes_with.__name__,
         failure=failure,
     )

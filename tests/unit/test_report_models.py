@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 from tests.unit.test_report_render import a_context, a_line, a_stopped_claim
 
+from claim_agent.domain.claim_line import ClaimLine
 from claim_agent.domain.decision import DecisionStage, Proposal
 from claim_agent.domain.models import DraftedEmail
 from claim_agent.domain.outcome import Recommendation
@@ -20,20 +21,18 @@ from claim_agent.report.models import (
     ReportState,
     RevisionTurn,
     ScreeningReportContent,
-    SiblingLine,
 )
 
 A_MOMENT = datetime(2026, 3, 21, 10, 4, 11, tzinfo=UTC)
 
 
 def a_report(**overrides: Any) -> Report:
-    """One investigated product's report, so a test writes down only the part it is about."""
+    """One investigated claim's report, so a test writes down only the part it is about."""
     fields: dict[str, Any] = {
-        "report_id": "RPT-CASE-1001-L01",
+        "report_id": "RPT-CASE-1001",
         "version": 1,
         "case_id": "CASE-1001",
-        "claim_line_id": "CASE-1001-L01",
-        "product_name": "Liposomal Tripeptide Collagen",
+        "product_names": ("Liposomal Tripeptide Collagen",),
         "account_name": "Best Paw Nutrition",
         "user_id": "334430",
         "stage": DecisionStage.INVESTIGATION,
@@ -54,27 +53,20 @@ def a_report(**overrides: Any) -> Report:
     }
     fields.update(overrides)
     if "content" not in fields:
-        line = a_line()
-        claim_line = line.line.model_copy(update={"claim_line_id": fields["claim_line_id"]})
-        product_name = fields["product_name"]
-        if isinstance(product_name, str) and product_name != claim_line.product_name:
-            claimed = claim_line.claimed.model_copy(update={"name": product_name})
-            order_line = (
-                claim_line.order_line.model_copy(update={"name": product_name})
-                if claim_line.order_line is not None
-                else None
-            )
-            claim_line = claim_line.model_copy(
-                update={"claimed": claimed, "order_line": order_line}
-            )
+        findings = a_line()
         fields["content"] = InvestigationReportContent(
-            line=claim_line,
+            lines=tuple(
+                _named(findings.lines[0], name, position)
+                for position, name in enumerate(fields["product_names"], start=1)
+            ),
             context=a_context(),
-            evidence=line.evidence,
-            assessments=line.assessments,
-            outcome=line.outcome.model_copy(update={"recommendation": fields["recommendation"]}),
-            amount=line.amount.model_copy(update={"amount_usd": fields["amount_usd"]}),
-            concerns=line.concerns,
+            evidence=findings.evidence,
+            assessments=findings.assessments,
+            outcome=findings.outcome.model_copy(
+                update={"recommendation": fields["recommendation"]}
+            ),
+            amount=findings.amount.model_copy(update={"amount_usd": fields["amount_usd"]}),
+            concerns=findings.concerns,
             requested_details=(
                 ("a clear photograph showing the full product label",)
                 if fields["recommendation"] is Recommendation.REQUEST_INFO
@@ -84,13 +76,27 @@ def a_report(**overrides: Any) -> Report:
     return Report(**fields)
 
 
+def _named(line: ClaimLine, name: str, position: int) -> ClaimLine:
+    """The same claim line under a given product name, so a test can ask for several."""
+    return line.model_copy(
+        update={
+            "claim_line_id": f"CASE-1001-L{position:02d}",
+            "claimed": line.claimed.model_copy(update={"name": name}),
+            "order_line": (
+                line.order_line.model_copy(update={"name": name})
+                if line.order_line is not None
+                else None
+            ),
+        }
+    )
+
+
 def a_screening_report(**overrides: Any) -> Report:
     """A claim the quick checks turned away, which has no damaged product in it."""
     fields: dict[str, Any] = {
         "report_id": "RPT-CASE-1004",
         "case_id": "CASE-1004",
-        "claim_line_id": None,
-        "product_name": None,
+        "product_names": (),
         "stage": DecisionStage.SCREENING,
         "recommendation": None,
         "amount_usd": None,
@@ -135,20 +141,20 @@ def test_a_stopped_claim_names_no_damaged_product() -> None:
     """FR-C.1: the split into products happens later, so a stopped claim never has one."""
     report = a_screening_report()
 
-    assert report.claim_line_id is None
+    assert report.product_names == ()
     assert report.stage is DecisionStage.SCREENING
 
 
 def test_a_stopped_claim_carrying_a_product_is_refused() -> None:
     """FR-C.1: a product on a claim that never reached the split is a mistake in our own code."""
     with pytest.raises(ValidationError):
-        a_screening_report(claim_line_id="CASE-1004-L01")
+        a_screening_report(product_names=("Liposomal Tripeptide Collagen",))
 
 
-def test_an_investigated_report_has_to_name_its_product() -> None:
-    """FR-2.9a: without an id it cannot be told apart from a report about a whole claim."""
+def test_an_investigated_report_has_to_name_what_was_damaged() -> None:
+    """FR-2.9a: a report that names no product cannot be told apart from a clarification."""
     with pytest.raises(ValidationError):
-        a_report(claim_line_id=None)
+        a_report(product_names=())
 
 
 # --- A stopped claim recommends nothing (FR-2.1) ------------------------------
@@ -351,18 +357,14 @@ def test_a_claim_nobody_has_asked_about_has_no_reports_and_that_is_ordinary() ->
     assert view.reports == ()
 
 
-def test_a_sibling_row_carries_what_a_representative_needs_to_see_at_a_glance() -> None:
-    """FR-2.9a: a rep approving one product should see the second is still waiting."""
-    sibling = SiblingLine(
-        claim_line_id="CASE-1001-L02",
-        product_name="Blue Razz Liquid Carnitine",
-        recommendation=Recommendation.REQUEST_INFO,
-        amount_usd=None,
-        state=ReportState.AWAITING_REVIEW,
-    )
+def test_fr_2_9a_one_report_names_every_damaged_product_on_the_claim() -> None:
+    """FR-2.9a: a representative deciding sees the whole claim rather than inferring it."""
+    report = a_report(product_names=("Liposomal Tripeptide Collagen", "Blue Razz Liquid Carnitine"))
 
-    assert sibling.state is ReportState.AWAITING_REVIEW
-    assert sibling.amount_usd is None
+    assert report.product_names == (
+        "Liposomal Tripeptide Collagen",
+        "Blue Razz Liquid Carnitine",
+    )
 
 
 # --- The conversation on a report (FR-R.13) -----------------------------------

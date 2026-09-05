@@ -103,7 +103,6 @@ async def run_triage(
     budget: RunBudget | None = None,
     ledger: RunLedger | None = None,
     events: EventStream | None = None,
-    claim_line_id: str | None = None,
 ) -> LoopOutcome[ClaimSplit]:
     """Run one pass that ends on the triage form, with everything else defaulted.
 
@@ -121,7 +120,6 @@ async def run_triage(
         budget=budget or budget_of(),
         ledger=ledger or RunLedger(),
         events=events or EventStream(),
-        claim_line_id=claim_line_id,
     )
 
 
@@ -450,15 +448,13 @@ async def test_the_run_says_what_it_is_doing_while_it_works() -> None:
     )
     stream = EventStream()
 
-    await run_triage(model, tools=[inspect_image], events=stream, claim_line_id="LINE-1")
+    await run_triage(model, tools=[inspect_image], events=stream)
 
     called = events_of(stream, EventKind.TOOL_CALLED)
     assert [event.summary for event in called] == ["Used the inspect image tool."]
     assert called[0].detail == {"tool": "inspect_image", "outcome": "answered"}
     thinking = events_of(stream, EventKind.THINKING)
     assert thinking[0].summary == "The first image is too dark, so I will look at the second."
-    # Several products are investigated at once, so every event names the one it belongs to.
-    assert all(event.claim_line_id == "LINE-1" for event in stream.events())
 
 
 async def test_a_tool_that_could_not_answer_is_narrated_as_such() -> None:
@@ -520,7 +516,6 @@ async def test_each_pass_runs_on_its_own_budget() -> None:
         budget=line_budget,
         ledger=RunLedger(),
         events=EventStream(),
-        claim_line_id="LINE-1",
     )
 
     assert triage.answer == a_split()

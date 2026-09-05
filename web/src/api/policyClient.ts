@@ -6,7 +6,7 @@
  * it draws whatever came back.
  */
 import { requestJson, sendJson } from "./request";
-import type { ForgottenCorrections, PolicyView, SubmittedValues } from "./policyTypes";
+import type { ClearedStores, PolicyView, SubmittedValues } from "./policyTypes";
 
 /**
  * Read the policy in force.
@@ -47,15 +47,17 @@ export async function resetPolicy(): Promise<PolicyView> {
 }
 
 /**
- * Forget every correction representatives have made, for every merchant.
+ * Throw away everything the service has remembered.
  *
- * **A demonstration control that destroys real history.** Every claim after it is judged as
- * though no representative had ever corrected anything, which is the point when somebody wants
- * to show the system starting from nothing, and a genuine loss otherwise. There is no undo.
+ * **A demonstration control that destroys real history.** Four stores go: what representatives
+ * corrected for each merchant, every report and every earlier version of one, what
+ * representatives decided, and the past claims a new claim is priced against. That is the point
+ * when somebody wants to show the system starting from nothing, and a genuine loss otherwise.
+ * There is no undo.
  *
- * @returns How many corrections were removed. Zero is an ordinary answer.
+ * @returns How many records went from each store. All zeroes is an ordinary answer.
  * @throws ApiFailure - Always this and nothing else.
  */
-export async function forgetCorrections(): Promise<ForgottenCorrections> {
-  return requestJson<ForgottenCorrections>("/admin/corrections/forget", { method: "POST" });
+export async function forgetEverything(): Promise<ClearedStores> {
+  return requestJson<ClearedStores>("/admin/forget-everything", { method: "POST" });
 }

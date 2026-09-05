@@ -249,7 +249,6 @@ def _a_decision(
     return DecisionRecord(
         decision_id=_decision_id(report, sequence=sequence),
         case_id=report.case_id,
-        claim_line_id=report.claim_line_id,
         stage=report.stage,
         report_version=report.version,
         action=action,
@@ -271,15 +270,12 @@ def _a_decision(
 def _decision_id(report: Report, *, sequence: int) -> str:
     """Name one decision, the same way every time.
 
-    Worked out from what it was about and which decision on it this is, rather than handed out
-    fresh, so repeating a decision writes over its own record instead of adding a second
-    (FR-C.4). The sequence is what keeps two *different* notes on one report from sharing a name
-    and one of them being lost.
-
-    A claim the quick checks stopped has no product to name, so its own identifier is used.
+    Worked out from the claim and which decision on it this is, rather than handed out fresh,
+    so repeating a decision writes over its own record instead of adding a second (FR-C.4). The
+    sequence is what keeps two *different* notes on one report from sharing a name and one of
+    them being lost.
     """
-    about = report.claim_line_id or report.case_id
-    return f"DEC-{about}-{sequence:02d}"
+    return f"DEC-{report.case_id}-{sequence:02d}"
 
 
 def _review_entry(

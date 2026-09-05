@@ -475,7 +475,6 @@ class _ToolContext:
     case_id: str
     shipment_id: str | None
     user_id: str | None
-    claim_line_id: str | None
     case: Case | None
     shipment: Shipment | None
     evidence: EvidenceClient
@@ -501,7 +500,6 @@ def investigation_tools(
     ledger: RunLedger,
     events: EventStream,
     policy: Policy,
-    claim_line_id: str | None = None,
     case: Case | None = None,
     shipment: Shipment | None = None,
 ) -> list[BaseTool]:
@@ -510,7 +508,6 @@ def investigation_tools(
         case_id=case_id,
         shipment_id=shipment_id,
         user_id=user_id,
-        claim_line_id=claim_line_id,
         case=case,
         shipment=shipment,
         evidence=evidence,
@@ -1402,12 +1399,7 @@ async def _finish(
     detail = {"tool": outcome.tool, "succeeded": "yes" if outcome.succeeded else "no"}
     if reference is not None:
         detail["reference"] = reference
-    await context.events.emit(
-        EventKind.TOOL_CALLED,
-        outcome.summary,
-        claim_line_id=context.claim_line_id,
-        **detail,
-    )
+    await context.events.emit(EventKind.TOOL_CALLED, outcome.summary, **detail)
     return "\n".join([outcome.summary, *lines]), outcome
 
 

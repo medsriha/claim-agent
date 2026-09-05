@@ -42,7 +42,7 @@ def test_approving_records_what_the_representative_chose() -> None:
     assert outcome.decision is not None
     assert outcome.decision.action is RepAction.APPROVED
     assert outcome.decision.case_id == "CASE-1001"
-    assert outcome.decision.claim_line_id == "CASE-1001-L01"
+    assert outcome.decision.case_id == "CASE-1001"
     assert outcome.decision.report_version == 1
     assert outcome.decision.decided_at == A_MOMENT
 
@@ -68,7 +68,7 @@ def test_a_stopped_claim_can_be_approved_and_names_the_whole_claim() -> None:
     outcome = approve(a_screening_report(), policy=POLICY, at=A_MOMENT)
 
     assert outcome.decision is not None
-    assert outcome.decision.claim_line_id is None
+    assert outcome.decision.case_id == "CASE-1004"
     assert outcome.decision.stage is DecisionStage.SCREENING
     assert outcome.decision.decision_id == "DEC-CASE-1004-00"
 

@@ -1,86 +1,99 @@
 # Damaged-in-Transit Claims Agent
 
-Backend API that investigates ShipBob damaged-in-transit claims and hands a support rep a
-structured report and a drafted merchant email. The agent recommends; **a rep decides**, and
-nothing is sent or paid without human approval.
+A backend service that investigates ShipBob damaged-in-transit claims and hands a support
+representative a structured report and a drafted merchant email. **The system recommends; a
+representative decides.** Nothing is sent and no money moves without a person approving it.
 
-## Quickstart
+This page is about running the demonstration. Everything runs in containers, so there is
+nothing to install but Docker.
 
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.11.
+## What you need
 
-```bash
-make install                 # create .venv and sync dependencies
-make hooks                   # install the git hooks
-cp .env.example .env         # then fill in ANTHROPIC_API_KEY
-make run                     # http://127.0.0.1:8000  (docs at /docs)
-```
+- **Docker Desktop**, running. Nothing else — no Python, no Node.
+- **An Anthropic API key**, to investigate a claim. Without one the service still starts and
+  still screens claims; asking it to investigate one reports plainly that it cannot.
 
-```bash
-curl localhost:8000/health
-```
-
-## Running the demo
-
-One one-off step, then three things running side by side. The screen is at
-<http://localhost:5173>.
+## Run it
 
 ```bash
-make mock         # a stand-in for ShipBob, on :8080 — without it every claim fails
-make run          # the claims service, on :8000
-make ui-install   # once: install the UI's dependencies
-make ui-dev       # the screen, on :5173, forwarding claim requests to :8000
+cp .env.example .env      # then open .env and fill in ANTHROPIC_API_KEY
+docker compose up --build
 ```
 
-## Restarting the backend
+The first build takes a few minutes; after that it starts in seconds. When the three
+containers report healthy, open the screen:
 
-`make run` watches the code, so editing a `.py` file restarts it for you. Restart by hand for
-anything else — `Ctrl+C`, then `make run` again:
+**<http://localhost:5173>**
+
+Stop it with `Ctrl+C`, or `docker compose down` from another terminal.
+
+## What is running
+
+| | Address | What it is |
+|---|---|---|
+| **The screen** | <http://localhost:5173> | What a representative uses. Start here. |
+| The service | <http://localhost:8000/docs> | The claims API, and its own documentation. |
+| ShipBob stand-in | <http://localhost:8080/cases> | A small program holding the sample claims, so there is something to read without connecting to ShipBob. |
+
+The screen forwards claim requests to the service itself, so a browser only ever talks to one
+address.
+
+## What to try
+
+1. **Pick a sample claim.** The findings arrive one at a time, as the system works through
+   them. Some claims are stopped by the quick eligibility checks — too old, insured, the wrong
+   kind of claim — and end in a drafted email to the merchant explaining why. The rest are
+   investigated properly: the system reads the photographs and the paperwork, prices the
+   damage, and writes a report.
+2. **Expect an investigation to take a minute or two**, longer when there are photographs to
+   read. The messages on screen are the real stages, arriving as they finish.
+3. **Read the report, then decide.** A representative can approve it or send it back with a
+   note, and a report sent back is rewritten in light of that note.
+4. **Change the rules.** The admin panel, from the header, holds the thresholds every later
+   claim is judged by — the $100 cap, the age limit, and the rest. A change applies to the
+   next claim screened. It is held in memory only, so restarting puts every value back.
+
+## Starting again
+
+What the service remembers — reports, decisions, past claims, and what a representative
+corrected — is kept in a volume and survives a restart. To wipe it and start from nothing:
 
 ```bash
-lsof -ti:8000 | xargs kill    # only if the port is still held
+docker compose down -v
 ```
 
-Two things a restart is actually needed for. **`.env` changes** are not picked up: settings and
-policy are read once at startup and the file watcher only watches Python. And a restart
-**discards any threshold changed through the admin panel** — those live in memory only, so
-every value goes back to what `.env` says.
+The admin panel has a control that does the same thing without stopping anything.
 
-## Development
+## Two optional extras
+
+**Give the history panel something to show.** Nothing in the system writes a representative's
+correction yet, so on a fresh machine every claim honestly reports none on file. This writes
+one by hand, so the feature can be demonstrated. **Everything it writes is invented**, and
+`--clear` takes it back out:
 
 ```bash
-make test        # pytest with coverage
-make lint        # ruff check + format check
-make typecheck   # mypy (strict)
-make format      # apply formatting and safe fixes
-make check       # everything CI runs — run before pushing
-
-make ui-lint     # the UI's lint and types
-make ui-build    # build the UI for production
+docker compose run --rm api python -m tools.seed_merchant_memory
+docker compose run --rm api python -m tools.seed_merchant_memory --clear
 ```
 
-Pre-commit runs ruff and mypy on commit, pytest on push. CI repeats all of it on `main` and
-on pull requests.
+**See what a slow ShipBob looks like.** This holds every answer back, so the waiting states —
+and, if you set it high enough, the timeout a representative would see in a real outage —
+can be seen on purpose:
 
-**The UI is deliberately outside all of that.** `make check`, CI and the hooks are Python only,
-which keeps the push loop fast and CI free of Node. Nothing catches a broken UI for you — run
-`make ui-lint` yourself before pushing a change to `web/`.
-
-## Configuration
-
-Process settings live in `src/claim_agent/settings.py`; claim policy thresholds live in
-`src/claim_agent/policy.py` and nowhere else. Both are environment-overridable — see
-[.env.example](.env.example). Most policy defaults are provisional placeholders pending
-ShipBob sign-off; they are marked as such in the module.
-
-## Layout
-
+```bash
+SHIPBOB_MOCK_DELAY_SECONDS=3 docker compose up --build
 ```
-src/claim_agent/
-  api/         HTTP surface        domain/     pure models and rules
-  preflight/   Layer 0 (rules)     agent/      Layers 1a/1b/R (LangGraph)
-  execution/   empty — nothing is sent         storage/  reports, audit, memory
-  shipbob/     ShipBob mock API client
-tests/         unit/ (fast, no I/O) and integration/ (through HTTP)
-tools/         development only — the ShipBob stand-in and demo data
-web/           the demo screen (React + TypeScript, Vite)
+
+## Running the tests
+
+The test suite is in the image, so it needs nothing installed either:
+
+```bash
+docker compose run --rm api pytest
 ```
+
+## Working on the code
+
+The containers are for running the demonstration, not for writing code — an edit means a
+rebuild. To work on it directly, with reload, you will want [uv](https://docs.astral.sh/uv/)
+and Node. `make help` lists every command.

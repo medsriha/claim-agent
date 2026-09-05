@@ -9,15 +9,19 @@ a reply, written for them, about their claim.
 What the agent may then *change* depends on what the report is, and that is decided here
 rather than by what the agent wrote:
 
-- **A report about one damaged product** is reworked in full: findings, judgements, the
-  figure and the merchant's email (FR-R.9).
+- **A report about an investigated claim** is reworked in full: findings, judgements, the
+  figure and the merchant's email, across every product on it (FR-R.9, FR-R.1a).
 - **A report about a claim nobody could split into products** may have what is still unclear,
   what the merchant is asked for, and its email reworked. It can never be given an amount,
   because nothing on it was ever priced — so where the representative settles the split, the
-  claim is investigated again instead, which is the only honest route from "we cannot tell
-  which product" to "here is what to pay" (FR-1a.4).
+  claim is investigated instead, which is the only honest route from "we cannot tell which
+  product" to "here is what to pay" (FR-1a.4).
 - **A report for a claim the quick checks turned away** may have only its merchant email
   reworded. Its verdict is arithmetic and no message can overturn one (FR-0.6, FR-R.8).
+
+**Every path produces one report**, because a claim has one (FR-2.9b). Where a message causes
+the claim to be investigated, the findings become the next version of the very report the
+message was written on, so the conversation that led there stays attached to them (FR-R.13).
 
 **Nothing here sends anything or moves any money**, whichever path a message takes. The agent
 holds the investigation's read-only tools and no others (FR-R.6, FR-3.1).
@@ -30,23 +34,21 @@ rather than an error page (NFR-4).
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
 
 from claim_agent.agent.events import EventStream
 from claim_agent.agent.images import ImageFetcher
 from claim_agent.agent.llm import StructuredModel
-from claim_agent.agent.precedent_context import precedent_for_line
+from claim_agent.agent.precedent_context import precedent_for_claim
 from claim_agent.agent.prompts import EarlierExchange
 from claim_agent.agent.revise import (
+    ClaimFindingsRevision,
     ClaimRevision,
-    LineRevision,
     ReportUnderReview,
+    rework_claim_findings,
     rework_claim_report,
-    rework_line,
     rework_screening_report,
 )
 from claim_agent.agent.run import investigate_claim
@@ -56,29 +58,27 @@ from claim_agent.domain.evidence import SHARED_EVIDENCE
 from claim_agent.domain.models import Attachment, UtcDatetime, Verdict
 from claim_agent.domain.outcome import Recommendation
 from claim_agent.domain.reimbursement import nothing_priced_yet
-from claim_agent.errors import ClaimAgentError, StorageError
+from claim_agent.errors import ClaimAgentError
 from claim_agent.observability import get_logger
 from claim_agent.policy import Policy
 from claim_agent.preflight.gather import gather_case_record
 from claim_agent.preflight.models import CaseRecord, ClaimContext
 from claim_agent.preflight.service import run_preflight
 from claim_agent.report.build import (
-    build_investigation_reports,
+    build_investigation_report,
     build_revised_report,
-    report_for_one_product,
+    report_for_the_claim,
 )
 from claim_agent.report.models import (
     ClarificationReportContent,
     InvestigationReportContent,
     Report,
-    ReportState,
     ScreeningReportContent,
 )
 from claim_agent.shipbob.client import ShipBobClient
 from claim_agent.shipbob.evidence_client import EvidenceClient
 from claim_agent.storage.merchant_memory import MerchantMemory
 from claim_agent.storage.precedent_store import PrecedentStore
-from claim_agent.storage.report_store import ReportStore
 
 logger = get_logger(__name__)
 
@@ -100,28 +100,11 @@ _NO_MODEL = (
 """What a representative is told when no model can be built to answer them."""
 
 
-@dataclass(frozen=True)
-class Written:
-    """Everything a representative's message produced, ready to be written down.
-
-    Kept together because the two halves are written in one go and read in one go: the report
-    they will see next, and any other reports the message caused to exist — which happens when
-    a claim is investigated again because they settled what it is for.
-
-    `alongside` is empty for every message that did not cause a fresh investigation, which is
-    almost all of them.
-    """
-
-    report: Report
-    alongside: tuple[Report, ...] = ()
-
-
 async def answer_the_representative(
     parked: Report,
     *,
     feedback: str,
     at: UtcDatetime,
-    reports: ReportStore,
     shipbob: ShipBobClient,
     evidence: EvidenceClient,
     fetcher: ImageFetcher,
@@ -129,7 +112,7 @@ async def answer_the_representative(
     memory: MerchantMemory,
     precedent_store: PrecedentStore,
     policy: Policy,
-) -> Written:
+) -> Report:
     """Give a representative's message to the agent, and write down what came back.
 
     Args:
@@ -137,7 +120,6 @@ async def answer_the_representative(
         feedback: What they said, in their own words, kept exactly as written.
         at: When this is happening. Handed in rather than read from a clock, so the same
             message writes the same version twice (NFR-1).
-        reports: Where reports are kept, and where the new version goes.
         shipbob: Reads the case, its parcel and its order again.
         evidence: Reads the claim's images and prices the shipment.
         fetcher: Downloads an image so a model can look at it.
@@ -148,8 +130,7 @@ async def answer_the_representative(
         policy: The thresholds this claim is judged by (FR-0.7).
 
     Returns:
-        The next version of the report, and any product reports a fresh investigation
-        produced beside it. Never raises for anything that can happen to a claim.
+        The next version of the report. Never raises for anything that can happen to a claim.
     """
     try:
         record = await gather_case_record(parked.case_id, shipbob)
@@ -175,7 +156,6 @@ async def answer_the_representative(
         parked,
         feedback=feedback,
         record=record,
-        reports=reports,
         evidence=evidence,
         fetcher=fetcher,
         chat=chat,
@@ -191,7 +171,6 @@ async def answer_the_representative(
             feedback=feedback,
             at=at,
             record=record,
-            reports=reports,
             evidence=evidence,
             fetcher=fetcher,
             chat=chat,
@@ -206,7 +185,6 @@ async def answer_the_representative(
             answered,
             feedback=feedback,
             at=at,
-            reports=reports,
             evidence=evidence,
             fetcher=fetcher,
             chat=chat,
@@ -217,7 +195,7 @@ async def answer_the_representative(
             policy=policy,
         )
 
-    return Written(build_revised_report(parked, answered, feedback=feedback, at=at))
+    return build_revised_report(parked, answered, feedback=feedback, at=at)
 
 
 async def _ask_the_agent(
@@ -225,30 +203,30 @@ async def _ask_the_agent(
     *,
     feedback: str,
     record: CaseRecord,
-    reports: ReportStore,
     evidence: EvidenceClient,
     fetcher: ImageFetcher,
     chat: BaseChatModel,
     structured: StructuredModel,
     precedent_store: PrecedentStore,
     policy: Policy,
-) -> LineRevision | ClaimRevision:
+) -> ClaimFindingsRevision | ClaimRevision:
     """Put the message to the agent, in the shape this kind of report calls for.
 
     The three shapes are genuinely different questions, which is why they are three prompts
-    rather than one with branches in it: what a product report may become, what an unsettled
-    claim may become, and what a stopped claim may become have almost nothing in common.
+    rather than one with branches in it: what an investigated claim's report may become, what
+    an unsettled claim may become, and what a stopped claim may become have almost nothing in
+    common.
 
-    `chat` is only used by the product rework, which runs the tool-use loop. The other two ask
+    `chat` is only used by the findings rework, which runs the tool-use loop. The other two ask
     one question and hold no tools, because there is nothing they could look at that would
     change their answer.
     """
     content = parked.content
 
     if isinstance(content, InvestigationReportContent):
-        return await rework_line(
+        return await rework_claim_findings(
             under_review=ReportUnderReview(
-                line=content.line,
+                lines=content.lines,
                 context=content.context,
                 attachments=content.attachments,
                 recommendation=content.outcome.recommendation,
@@ -258,7 +236,6 @@ async def _ask_the_agent(
                 concerns=content.concerns,
                 drafted_email=parked.drafted_email,
                 conversation=what_has_been_said(parked),
-                siblings=the_other_products(parked, reports),
             ),
             feedback=feedback,
             record=record,
@@ -268,10 +245,10 @@ async def _ask_the_agent(
             structured=structured,
             events=EventStream(),
             policy=policy,
-            precedent=precedent_for_line(
+            precedent=precedent_for_claim(
                 store=precedent_store,
                 case=record.case,
-                line=content.line,
+                lines=content.lines,
                 policy=policy,
                 # The three that describe the parcel, exactly as a first pass supplies them.
                 # The report has settled all four by now, and handing over the fourth would
@@ -319,30 +296,29 @@ async def _look_into_what_they_settled(
     feedback: str,
     at: UtcDatetime,
     record: CaseRecord,
-    reports: ReportStore,
     evidence: EvidenceClient,
     fetcher: ImageFetcher,
     chat: BaseChatModel,
     structured: StructuredModel,
     precedent_store: PrecedentStore,
     policy: Policy,
-) -> Written:
+) -> Report:
     """Look into the products a representative just named, and nothing else (FR-1a.4).
 
-    **This is what a representative naming a product should cost: one pass per product.** The
-    heavy alternative — investigating the whole claim again — re-reads every image, re-splits
-    the claim and re-judges everything, and on a claim nobody could split it very often comes
-    back unable to split it a second time. A representative who has just answered that exact
+    **This is what a representative naming a product should cost: one pass.** The heavy
+    alternative — investigating the whole claim again — re-reads every image, re-splits the
+    claim and re-judges everything, and on a claim nobody could split it very often comes back
+    unable to split it a second time. A representative who has just answered that exact
     question should not be made to wait for the system to fail at it again.
 
     So their answer is turned straight into claim lines, matched against the order the way the
-    split would have matched them, and each one is investigated on its own. Their instruction
-    travels with it: if they said to pay the claim, the run comes back approved, with the
-    figure, because the rules that would withhold it encode the agent's uncertainty and they
-    have just corrected it.
+    split would have matched them, and the claim is investigated with all of them in hand.
+    Their instruction travels with it: if they said to pay the claim, the run comes back
+    approved, with the figure, because the rules that would withhold it encode the agent's
+    uncertainty and they have just corrected it.
 
-    The claim-level report is superseded rather than overwritten — its conversation is the
-    record of how this was reached (FR-R.13) — and each product's report is written beside it.
+    The findings become this report's next version, so the conversation that produced them
+    stays attached (FR-R.13).
     """
     lines = build_claim_lines(
         parked.case_id,
@@ -352,73 +328,61 @@ async def _look_into_what_they_settled(
         ),
         record.order,
     )
-    # Each product on its own, at the same time, exactly as an investigation does it: they need
-    # nothing from each other, and one slow product must not hold up a simple one (FR-1b.3).
-    #
-    # Each run fetches the priced invoice and reads the photographs for itself, because each
-    # builds its own memo of what it has looked at. On a claim of one product — which is what a
-    # representative naming one almost always means — that costs nothing; on several it pays
-    # for the same invoice more than once.
-    looked_into = await asyncio.gather(
-        *(
-            rework_line(
-                under_review=_nothing_established_yet(line, parked, ambiguity=answered.ambiguity),
-                feedback=feedback,
-                record=record,
-                evidence_client=evidence,
-                fetcher=fetcher,
-                chat=chat,
-                structured=structured,
-                events=EventStream(),
-                policy=policy,
-                precedent=precedent_for_line(
-                    store=precedent_store, case=record.case, line=line, policy=policy
-                ),
-            )
-            for line in lines
-        )
-    )
 
-    produced = _placed_beside_what_is_already_there(
-        tuple(
-            report_for_one_product(
-                line=done.investigation,
-                case=record.case,
-                carrier=record.shipment.carrier if record.shipment is not None else None,
-                context=_context_of(parked),
-                attachments=_attachments_of(parked),
-                at=at,
-            )
-            for done in looked_into
-            if done.investigation is not None
+    looked_into = await rework_claim_findings(
+        under_review=_nothing_established_yet(lines, parked, ambiguity=answered.ambiguity),
+        feedback=feedback,
+        record=record,
+        evidence_client=evidence,
+        fetcher=fetcher,
+        chat=chat,
+        structured=structured,
+        events=EventStream(),
+        policy=policy,
+        precedent=precedent_for_claim(
+            store=precedent_store, case=record.case, lines=lines, policy=policy
         ),
-        reports=reports,
     )
 
     logger.info(
         "settled_products_looked_into",
         case_id=parked.case_id,
         named=len(lines),
-        produced=len(produced),
+        reworked=looked_into.reworked,
     )
-    return Written(
-        build_revised_report(
+
+    if looked_into.findings is None:
+        # The run could not answer. Their message is still recorded and answered, and the
+        # report keeps the clarification it had, so they can try again (NFR-4).
+        return build_revised_report(
             parked,
-            answered.model_copy(
-                update={"reply": _also(answered.reply, _what_it_produced(produced))}
-            ),
+            answered.model_copy(update={"reply": _also(answered.reply, looked_into.reply)}),
             feedback=feedback,
             at=at,
             reinvestigated=True,
-        ),
-        alongside=produced,
+        )
+
+    built = report_for_the_claim(
+        findings=looked_into.findings,
+        case=record.case,
+        carrier=record.shipment.carrier if record.shipment is not None else None,
+        context=_context_of(parked),
+        attachments=_attachments_of(parked),
+        at=at,
+    )
+    return _findings_became_the_next_version(
+        parked,
+        built,
+        answered.model_copy(update={"reply": _also(answered.reply, _what_it_produced(built))}),
+        feedback=feedback,
+        at=at,
     )
 
 
 def _nothing_established_yet(
-    line: ClaimLine, parked: Report, *, ambiguity: str | None
+    lines: Sequence[ClaimLine], parked: Report, *, ambiguity: str | None
 ) -> ReportUnderReview:
-    """One product to look into, with an honest account of what is known about it: nothing.
+    """The claim to look into, with an honest account of what is known about it: nothing.
 
     A claim nobody could split was never investigated, so there are no findings to carry
     forward and no figure to start from. Saying that plainly is better than seeding the run
@@ -426,14 +390,13 @@ def _nothing_established_yet(
     as a record of what was seen, and there is nothing to have seen.
     """
     return ReportUnderReview(
-        line=line,
+        lines=tuple(lines),
         context=_context_of(parked),
         attachments=_attachments_of(parked),
         recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
         amount=nothing_priced_yet(),
         concerns=(ambiguity,) if ambiguity else (),
         conversation=what_has_been_said(parked),
-        siblings=(),
     )
 
 
@@ -456,7 +419,6 @@ async def _investigate_the_claim_again(
     *,
     feedback: str,
     at: UtcDatetime,
-    reports: ReportStore,
     evidence: EvidenceClient,
     fetcher: ImageFetcher,
     chat: BaseChatModel,
@@ -465,12 +427,12 @@ async def _investigate_the_claim_again(
     memory: MerchantMemory,
     precedent_store: PrecedentStore,
     policy: Policy,
-) -> Written:
-    """Investigate the claim again, because the representative settled what it is for.
+) -> Report:
+    """Investigate the claim again, because the representative asked for it.
 
-    This is the one route from a claim nobody could divide into products to a report somebody
+    This is the slow route from a claim nobody could divide into products to a report somebody
     can approve. It is a real investigation, not a rewording: the evidence is read again, the
-    claim is split again, and each product is judged on what is actually in the photographs —
+    claim is split again, and the products are judged on what is actually in the photographs —
     which is the only way a figure can exist at all (FR-1.21).
 
     **What the representative said reaches it as a correction against the merchant**, written
@@ -479,12 +441,11 @@ async def _investigate_the_claim_again(
     them: the same channel that improves the merchant's *next* claim improves this one.
 
     A claim that fails the quick checks on the way through is possible in principle — the
-    thresholds can change between one screening and the next (FR-0.7) — and produces no
-    products, so the report is carried through with the agent's reply and nothing else.
+    thresholds can change between one screening and the next (FR-0.7) — and produces nothing
+    new, so the report is carried through with the agent's reply and nothing else.
 
     Returns:
-        The claim-level report's next version, and the product reports the investigation
-        produced. Both are the caller's to write down.
+        The report's next version, carrying whatever the investigation established.
     """
     try:
         screening = await run_preflight(
@@ -504,9 +465,7 @@ async def _investigate_the_claim_again(
 
     if screening.verdict is Verdict.TERMINAL:
         logger.info("fresh_investigation_stopped_by_the_checks", case_id=parked.case_id)
-        return Written(
-            build_revised_report(parked, answered, feedback=feedback, at=at, reinvestigated=True)
-        )
+        return build_revised_report(parked, answered, feedback=feedback, at=at, reinvestigated=True)
 
     investigated = await investigate_claim(
         record=screening.record,
@@ -519,95 +478,57 @@ async def _investigate_the_claim_again(
         policy=policy,
         precedent_store=precedent_store,
     )
-    built = build_investigation_reports(screening, investigated, at=at)
-
-    # A claim still nobody can split produces another claim-level report under the very same
-    # name. Writing that as version 1 would overwrite the version the representative was
-    # looking at and lose the conversation with it (FR-R.13), so its findings are folded into
-    # the next version instead and only genuinely new reports are written beside it.
-    superseded = tuple(report for report in built if report.report_id == parked.report_id)
-    fresh = _placed_beside_what_is_already_there(
-        tuple(report for report in built if report.report_id != parked.report_id),
-        reports=reports,
-    )
-
-    revised = build_revised_report(
-        parked,
-        answered.model_copy(update={"reply": _also(answered.reply, _what_it_produced(fresh))}),
-        feedback=feedback,
-        at=at,
-        reinvestigated=True,
-    )
-    if superseded:
-        revised = revised.model_copy(
-            update={
-                "recommendation": superseded[0].recommendation,
-                "amount_usd": superseded[0].amount_usd,
-                "drafted_email": superseded[0].drafted_email,
-                "content": superseded[0].content,
-            }
-        )
+    built = build_investigation_report(screening, investigated, at=at)
 
     logger.info(
         "claim_investigated_again",
         case_id=parked.case_id,
-        produced=len(fresh),
-        still_unsettled=bool(superseded),
+        products=len(built.product_names),
     )
-    return Written(revised, alongside=fresh)
+    return _findings_became_the_next_version(
+        parked,
+        built,
+        answered.model_copy(update={"reply": _also(answered.reply, _what_it_produced(built))}),
+        feedback=feedback,
+        at=at,
+    )
 
 
-def _placed_beside_what_is_already_there(
-    built: Sequence[Report], *, reports: ReportStore
-) -> tuple[Report, ...]:
-    """Fit freshly investigated reports around the ones a claim already has.
+def _findings_became_the_next_version(
+    parked: Report,
+    built: Report,
+    revision: ClaimRevision,
+    *,
+    feedback: str,
+    at: UtcDatetime,
+) -> Report:
+    """Make freshly investigated findings the next version of the report they replace.
 
-    **This is the guard against a fresh investigation destroying a decision.** Every report a
-    build produces is version 1, and writing one replaces whatever shares its name — so a claim
-    whose products were already reported on would have those reports written straight over,
-    taking their review state, their conversation and the record of what a representative
-    decided with them.
+    **Writing them as version 1 instead would be the destructive mistake.** Every build
+    produces a version 1 under the claim's own report name, and writing that would land on top
+    of the version the representative was looking at, taking its conversation and the record of
+    what has already been decided on it with it (FR-R.13, FR-C.1).
 
-    Three cases, and they are genuinely different:
-
-    - **Nothing there yet.** The report is written as it is, version 1.
-    - **Something there, still under review.** The new findings become its next version, and
-      what a representative has already done to it travels with them (FR-R.13, FR-C.1).
-    - **Something there and approved.** It is left completely alone. Approving is final and
-      terminal (FR-2.9), and investigating a claim again is not a way round that — a line whose
-      email is about to go out must not change underneath the person who released it.
-
-    A store that cannot be read withholds the report rather than writing it. Losing findings
-    that can be produced again is the lesser harm; overwriting an approval cannot be undone.
+    So the version, the conversation and the review history come from the report that was sent
+    back, and everything the investigation established comes from the build. The two halves are
+    copied together, because the report refuses to hold a recommendation that disagrees with
+    its own content.
     """
-    placed: list[Report] = []
-    for report in built:
-        try:
-            existing = reports.get(report.report_id)
-        except StorageError:
-            logger.warning("fresh_findings_withheld", report_id=report.report_id)
-            continue
-
-        if existing is None:
-            placed.append(report)
-        elif existing.state is ReportState.APPROVED:
-            logger.info("fresh_findings_withheld_from_an_approved_line", report_id=report.report_id)
-        else:
-            placed.append(
-                report.model_copy(
-                    update={
-                        "version": existing.version + 1,
-                        "decisions_taken": existing.decisions_taken,
-                        "reviews": existing.reviews,
-                        "revisions": existing.revisions,
-                    }
-                )
-            )
-    return tuple(placed)
+    revised = build_revised_report(parked, revision, feedback=feedback, at=at, reinvestigated=True)
+    return revised.model_copy(
+        update={
+            "product_names": built.product_names,
+            "recommendation": built.recommendation,
+            "amount_usd": built.amount_usd,
+            "confidence": built.confidence,
+            "drafted_email": built.drafted_email,
+            "content": built.content,
+        }
+    )
 
 
-def _what_it_produced(fresh: Sequence[Report]) -> str:
-    """One sentence saying what investigating the claim again actually turned up.
+def _what_it_produced(built: Report) -> str:
+    """One sentence saying what investigating the claim actually turned up.
 
     **The agent's reply is written before the investigation runs**, so on its own it can only
     say what is about to happen. Left at that, a representative reads "I am investigating this
@@ -616,16 +537,16 @@ def _what_it_produced(fresh: Sequence[Report]) -> str:
 
     So the outcome is added afterwards, by code, because code is the only thing that knows it.
     """
-    if not fresh:
+    if not built.product_names:
         return (
-            "I had the whole claim investigated again, and it still could not establish which "
-            "products this claim is for — so there is no product to price and nothing new to "
+            "I had the claim investigated again, and it still could not establish which "
+            "products this claim is for — so there is nothing to price and nothing new to "
             "approve. What it now says is unclear is in the report above."
         )
-    named = ", ".join(sorted(report.product_name or report.report_id for report in fresh))
+    named = ", ".join(built.product_names)
     return (
-        f"I had the whole claim investigated again. It produced a report for {named}, below, "
-        "each with its own recommendation for you to decide on."
+        f"I had the claim investigated, and the report above now covers {named}, with one "
+        "recommendation for you to decide on."
     )
 
 
@@ -634,16 +555,14 @@ def _also(reply: str, added: str) -> str:
     return f"{reply.rstrip()} {added}" if reply.strip() else added
 
 
-def _only_a_reply(parked: Report, said: str, *, feedback: str, at: UtcDatetime) -> Written:
+def _only_a_reply(parked: Report, said: str, *, feedback: str, at: UtcDatetime) -> Report:
     """The next version of a report that nothing could change, carrying what was said.
 
     Used where the agent was never reached at all. The report keeps every finding it had and
     the representative is told why, so they can send it back again or decide on it as it
     stands (NFR-4).
     """
-    return Written(
-        build_revised_report(parked, ClaimRevision(reply=said), feedback=feedback, at=at)
-    )
+    return build_revised_report(parked, ClaimRevision(reply=said), feedback=feedback, at=at)
 
 
 def what_has_been_said(report: Report) -> tuple[EarlierExchange, ...]:
@@ -656,29 +575,4 @@ def what_has_been_said(report: Report) -> tuple[EarlierExchange, ...]:
     return tuple(
         EarlierExchange(feedback=turn.feedback, reply=turn.reply, changed=turn.changed)
         for turn in report.revisions
-    )
-
-
-def the_other_products(report: Report, reports: ReportStore) -> tuple[ClaimLine, ...]:
-    """The claim's other damaged products, read from their own reports (FR-1b.2).
-
-    Looked up rather than stored on the report, for the same reason the rows beside a report
-    are: what the other products are is a fact about the claim now, not when this report was
-    written.
-
-    A store that cannot be read gives none rather than failing the answer. Knowing what else
-    was claimed for makes a rework better informed; not knowing costs a sentence of context,
-    and losing the whole answer over it would cost the representative their reply (NFR-4).
-    """
-    try:
-        claim = reports.for_case(report.case_id)
-    except StorageError:
-        logger.warning("reply_could_not_read_the_other_products", case_id=report.case_id)
-        return ()
-
-    return tuple(
-        other.content.line
-        for other in claim.reports
-        if other.report_id != report.report_id
-        and isinstance(other.content, InvestigationReportContent)
     )

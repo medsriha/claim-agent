@@ -305,7 +305,6 @@ def _screening_decision(
     return DecisionRecord(
         decision_id=f"DEC-{case_id}-01",
         case_id=case_id,
-        claim_line_id=None,
         stage=DecisionStage.SCREENING,
         report_version=2 if sent_back else 1,
         action=RepAction.SENT_BACK if sent_back else RepAction.APPROVED,
@@ -324,11 +323,10 @@ def _screening_decision(
     )
 
 
-def _line_decision(
-    rng: random.Random, case_id: str, position: int, decided_at: datetime, progress: float
+def _claim_decision(
+    rng: random.Random, case_id: str, decided_at: datetime, progress: float
 ) -> DecisionRecord:
-    """One investigated product, and what a representative did about it."""
-    claim_line_id = f"{case_id}-L{position:02d}"
+    """One investigated claim, and what a representative did about it."""
     order_value = _draw_order_value(rng)
     defect = _pick(rng, _DEFECTS)
     damage = _pick(rng, _DAMAGES)
@@ -344,9 +342,8 @@ def _line_decision(
         # explain, and the draft has more chances to say it not quite right.
         edited = rng.random() < 0.40 - 0.26 * clarity - 0.10 * progress
         return DecisionRecord(
-            decision_id=f"DEC-{claim_line_id}-01",
+            decision_id=f"DEC-{case_id}-01",
             case_id=case_id,
-            claim_line_id=claim_line_id,
             stage=DecisionStage.INVESTIGATION,
             report_version=1,
             action=RepAction.APPROVED,
@@ -371,9 +368,8 @@ def _line_decision(
         if not changes_outcome and decided_amount is not None:
             decided_amount = (decided_amount * Decimal("0.5")).quantize(CENTS, ROUND_HALF_UP)
         return DecisionRecord(
-            decision_id=f"DEC-{claim_line_id}-01",
+            decision_id=f"DEC-{case_id}-01",
             case_id=case_id,
-            claim_line_id=claim_line_id,
             stage=DecisionStage.INVESTIGATION,
             report_version=1,
             action=RepAction.APPROVED_WITH_OVERRIDE,
@@ -391,9 +387,8 @@ def _line_decision(
 
     # Sent back: nothing was decided, so what was recommended still stands on both sides.
     return DecisionRecord(
-        decision_id=f"DEC-{claim_line_id}-01",
+        decision_id=f"DEC-{case_id}-01",
         case_id=case_id,
-        claim_line_id=claim_line_id,
         stage=DecisionStage.INVESTIGATION,
         report_version=1,
         action=RepAction.SENT_BACK,
@@ -443,10 +438,9 @@ def generate(now: datetime) -> list[DecisionRecord]:
                 decisions.append(_screening_decision(rng, case_id, decided_at, progress))
                 continue
 
-            roll = rng.random()
-            lines = 1 if roll < 0.60 else (2 if roll < 0.88 else 3)
-            for position in range(1, lines + 1):
-                decisions.append(_line_decision(rng, case_id, position, decided_at, progress))
+            # One decision per claim, however many products were on it: a claim is
+            # investigated once and approved once (FR-C.1, FR-2.9b).
+            decisions.append(_claim_decision(rng, case_id, decided_at, progress))
 
     decisions.sort(key=lambda decision: decision.decided_at)
     return decisions

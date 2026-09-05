@@ -28,22 +28,22 @@ def test_a_decision_comes_back_as_it_went_in(store: DecisionStore) -> None:
 
     [read] = store.decided_between(A_MOMENT - timedelta(days=1), A_MOMENT + timedelta(days=1))
 
-    assert read.claim_line_id == "CASE-9001-L01"
+    assert read.case_id == "CASE-9001"
     assert read.decided_by is None
     assert read.rep_words == "Logged by phone."
     assert read.recommended.amount_usd == read.decided.amount_usd
 
 
-def test_a_stopped_claim_keeps_its_missing_line_rather_than_gaining_one(
+def test_a_stopped_claim_records_without_a_recommendation_to_compare(
     store: DecisionStore,
 ) -> None:
-    """FR-C.1: the record names a whole claim, and no line is invented to give it a home."""
+    """FR-C.1: a stopped claim records the same way, with nothing invented to fill a gap."""
     store.record(screened())
 
     [read] = store.decided_between(A_MOMENT - timedelta(days=1), A_MOMENT + timedelta(days=1))
 
-    assert read.claim_line_id is None
     assert read.stated_confidence is None
+    assert read.recommended.outcome is None
 
 
 def test_writing_the_same_decision_twice_replaces_it_rather_than_counting_it_twice(

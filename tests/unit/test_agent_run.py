@@ -1,11 +1,9 @@
-"""Investigating a whole claim: the split, then every product, then the total.
+"""Investigating a whole claim: the split, then the one run that answers for it.
 
-Two things are checked here that no single product's investigation can check for
-itself. Each product gets its own step allowance, so a complicated one cannot starve
-a simple one (FR-1b.3). And the reimbursement cap is applied across the claim as
-well as within each product, because three products at fifty dollars each are each
-fine and together are not — the hole FR-1.20 warns about, where a cap is got round by
-splitting a claim into more products.
+What is checked here is what happens *around* the investigation rather than inside it:
+that a claim nobody could split is investigated not at all, that the images and the
+invoice are read once however many products there are, that precedent arrives before
+the run starts, and that the whole thing narrates itself on one stream.
 
 Everything is driven by a scripted model. Nothing reaches Anthropic and nothing needs
 a key, so the same script always produces the same claim (NFR-1).
@@ -13,7 +11,6 @@ a key, so the same script always produces the same claim (NFR-1).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -25,12 +22,10 @@ from tests.fakes.model import scripted
 from tests.fixtures.attachments import ATTACHMENTS_1001, INVOICE_342578703
 from tests.fixtures.shipbob import CASE_1001, ORDER_1001, SHIPMENT_1001
 
-from claim_agent.agent.budget import BudgetSnapshot
-from claim_agent.agent.events import EventStream
+from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
-from claim_agent.agent.investigate import LineInvestigation
 from claim_agent.agent.llm import StructuredModel
-from claim_agent.agent.run import ClaimInvestigation, apply_claim_cap, investigate_claim
+from claim_agent.agent.run import ClaimInvestigation, investigate_claim
 from claim_agent.agent.schemas import (
     AssessmentJudgement,
     ClaimedProductProposal,
@@ -40,12 +35,11 @@ from claim_agent.agent.schemas import (
     InvestigationConclusion,
 )
 from claim_agent.domain.assessment import REQUIRED_ASSESSMENTS
-from claim_agent.domain.claim_line import ClaimedProduct, MatchOutcome, build_claim_lines
+from claim_agent.domain.claim_line import MatchOutcome
 from claim_agent.domain.evidence import REQUIRED_EVIDENCE, EvidenceState
-from claim_agent.domain.models import Case, DraftedEmail, Order, Shipment
-from claim_agent.domain.outcome import OutcomeDecision, OverrideReason, Recommendation
+from claim_agent.domain.models import Case, Order, Shipment
+from claim_agent.domain.outcome import Recommendation
 from claim_agent.domain.precedent import PrecedentRecord
-from claim_agent.domain.reimbursement import AmountComponent, AmountDerivation
 from claim_agent.policy import Policy
 from claim_agent.preflight.models import CaseRecord, ClaimContext
 from claim_agent.settings import Settings
@@ -90,9 +84,10 @@ def a_split(*products: tuple[str, str]) -> ClaimSplit:
     )
 
 
-def a_conclusion(product: str, sku: str) -> InvestigationConclusion:
-    """A well-evidenced conclusion recommending payment for one product.
+def a_conclusion(*products: tuple[str, str]) -> InvestigationConclusion:
+    """A well-evidenced conclusion recommending payment for these products.
 
+    One conclusion covers the whole claim, however many products are on it (FR-1b.1).
     Its email writes no amount of its own; code adds the capped figure after the model
     has answered (FR-1.21).
     """
@@ -114,7 +109,9 @@ def a_conclusion(product: str, sku: str) -> InvestigationConclusion:
             )
             for name in REQUIRED_ASSESSMENTS
         ),
-        damaged_items=(DamagedItem(product_name=product, quantity=1, sku=sku),),
+        damaged_items=tuple(
+            DamagedItem(product_name=name, quantity=1, sku=sku) for name, sku in products
+        ),
         recommendation=Recommendation.APPROVE,
         reasoning="The photographs show it broken and it is on the invoice.",
         email_subject="About your damaged order",
@@ -122,33 +119,22 @@ def a_conclusion(product: str, sku: str) -> InvestigationConclusion:
     )
 
 
-def in_claim_line_order(products: Sequence[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Put products in the order `build_claim_lines` will hand them back.
-
-    Claim lines are sorted by product code so that the same claim always produces the
-    same identifiers. A test that scripts one conclusion per product has to script them
-    in that order, or a conclusion about one product lands on another — which reads as
-    a product that cannot be priced, and looks like a bug in the code under test rather
-    than in the script.
-    """
-    return sorted(products, key=lambda product: (product[1] or "", product[0]))
-
-
 async def run_claim(
     *,
     split: ClaimSplit,
-    conclusions: Sequence[InvestigationConclusion],
+    conclusion: InvestigationConclusion | None,
     policy: Policy | None = None,
     events: EventStream | None = None,
     precedent_store: PrecedentStore | None = None,
 ) -> ClaimInvestigation:
     """Investigate one claim against a scripted model.
 
-    The chat model is scripted to conclude at once every time it is asked, so no
-    tools are called and the test is about what happens around the runs rather than
-    inside them. `conclusions` is what the split pass and then each product's pass
-    are handed, in that order — see `in_claim_line_order`.
+    The chat model is scripted to conclude at once every time it is asked, so no tools
+    are called and the test is about what happens around the run rather than inside it.
+    `conclusion` is what the one investigation pass is handed after the split, and is
+    `None` for a claim that never reaches it.
     """
+    answers = (split,) if conclusion is None else (split, conclusion)
     async with httpx.AsyncClient(base_url="http://shipbob.test") as http:
         with respx.mock(assert_all_called=False) as shipbob:
             shipbob.get("/cases/CASE-1001/attachments").respond(200, json=ATTACHMENTS_1001)
@@ -158,37 +144,77 @@ async def run_claim(
                 context=a_context(),
                 evidence=EvidenceClient(http),
                 fetcher=ImageFetcher(http, Settings(attachment_cache_dir=None)),
-                # One "I am finished" reply per pass: the split, then each product.
+                # One "I am finished" reply per pass: the split, then the investigation.
                 chat=scripted(
-                    *[AIMessage(content="I have what I need.") for _ in range(len(conclusions) + 1)]
+                    *[AIMessage(content="I have what I need.") for _ in range(len(answers))]
                 ),
-                structured=StructuredModel(scripted(split, *conclusions), max_attempts=1),
+                structured=StructuredModel(scripted(*answers), max_attempts=1),
                 events=events if events is not None else EventStream(),
                 policy=policy if policy is not None else Policy(),
                 precedent_store=precedent_store,
             )
 
 
-async def test_fr_1_3_a_claim_with_two_products_has_a_budget_for_each() -> None:
-    """FR-1.3: budgets are per run, so a difficult product cannot starve a simple one.
+async def test_fr_1_3_the_split_and_the_investigation_each_get_their_own_budget() -> None:
+    """FR-1.3: two allowances on a claim, not one shared between the passes.
 
-    Three allowances are spent on a two-product claim — one for working out the split
-    and one for each product — and none of them is shared.
+    The investigation starts from a full allowance rather than from what working out
+    the split happened to leave.
     """
     claim = await run_claim(
         split=a_split((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
-        conclusions=[
-            a_conclusion(name, sku)
-            for name, sku in in_claim_line_order([(COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)])
-        ],
+        conclusion=a_conclusion((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
     )
 
     allowed = Policy().max_agent_steps
     assert claim.triage.budget.steps_allowed == allowed
-    for line in claim.lines:
-        assert line.budget.steps_allowed == allowed
-        # Each product started from a full allowance rather than what the split left.
-        assert line.budget.steps_used < allowed
+    assert claim.findings is not None
+    assert claim.findings.budget.steps_allowed == allowed
+    assert claim.findings.budget.steps_used < allowed
+
+
+async def test_fr_1b_1_a_claim_of_two_products_is_one_run_answering_for_both() -> None:
+    """FR-1b.1, FR-1b.3: one investigation, one next action, one email, two products.
+
+    This is the change the merged run was made for. Two damaged products used to be two
+    runs and two emails to one merchant about one parcel; now there is one set of
+    findings naming both, with a single recommendation on it.
+
+    What that recommendation *is* is not asserted here. The scripted run never looks at
+    an image, so the claim's shared evidence comes back missing and the rules withhold
+    the payment — which is right, and is covered where the rules are, in
+    `test_agent_investigate`.
+    """
+    claim = await run_claim(
+        split=a_split((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
+        conclusion=a_conclusion((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
+    )
+
+    assert claim.findings is not None
+    assert sorted(line.product_name for line in claim.findings.lines) == sorted([AMPOULE, COLLAGEN])
+    assert claim.findings.conclusion is not None
+    assert claim.findings.conclusion.recommendation is Recommendation.APPROVE
+
+
+async def test_fr_1_20_the_cap_holds_the_one_figure_a_claim_recommends() -> None:
+    """FR-1.20: three products at fifty each are a claim of one hundred and fifty, capped.
+
+    The old shape added separate figures up afterwards and then withdrew approvals it had
+    already granted. One run proposes one figure, so the cap simply holds it — which is
+    what settles whether the cap is per product or per claim.
+    """
+    claim = await run_claim(
+        split=a_split((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
+        conclusion=a_conclusion((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)).model_copy(
+            update={"recommended_amount_usd": "150.00"}
+        ),
+        policy=Policy(reimbursement_cap_usd=Decimal("100.00")),
+    )
+
+    assert claim.findings is not None
+    assert claim.findings.amount.proposed_usd == Decimal("150.00")
+    assert claim.findings.amount.amount_usd == Decimal("100.00")
+    assert claim.findings.amount.cap_applied is True
 
 
 async def test_fr_1a_4_an_unsettled_split_investigates_nothing() -> None:
@@ -203,10 +229,10 @@ async def test_fr_1a_4_an_unsettled_split_investigates_nothing() -> None:
             ambiguity="The photograph shows a 24oz bottle and the order holds two of them.",
             reasoning="The images do not tell the two apart.",
         ),
-        conclusions=[],
+        conclusion=None,
     )
 
-    assert claim.lines == ()
+    assert claim.findings is None
     assert claim.triage.is_ambiguous
     assert "24oz" in (claim.triage.ambiguity or "")
 
@@ -229,16 +255,11 @@ async def test_nfr_8_one_claim_looks_at_its_evidence_once_however_many_products(
                 context=a_context(),
                 evidence=EvidenceClient(http),
                 fetcher=ImageFetcher(http, Settings(attachment_cache_dir=None)),
-                chat=scripted(*[AIMessage(content="Done.") for _ in range(3)]),
+                chat=scripted(*[AIMessage(content="Done.") for _ in range(2)]),
                 structured=StructuredModel(
                     scripted(
                         a_split((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
-                        *[
-                            a_conclusion(name, sku)
-                            for name, sku in in_claim_line_order(
-                                [(COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)]
-                            )
-                        ],
+                        a_conclusion((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
                     ),
                     max_attempts=1,
                 ),
@@ -263,17 +284,16 @@ async def test_nfr_1_the_same_claim_investigated_twice_comes_out_the_same() -> N
     async def once() -> ClaimInvestigation:
         return await run_claim(
             split=a_split((COLLAGEN, COLLAGEN_SKU)),
-            conclusions=[a_conclusion(COLLAGEN, COLLAGEN_SKU)],
+            conclusion=a_conclusion((COLLAGEN, COLLAGEN_SKU)),
         )
 
     first, second = await once(), await once()
 
-    assert first.recommended_total_usd == second.recommended_total_usd
-    assert [line.outcome for line in first.lines] == [line.outcome for line in second.lines]
-    assert [line.amount for line in first.lines] == [line.amount for line in second.lines]
-    assert [line.drafted_email for line in first.lines] == [
-        line.drafted_email for line in second.lines
-    ]
+    assert first.findings is not None
+    assert second.findings is not None
+    assert first.findings.outcome == second.findings.outcome
+    assert first.findings.amount == second.findings.amount
+    assert first.findings.drafted_email == second.findings.drafted_email
 
 
 async def test_nfr_4_a_claim_whose_invoice_cannot_be_had_still_reaches_a_person() -> None:
@@ -295,7 +315,7 @@ async def test_nfr_4_a_claim_whose_invoice_cannot_be_had_still_reaches_a_person(
                 chat=scripted(*[AIMessage(content="Done.") for _ in range(2)]),
                 structured=StructuredModel(
                     scripted(
-                        a_split((COLLAGEN, COLLAGEN_SKU)), a_conclusion(COLLAGEN, COLLAGEN_SKU)
+                        a_split((COLLAGEN, COLLAGEN_SKU)), a_conclusion((COLLAGEN, COLLAGEN_SKU))
                     ),
                     max_attempts=1,
                 ),
@@ -303,270 +323,35 @@ async def test_nfr_4_a_claim_whose_invoice_cannot_be_had_still_reaches_a_person(
                 policy=Policy(),
             )
 
-    assert len(claim.lines) == 1
-    line = claim.lines[0]
-    assert line.outcome.recommendation is not Recommendation.APPROVE
-    assert not line.amount.is_payable
+    assert claim.findings is not None
+    assert claim.findings.outcome.recommendation is not Recommendation.APPROVE
+    assert not claim.findings.amount.is_payable
 
 
 async def test_the_whole_claim_narrates_itself_on_one_stream() -> None:
-    """The screen watches several products at once, so every message names its own.
+    """NFR-3: somebody watching sees the split, then the investigation, in order.
 
-    A claim-level message carries no product; a product's message always carries one,
-    or a representative could not tell which of two investigations a line belonged to.
+    One stream and one numbering, so a screen can lay the messages out in the order
+    they happened rather than guessing at it.
     """
     events = EventStream()
     await run_claim(
         split=a_split((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
-        conclusions=[
-            a_conclusion(name, sku)
-            for name, sku in in_claim_line_order([(COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)])
-        ],
+        conclusion=a_conclusion((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
         events=events,
     )
 
     said = events.events()
     assert said, "an investigation that says nothing leaves a screen blank"
     assert [event.sequence for event in said] == list(range(1, len(said) + 1))
-    named = {event.claim_line_id for event in said if event.claim_line_id is not None}
-    assert len(named) == 2
+    kinds = [event.kind for event in said]
+    assert kinds.index(EventKind.CLAIM_SPLIT) < kinds.index(EventKind.INVESTIGATION_STARTED)
+    # One investigation, so it starts once and finishes once however many products.
+    assert kinds.count(EventKind.INVESTIGATION_STARTED) == 1
+    assert kinds.count(EventKind.INVESTIGATION_FINISHED) == 1
 
 
-# --- The cap across a whole claim (FR-1.20) ----------------------------------
-#
-# Tested against `apply_claim_cap` rather than through a whole investigation, because
-# that is where the rule lives. Reaching it end to end needs every product approved,
-# which needs all four pieces of evidence settled, which needs a scripted run that
-# looks at each image — a great deal of scaffolding standing between the test and the
-# one line of arithmetic it is actually about.
-
-
-def a_priced_line(
-    product: str, sku: str, paid: str, *, recommendation: Recommendation
-) -> LineInvestigation:
-    """A finished investigation recommending `recommendation`, refunding `paid`.
-
-    `paid` is the figure being recommended, which is what the claim-level cap adds up.
-    The item is written as refunding its whole price, so the numbers here are internally
-    consistent without the refund percentage getting between the test and the cap it is
-    actually about.
-    """
-    amount = AmountDerivation(
-        components=(
-            AmountComponent(
-                product_name=product,
-                sku=sku,
-                quantity=1,
-                unit_price=Decimal(paid),
-            ),
-        ),
-        items_total_usd=Decimal(paid),
-        proposed_usd=Decimal(paid),
-        amount_usd=Decimal(paid),
-        cap_usd=Decimal("100.00"),
-        cap_applied=False,
-        priced_from="INV-342578703",
-    )
-    line = build_claim_lines(
-        "CASE-1001", [ClaimedProduct(name=product, sku=sku, quantity=1)], ORDER
-    )[0]
-    return LineInvestigation(
-        line=line,
-        evidence=(),
-        assessments=(),
-        outcome=OutcomeDecision(
-            recommendation=recommendation,
-            recommended_by_agent=recommendation,
-            explanation="Judged on its own evidence.",
-        ),
-        amount=amount,
-        concerns=(),
-        drafted_email=DraftedEmail(
-            to="m@example.test", subject="About your order", body=f"We will refund ${paid}."
-        ),
-        ledger=(),
-        budget=BudgetSnapshot(
-            steps_used=2,
-            steps_allowed=12,
-            image_analyses_used=1,
-            image_analyses_allowed=20,
-            tool_retries_used=0,
-            tool_retries_allowed_per_call=2,
-            limits_reached=(),
-        ),
-        conclusion=None,
-    )
-
-
-def test_fr_1_20_two_products_within_the_cap_are_left_alone() -> None:
-    """FR-1.20: the cap only bites when the claim actually goes over it."""
-    verdict = apply_claim_cap(
-        [
-            a_priced_line(COLLAGEN, COLLAGEN_SKU, "52.00", recommendation=Recommendation.APPROVE),
-            a_priced_line(AMPOULE, AMPOULE_SKU, "38.00", recommendation=Recommendation.APPROVE),
-        ],
-        policy=Policy(),
-    )
-
-    assert verdict.total_usd == Decimal("90.00")
-    assert verdict.applied is False
-    assert verdict.complaint is None
-    for line in verdict.lines:
-        assert line.outcome.recommendation is Recommendation.APPROVE
-
-
-def test_fr_1_20_the_cap_limits_the_whole_claim_and_not_only_each_product() -> None:
-    """FR-1.20: otherwise the cap is got round by splitting a claim into more products.
-
-    Two products at $52.00 and $38.00 are each well under the $100 cap. Together they
-    come to $90.00, so a cap of $80.00 is breached by the claim without either product
-    breaching it alone — which is exactly the hole the requirement warns about.
-
-    Nothing is trimmed and neither product is chosen over the other: both go to a
-    representative, who can decide what to pay.
-    """
-    verdict = apply_claim_cap(
-        [
-            a_priced_line(COLLAGEN, COLLAGEN_SKU, "52.00", recommendation=Recommendation.APPROVE),
-            a_priced_line(AMPOULE, AMPOULE_SKU, "38.00", recommendation=Recommendation.APPROVE),
-        ],
-        policy=Policy(reimbursement_cap_usd=Decimal("80.00")),
-    )
-
-    assert verdict.applied is True
-    assert verdict.total_usd == Decimal("90.00")
-    assert verdict.complaint is not None
-    for line in verdict.lines:
-        assert line.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-        assert OverrideReason.CLAIM_CAP_EXCEEDED in line.outcome.overrides
-        # What the investigation itself concluded is kept beside the new answer, so a
-        # representative can see the product was sound and the claim's total was not.
-        assert line.outcome.recommended_by_agent is Recommendation.APPROVE
-        # The draft promised a figure that would no longer be paid.
-        assert line.drafted_email is None
-
-
-def test_fr_1_20_a_high_value_approval_counts_towards_the_claim_cap_like_any_other() -> None:
-    """FR-1.20 with FR-C.7: the label says take a second look, never skip the arithmetic.
-
-    A high-value approval is an approval. If the cap only added up the plain ones, a claim
-    could be paid over the cap by having one of its products labelled — which is the hole
-    the requirement warns about, reopened by a label.
-    """
-    verdict = apply_claim_cap(
-        [
-            a_priced_line(
-                COLLAGEN, COLLAGEN_SKU, "52.00", recommendation=Recommendation.APPROVE_HIGH_VALUE
-            ),
-            a_priced_line(AMPOULE, AMPOULE_SKU, "38.00", recommendation=Recommendation.APPROVE),
-        ],
-        policy=Policy(reimbursement_cap_usd=Decimal("80.00")),
-    )
-
-    assert verdict.total_usd == Decimal("90.00")
-    assert verdict.applied is True
-    for line in verdict.lines:
-        assert line.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-        assert line.drafted_email is None
-
-
-def test_fr_1_20_the_claim_cap_can_only_withhold_a_payment_never_cause_one() -> None:
-    """FR-1.20: the cap is a reason not to pay, and never a reason to pay.
-
-    A product going back to the merchant for a photograph, or already handed to a
-    person, is left exactly as it was. The cap must not re-open it and must not turn a
-    request for evidence into a payment.
-    """
-    verdict = apply_claim_cap(
-        [
-            a_priced_line(COLLAGEN, COLLAGEN_SKU, "52.00", recommendation=Recommendation.APPROVE),
-            a_priced_line(AMPOULE, AMPOULE_SKU, "38.00", recommendation=Recommendation.APPROVE),
-            a_priced_line(
-                "Red/Black HUGE Shaker", "0157", "12.99", recommendation=Recommendation.REQUEST_INFO
-            ),
-        ],
-        policy=Policy(reimbursement_cap_usd=Decimal("80.00")),
-    )
-
-    asked = next(
-        line
-        for line in verdict.lines
-        if line.outcome.recommended_by_agent is Recommendation.REQUEST_INFO
-    )
-    assert asked.outcome.recommendation is Recommendation.REQUEST_INFO
-    assert OverrideReason.CLAIM_CAP_EXCEEDED not in asked.outcome.overrides
-    assert asked.drafted_email is not None
-    # Only what was going to be paid counts towards the total.
-    assert verdict.total_usd == Decimal("90.00")
-
-
-def test_fr_1_20_a_claim_of_one_product_is_capped_the_same_way() -> None:
-    """FR-1.20: a single product over the cap is held back like any other claim."""
-    verdict = apply_claim_cap(
-        [a_priced_line(COLLAGEN, COLLAGEN_SKU, "52.00", recommendation=Recommendation.APPROVE)],
-        policy=Policy(reimbursement_cap_usd=Decimal("20.00")),
-    )
-
-    assert verdict.applied is True
-    assert verdict.lines[0].outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-
-
-def test_the_whole_claim_cap_can_be_turned_off() -> None:
-    """FR-1.20, open question 2: whether the cap limits a claim or a product is unsettled.
-
-    Neither reading is stated by ShipBob, so which one applies is a setting rather than
-    a decision buried in the code.
-    """
-    lines = [
-        a_priced_line(COLLAGEN, COLLAGEN_SKU, "52.00", recommendation=Recommendation.APPROVE),
-        a_priced_line(AMPOULE, AMPOULE_SKU, "38.00", recommendation=Recommendation.APPROVE),
-    ]
-
-    verdict = apply_claim_cap(
-        lines,
-        policy=Policy(reimbursement_cap_usd=Decimal("80.00"), cap_applies_to_whole_claim=False),
-    )
-
-    assert verdict.applied is False
-    for line in verdict.lines:
-        assert line.outcome.recommendation is Recommendation.APPROVE
-
-
-async def test_fr_1b_3_two_products_reach_their_own_answers() -> None:
-    """FR-1b.3: a weak product must not drag down a strong one, or the other way about.
-
-    The two runs are given different conclusions and come back different. Neither
-    product's answer is touched by the other's, which is what splitting a claim before
-    investigating it buys.
-    """
-    ordered = in_claim_line_order([(COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)])
-    conclusions = [
-        a_conclusion(name, sku).model_copy(
-            update={
-                "recommendation": Recommendation.REQUEST_REP_CLARIFICATION
-                if index == 0
-                else Recommendation.REQUEST_INFO
-            }
-        )
-        for index, (name, sku) in enumerate(ordered)
-    ]
-
-    claim = await run_claim(split=a_split(*ordered), conclusions=conclusions)
-
-    assert len(claim.lines) == 2
-    # What each run itself concluded is kept whole on its line, which is where a
-    # representative reads it. `recommended_by_agent` is what the rules were asked
-    # about, and on a line whose email had to be thrown away those differ.
-    reached = {
-        line.line.product_name: line.conclusion.recommendation
-        for line in claim.lines
-        if line.conclusion is not None
-    }
-    assert reached[ordered[0][0]] is Recommendation.REQUEST_REP_CLARIFICATION
-    assert reached[ordered[1][0]] is Recommendation.REQUEST_INFO
-
-
-# --- Every product is given the claims like it, before it is investigated ---
+# --- The claim is given the claims like it, before it is investigated -------
 
 
 def a_closed_claim(precedent_id: str, product: str, sku: str) -> PrecedentRecord:
@@ -595,26 +380,29 @@ def a_closed_claim(precedent_id: str, product: str, sku: str) -> PrecedentRecord
     )
 
 
-async def test_fr_s_5_every_product_is_looked_up_in_the_store_before_it_is_investigated(
+async def test_fr_s_5_the_claim_is_looked_up_in_the_store_before_it_is_investigated(
     tmp_path: Path,
 ) -> None:
-    """FR-S.5, FR-S.6: one lookup per product, and it happens before any run starts.
+    """FR-S.5, FR-S.6: one search per product, one set, and it happens before the run.
 
-    Each product is its own claim from here on, so each gets its own precedent rather
-    than the claim sharing one set between them.
+    Precedent arrives with the claim rather than being something the run may decide to
+    look up, and the products on the claim are what it is searched on.
     """
     store = PrecedentStore(tmp_path / "claims.db")
     store.record(a_closed_claim("PREC-901", COLLAGEN, COLLAGEN_SKU))
     store.record(a_closed_claim("PREC-902", AMPOULE, AMPOULE_SKU))
-    ordered = in_claim_line_order([(COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)])
+    events = EventStream()
 
     claim = await run_claim(
         split=a_split((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
-        conclusions=[a_conclusion(name, sku) for name, sku in ordered],
+        conclusion=a_conclusion((COLLAGEN, COLLAGEN_SKU), (AMPOULE, AMPOULE_SKU)),
         precedent_store=store,
+        events=events,
     )
 
-    assert len(claim.lines) == 2
+    assert claim.findings is not None
+    kinds = [event.kind for event in events.events()]
+    assert kinds.index(EventKind.PRECEDENT_GATHERED) < kinds.index(EventKind.INVESTIGATION_STARTED)
 
 
 async def test_fr_s_13_a_claim_run_without_a_store_is_investigated_all_the_same(
@@ -623,11 +411,11 @@ async def test_fr_s_13_a_claim_run_without_a_store_is_investigated_all_the_same(
     """FR-S.13, NFR-4: no store is an ordinary state, never a reason to fail a claim."""
     claim = await run_claim(
         split=a_split((COLLAGEN, COLLAGEN_SKU)),
-        conclusions=[a_conclusion(COLLAGEN, COLLAGEN_SKU)],
+        conclusion=a_conclusion((COLLAGEN, COLLAGEN_SKU)),
         precedent_store=None,
     )
 
-    assert len(claim.lines) == 1
+    assert claim.findings is not None
 
 
 async def test_fr_s_13_a_store_that_cannot_be_read_never_stops_a_claim(
@@ -644,8 +432,8 @@ async def test_fr_s_13_a_store_that_cannot_be_read_never_stops_a_claim(
 
     claim = await run_claim(
         split=a_split((COLLAGEN, COLLAGEN_SKU)),
-        conclusions=[a_conclusion(COLLAGEN, COLLAGEN_SKU)],
+        conclusion=a_conclusion((COLLAGEN, COLLAGEN_SKU)),
         precedent_store=PrecedentStore(broken),
     )
 
-    assert len(claim.lines) == 1
+    assert claim.findings is not None

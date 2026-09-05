@@ -9,7 +9,7 @@ from typing import Any
 from tests.fixtures.shipbob import CASE_1001, ORDER_1001
 
 from claim_agent.agent.budget import BudgetSnapshot
-from claim_agent.agent.investigate import LineInvestigation
+from claim_agent.agent.investigate import ClaimFindings
 from claim_agent.domain.assessment import Assessment, AssessmentName
 from claim_agent.domain.claim_line import ClaimedProduct, build_claim_lines
 from claim_agent.domain.decision import Proposal, RepAction
@@ -27,7 +27,7 @@ from claim_agent.domain.reimbursement import AmountComponent, AmountDerivation
 from claim_agent.preflight.models import ClaimContext, GateResult, TerminalReport
 from claim_agent.report.models import EmailWording
 from claim_agent.report.render import (
-    render_investigated_product,
+    render_investigated_claim,
     render_stopped_claim,
     render_what_the_representative_decided,
 )
@@ -100,13 +100,13 @@ def all_four_evidence() -> tuple[EvidenceFinding, ...]:
     )
 
 
-def a_line(**overrides: Any) -> LineInvestigation:
-    """A finished investigation of one damaged product."""
+def a_line(**overrides: Any) -> ClaimFindings:
+    """A finished investigation of a claim covering one damaged product."""
     line = build_claim_lines(
         "CASE-1001", [ClaimedProduct(name=COLLAGEN, sku="COLLAGEN1", quantity=1)], ORDER
     )[0]
     fields: dict[str, Any] = {
-        "line": line,
+        "lines": (line,),
         "evidence": all_four_evidence(),
         "assessments": (
             Assessment(
@@ -142,7 +142,7 @@ def a_line(**overrides: Any) -> LineInvestigation:
         "conclusion": None,
     }
     fields.update(overrides)
-    return LineInvestigation(**fields)
+    return ClaimFindings(**fields)
 
 
 def a_stopped_claim(**overrides: Any) -> TerminalReport:
@@ -182,7 +182,7 @@ def a_stopped_claim(**overrides: Any) -> TerminalReport:
 
 def rendered(**overrides: Any) -> str:
     """One investigated product's report as markdown."""
-    return render_investigated_product(line=a_line(**overrides), context=a_context(), case=CASE)
+    return render_investigated_claim(findings=a_line(**overrides), context=a_context(), case=CASE)
 
 
 def test_fr_c_7_a_high_value_approval_says_so_and_still_shows_its_amount() -> None:
@@ -450,8 +450,8 @@ def test_a_merchant_with_no_history_is_said_to_have_none() -> None:
 def test_a_past_correction_that_changed_the_conclusion_is_marked() -> None:
     """FR-2.6: a rep is owed which past correction influenced this recommendation."""
     line = a_line()
-    document = render_investigated_product(
-        line=line,
+    document = render_investigated_claim(
+        findings=line,
         context=a_context(
             merchant_corrections=(
                 MerchantCorrection(
@@ -471,8 +471,8 @@ def test_a_past_correction_that_changed_the_conclusion_is_marked() -> None:
 
 def test_a_high_value_order_is_called_out() -> None:
     """FR-2.6: whether this warrants more care is something a rep decides knowing it."""
-    document = render_investigated_product(
-        line=a_line(),
+    document = render_investigated_claim(
+        findings=a_line(),
         context=a_context(order_value_usd=Decimal("620.00"), is_high_value=True),
         case=CASE,
     )
@@ -483,8 +483,8 @@ def test_a_high_value_order_is_called_out() -> None:
 
 def test_an_order_that_could_not_be_read_is_not_reported_as_worth_nothing() -> None:
     """FR-0.5: missing is not the same as empty, and a rep must be able to tell."""
-    document = render_investigated_product(
-        line=a_line(), context=a_context(order_value_usd=None), case=CASE
+    document = render_investigated_claim(
+        findings=a_line(), context=a_context(order_value_usd=None), case=CASE
     )
 
     assert "could not be read" in document

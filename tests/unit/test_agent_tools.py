@@ -75,7 +75,6 @@ from claim_agent.shipbob.evidence_client import EvidenceClient
 CASE_ID = "CASE-1001"
 SHIPMENT_ID = "342578703"
 USER_ID = "334430"
-CLAIM_LINE_ID = "CASE-1001-L1"
 
 SHIPBOB = "http://shipbob.test"
 IMAGES = "https://storage.images.test/case-1001"
@@ -201,7 +200,6 @@ def build_run(
         ledger=ledger,
         events=events,
         policy=Policy(),
-        claim_line_id=CLAIM_LINE_ID,
     )
     return Run(
         tools={tool.name: tool for tool in tools},
@@ -874,8 +872,7 @@ async def test_every_tool_call_is_announced_while_the_run_is_still_working(
     """FR-1.1: a tool being called is the investigation choosing what to look at next.
 
     That choosing is the reason this is an agent rather than a fixed sequence, and it is
-    the thing worth putting in front of somebody watching. Every message names the damaged
-    product it belongs to, because several are investigated at once.
+    the thing worth putting in front of somebody watching.
     """
     serve_the_claim(api)
     run = build_run(shipbob_http, images_http, model=scripted(a_photo_of_damage()))
@@ -886,7 +883,6 @@ async def test_every_tool_call_is_announced_while_the_run_is_still_working(
     events = run.events.events()
     assert [event.kind for event in events] == [EventKind.TOOL_CALLED, EventKind.TOOL_CALLED]
     assert [event.detail["tool"] for event in events] == [LIST_ATTACHMENTS, INSPECT_IMAGE]
-    assert all(event.claim_line_id == CLAIM_LINE_ID for event in events)
     assert events[1].detail["reference"] == FIRST_IMAGE
 
 

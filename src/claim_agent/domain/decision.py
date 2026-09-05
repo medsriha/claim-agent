@@ -6,11 +6,9 @@ feedback so the investigation runs again. FR-C.1 says each of those produces one
 saying which claim it was about, which version of the report they were looking at, what they
 chose, what they changed, anything they said, and when.
 
-**Nothing in this system writes one of these yet.** The stage where a representative decides is
-not built, so the only thing that fills this store today is a development tool that invents
-history for a demonstration (FR-C.8). Reading is real; writing is real; the step in between that
-a person would trigger does not exist. That is the same position merchant memory has been in
-since it was built.
+**A review action writes one of these.** Approving a report or sending one back records exactly
+one, in `claim_agent.report.review`. A development tool also invents them for demonstrations
+(FR-C.8), so a machine can hold both kinds and they are not told apart here.
 
 **Two kinds of decision live here, and they must not be added together.** A claim the quick
 checks stopped never reaches the AI: it has no products in it, nobody was asked how sure they
@@ -20,7 +18,7 @@ count. Counting them as one population makes the advice look better than it is, 
 cheap deterministic decisions are the ones people agree with most.
 
 **Recording a decision is not carrying it out.** Writing down what somebody chose sends no email
-and moves no money; FR-3.1 still governs that and nothing here relaxes it.
+and moves no money, and nothing in this system does either.
 """
 
 from __future__ import annotations
@@ -42,8 +40,8 @@ class DecisionStage(StrEnum):
     because splitting a claim into products happens later and a stopped claim never gets there.
     Nothing was asked of the AI, so there is no statement of how sure anything was.
 
-    `INVESTIGATION` is one damaged product that was investigated (FR-1b.1). It carries a
-    recommendation from the AI and that recommendation's own confidence.
+    `INVESTIGATION` is a claim that was investigated (FR-1b.1). It carries a recommendation
+    from the AI, covering every damaged product on the claim.
 
     The two answer different questions about automation and are always reported apart.
     """
@@ -81,11 +79,11 @@ class Proposal(BaseModel):
     correction is worth remembering when the decision *differs* from the advice, not when
     somebody wrote a paragraph about it.
 
-    `outcome` is `None` on a screening decision, where there is no claim line and therefore
-    nothing for the next actions to apply to.
+    `outcome` is `None` on a screening decision, where nothing was established as damaged and
+    therefore nothing for the next actions to apply to.
 
     `amount_usd` is `None` whenever no money is involved, which includes every screening
-    decision and every investigated line that was refused or sent back for more information.
+    decision and every investigated claim that was refused or sent back for more information.
     None means "no amount", never "nothing".
     """
 
@@ -96,7 +94,7 @@ class Proposal(BaseModel):
 
 
 class DecisionRecord(BaseModel):
-    """One review action by one representative, on one claim or one of its products (FR-C.1).
+    """One review action by one representative, on one claim (FR-C.1).
 
     The fields follow the record FR-C.1 describes. Four go beyond it, and they are here because
     the figures this store exists to produce cannot be worked out without them:
@@ -136,7 +134,6 @@ class DecisionRecord(BaseModel):
 
     decision_id: str
     case_id: str
-    claim_line_id: str | None
     stage: DecisionStage
     report_version: int
     action: RepAction

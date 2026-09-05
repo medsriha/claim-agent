@@ -44,18 +44,13 @@ from claim_agent.api.deps import (
     ReportStoreDep,
     ShipBobClientDep,
 )
+from claim_agent.domain.correction import correction_from
 from claim_agent.domain.models import MerchantCorrection
 from claim_agent.domain.outcome import Recommendation
 from claim_agent.errors import InvalidRequestError, NotFoundError, StorageError
 from claim_agent.observability import get_logger
-from claim_agent.report.build import siblings_of
 from claim_agent.report.conversation import answer_the_representative
-from claim_agent.report.models import (
-    ClaimView,
-    EmailWording,
-    Report,
-    ReportForReview,
-)
+from claim_agent.report.models import ClaimView, EmailWording, Report
 from claim_agent.report.review import ReviewOutcome, approve, send_back
 from claim_agent.storage.decision_store import DecisionStore
 from claim_agent.storage.merchant_memory import MerchantMemory
@@ -104,22 +99,21 @@ class SendBack(BaseModel):
     rep_minutes: int = 0
 
 
-@router.get("/cases/{case_id}/reports", summary="Every report on one claim")
+@router.get("/cases/{case_id}/reports", summary="The report on one claim")
 async def read_claim(case_id: str, reports: ReportStoreDep) -> ClaimView:
-    """List a claim's reports, so a representative works from a case (FR-2.9b).
+    """Find a claim's report, so a representative works from a case (FR-2.9b).
 
-    One row per damaged product, or a single row for a claim the quick checks stopped before it
-    ever had products in it. A view over the reports and nothing more: approving still happens one
-    product at a time, on the report itself.
+    A claim has at most one report, covering every damaged product on it, so this answers with
+    none or one.
 
     Args:
         case_id: The claim, such as `CASE-1001`.
         reports: Where reports are kept.
 
     Returns:
-        The claim's reports, each at the version in force. **An empty list means nobody has asked
-        for this claim to be investigated**, which is an ordinary answer — a claim whose reports
-        could not be read fails instead, so the two can never be mistaken for one another.
+        The claim's report at the version in force. **An empty list means nobody has asked for
+        this claim to be investigated**, which is an ordinary answer — a claim whose report could
+        not be read fails instead, so the two can never be mistaken for one another.
     """
     return reports.for_case(case_id)
 
@@ -127,8 +121,8 @@ async def read_claim(case_id: str, reports: ReportStoreDep) -> ClaimView:
 @router.get("/reports/{report_id}", summary="Read one report")
 async def read_report(
     report_id: str, reports: ReportStoreDep, version: int | None = None
-) -> ReportForReview:
-    """Read one report, with the other products on its claim beside it (FR-2.9a, FR-R.13).
+) -> Report:
+    """Read one claim's report (FR-2.9a, FR-R.13).
 
     Args:
         report_id: Which report.
@@ -138,17 +132,12 @@ async def read_report(
             how a decision was reached (FR-R.13).
 
     Returns:
-        The report, and one row per other damaged product on the same claim. Those rows are looked
-        up now rather than stored with the report, because a sibling's review state changes the
-        moment somebody approves it.
+        The report, naming every damaged product on the claim.
 
     Raises:
         NotFoundError: There is no such report, or no such version of it.
     """
-    report = _the_report(reports, report_id, version=version)
-    return ReportForReview(
-        report=report, siblings=siblings_of(report, reports.for_case(report.case_id))
-    )
+    return _the_report(reports, report_id, version=version)
 
 
 @router.post("/reports/{report_id}/approve", summary="Approve a report")
@@ -157,6 +146,7 @@ async def approve_report(
     approval: Approval,
     reports: ReportStoreDep,
     decisions: DecisionStoreDep,
+    memory: MerchantMemoryDep,
     policy: PolicyDep,
 ) -> Report:
     """Accept a report, as it stands or after changing it (FR-2.8, FR-2.9, FR-C.1).
@@ -165,13 +155,18 @@ async def approve_report(
     limit, no level of confidence, and no number of rounds.
 
     **Approving sends nothing and pays nothing.** It records that a person accepted a
-    recommendation, and the stage that would act on that does not exist (FR-3.1).
+    recommendation, and nothing in this system acts on one.
+
+    **An approval that changed something is also remembered against the merchant** (FR-C.2,
+    FR-3.8), so the next claim they file starts knowing it. An approval that agreed with the
+    advice is not: a note saying the system was right would bury the notes saying it was wrong.
 
     Args:
         report_id: Which report.
         approval: What the representative settled on, and anything they said.
         reports: Where reports are kept.
         decisions: Where what a representative decided is recorded (FR-C.1).
+        memory: Where a correction is kept against the merchant (FR-3.8).
         policy: Read for the most the system may recommend on one claim (FR-0.7).
 
     Returns:
@@ -194,7 +189,10 @@ async def approve_report(
         policy=policy,
         at=datetime.now(UTC),
     )
-    return _write_down(outcome, reports=reports, decisions=decisions)
+    approved = _write_down(outcome, reports=reports, decisions=decisions)
+    if outcome.decision is not None:
+        _remember_against_the_merchant(memory, approved, summary=correction_from(outcome.decision))
+    return approved
 
 
 @router.post("/reports/{report_id}/send-back", summary="Send a report back with feedback")
@@ -268,13 +266,12 @@ async def send_report_back(
         at=datetime.now(UTC),
     )
     parked = _write_down(outcome, reports=reports, decisions=decisions)
-    _remember_against_the_merchant(memory, parked, feedback=sending_back.feedback)
+    _remember_against_the_merchant(memory, parked, summary=sending_back.feedback)
 
-    written = await answer_the_representative(
+    answered = await answer_the_representative(
         parked,
         feedback=sending_back.feedback,
         at=datetime.now(UTC),
-        reports=reports,
         shipbob=shipbob,
         evidence=evidence,
         fetcher=fetcher,
@@ -283,33 +280,35 @@ async def send_report_back(
         precedent_store=precedent_store,
         policy=policy,
     )
-    for produced in written.alongside:
-        reports.record(produced)
-    reports.record(written.report)
+    reports.record(answered)
 
     logger.info(
         "representative_was_answered",
-        case_id=written.report.case_id,
-        report_id=written.report.report_id,
-        version=written.report.version,
-        reworked=written.report.revisions[-1].reworked,
-        produced=len(written.alongside),
+        case_id=answered.case_id,
+        report_id=answered.report_id,
+        version=answered.version,
+        reworked=answered.revisions[-1].reworked,
     )
-    return written.report
+    return answered
 
 
 def _remember_against_the_merchant(
-    memory: MerchantMemory, report: Report, *, feedback: str
+    memory: MerchantMemory, report: Report, *, summary: str | None
 ) -> None:
-    """Keep what a representative said, so the merchant's next claim starts knowing it (FR-R.14).
+    """Keep what a representative corrected, so the merchant's next claim knows it (FR-R.14, FR-C.2).
 
-    Feedback is not only about the claim in hand. A representative who corrects the same thing
+    A correction is not only about the claim in hand. A representative who corrects the same thing
     on every claim from one merchant is doing work the system should have done, and this is how
     it stops having to be done twice (FR-3.8).
 
-    Their own words are what is stored. A summary of a correction is exactly the thing FR-C.2
-    warns against — "the amount was wrong" carries nothing, and paraphrasing is how a note
-    becomes that.
+    **Both review actions arrive here, and they differ in where the sentence comes from.** Sending
+    a report back is a correction by definition, and the representative's own words are the
+    correction — a summary of them is exactly the thing FR-C.2 warns against, and paraphrasing is
+    how a note becomes "the amount was wrong". An approval is a correction only where it *differed*
+    from the advice, and there the representative may have typed nothing, so the sentence is built
+    from the difference itself and carries the figures.
+
+    `summary` is `None` when an approval agreed with the advice, and nothing is written.
 
     **Written before the agent is asked, and that order is deliberate.** A claim being
     investigated again reads these corrections as starting context (FR-0.5), so a representative
@@ -323,14 +322,14 @@ def _remember_against_the_merchant(
     A store that cannot be written is logged and otherwise ignored. Losing a note against a
     merchant is worth less than losing the answer the representative is waiting for.
     """
-    if report.user_id is None:
+    if summary is None or report.user_id is None:
         return
     try:
         memory.record_correction(
             MerchantCorrection(
                 user_id=report.user_id,
                 case_id=report.case_id,
-                summary=feedback,
+                summary=summary,
                 recorded_at=datetime.now(UTC),
             )
         )
@@ -376,7 +375,6 @@ def _write_down(
         logger.info(
             "representative_decided",
             case_id=outcome.report.case_id,
-            claim_line_id=outcome.report.claim_line_id,
             report_id=outcome.report.report_id,
             action=outcome.decision.action.value,
         )

@@ -2,14 +2,12 @@
 
 An investigation takes a while. It screens the claim, reads photographs one at a
 time, looks up how comparable claims were decided, works out which products were
-damaged, and only then reaches a recommendation for each of them. Answering that
-in one reply at the end means a representative watches a blank screen for most of
-a minute with no idea whether anything is happening, which of several products is
-being worked on, or whether it has quietly failed.
+damaged, and only then reaches a recommendation. Answering that in one reply at
+the end means a representative watches a blank screen for most of a minute with no
+idea whether anything is happening or whether it has quietly failed.
 
 So this streams. Each thing the investigation does is sent as it happens, and the
-finished reports and their drafted emails follow at the end, on the same
-connection. The screen shows the work rather than a plausible imitation of it —
+finished report and its drafted email follow at the end, on the same connection. The screen shows the work rather than a plausible imitation of it —
 which matters, because the screen used to invent the pacing itself, and DESIGN.md
 recorded that as the largest gap between what it showed and what the system did.
 
@@ -51,7 +49,7 @@ from claim_agent.errors import ClaimAgentError, StorageError
 from claim_agent.observability import get_logger
 from claim_agent.preflight.models import PreflightResult
 from claim_agent.preflight.service import run_preflight
-from claim_agent.report.build import build_investigation_reports, build_screening_report
+from claim_agent.report.build import build_investigation_report, build_screening_report
 from claim_agent.report.models import Report
 from claim_agent.storage.report_store import ReportStore
 
@@ -87,17 +85,17 @@ async def investigate_case(
     reports: ReportStoreDep,
     policy: PolicyDep,
 ) -> StreamingResponse:
-    """Screen a claim, investigate every damaged product on it, and say so as it goes.
+    """Screen a claim, investigate it, and say so as it goes.
 
     The case id is the whole input; there is nothing to send in the body.
 
     What comes back is a stream of named messages. `progress` messages say what the
     investigation is doing — which image it looked at, what past claims it found,
     which tool it chose to call next. One `result` message near the end carries
-    everything a representative decides from: the split, each product's findings,
-    its recommendation, how its amount was worked out, and its drafted email. A
-    `done` message closes the stream, and a `failed` message appears instead of one
-    if something went wrong (NFR-4).
+    everything a representative decides from: the split, the findings, the
+    recommendation, how the amount was worked out, and the drafted email. A `done`
+    message closes the stream, and a `failed` message appears instead of one if
+    something went wrong (NFR-4).
 
     A claim the screen turns away sends its explanation as the `result` and never
     reaches the agent, so it costs no AI at all (NFR-8).
@@ -113,10 +111,10 @@ async def investigate_case(
         merchant_memory: What a representative has already corrected for this
             merchant (FR-0.5).
         precedent_store: The closed claims this service has handled before, looked
-            up per product so a claim is judged the way comparable ones were
+            up once for the claim so it is judged the way comparable ones were
             (FR-S.5).
-        reports: Where the finished reports are kept, so a representative can come
-            back to them and decide (FR-2.9b, FR-R.13).
+        reports: Where the finished report is kept, so a representative can come
+            back to it and decide (FR-2.9b, FR-R.13).
         policy: The thresholds every judgement is made against (FR-0.7).
 
     Returns:
@@ -210,13 +208,9 @@ async def _narrate(
     if screening.verdict is Verdict.TERMINAL:
         # Stopped before anything expensive. The explanation a representative has to
         # approve is the whole result, and no image was ever looked at (FR-0.4, NFR-8).
-        stopped = build_screening_report(screening, at=asked_at)
-        ready, could_not_keep = _keep(reports, (stopped,) if stopped else ())
-        yield _frame("progress", (await _say_they_are_ready(events, ready, could_not_keep)))
-        yield _frame(
-            "result",
-            _reports_message(ready, could_not_keep),
-        )
+        ready, could_not_keep = _keep(reports, build_screening_report(screening, at=asked_at))
+        yield _frame("progress", (await _say_it_is_ready(events, ready, could_not_keep)))
+        yield _frame("result", _report_message(ready, could_not_keep))
         yield _frame("done", {"case_id": screening.case_id})
         return
 
@@ -262,10 +256,10 @@ async def _narrate(
         return
 
     ready, could_not_keep = _keep(
-        reports, build_investigation_reports(screening, investigated, at=asked_at)
+        reports, build_investigation_report(screening, investigated, at=asked_at)
     )
-    yield _frame("progress", (await _say_they_are_ready(events, ready, could_not_keep)))
-    yield _frame("result", _reports_message(ready, could_not_keep))
+    yield _frame("progress", (await _say_it_is_ready(events, ready, could_not_keep)))
+    yield _frame("result", _report_message(ready, could_not_keep))
     yield _frame("done", {"case_id": screening.case_id})
 
 
@@ -326,10 +320,8 @@ def _screening_message(screening: PreflightResult) -> RunEvent:
     )
 
 
-def _keep(
-    reports: ReportStore, built: tuple[Report | None, ...] | tuple[Report, ...]
-) -> tuple[tuple[Report, ...], str | None]:
-    """Write the finished reports down, and never fail the claim for not managing it.
+def _keep(reports: ReportStore, built: Report | None) -> tuple[Report | None, str | None]:
+    """Write the finished report down, and never fail the claim for not managing it.
 
     A representative is watching this happen. Losing an investigation they have just
     seen run, because a file on disk could not be written, is the worst thing this
@@ -342,44 +334,44 @@ def _keep(
     because there is nothing to approve *against*. A representative told only that
     something failed would go looking for them.
 
-    Each report is written on its own. All canonical report data still comes back when keeping
-    one fails, and the reason beside it prevents the UI from offering review actions.
+    All canonical report data still comes back when keeping it fails, and the reason beside it
+    prevents the UI from offering review actions.
 
     Returns:
-        The reports that are ready to display, and one plain sentence if any were not kept.
+        The report if there is one, and one plain sentence if it was not kept.
     """
-    ready = tuple(report for report in built if report is not None)
-    for report in ready:
-        try:
-            reports.record(report)
-        except StorageError as failure:
-            logger.error(
-                "report_not_kept",
-                case_id=report.case_id,
-                claim_line_id=report.claim_line_id,
-                report_id=report.report_id,
-                failure=type(failure).__name__,
-            )
-            return (
-                ready,
-                "These findings could not be kept, so they cannot be approved yet. "
-                "Asking for this claim again will try to keep them.",
-            )
-    return ready, None
+    if built is None:
+        return None, None
+
+    try:
+        reports.record(built)
+    except StorageError as failure:
+        logger.error(
+            "report_not_kept",
+            case_id=built.case_id,
+            report_id=built.report_id,
+            failure=type(failure).__name__,
+        )
+        return (
+            built,
+            "These findings could not be kept, so they cannot be approved yet. "
+            "Asking for this claim again will try to keep them.",
+        )
+    return built, None
 
 
-def _reports_message(reports: tuple[Report, ...], could_not_keep: str | None) -> dict[str, Any]:
+def _report_message(report: Report | None, could_not_keep: str | None) -> dict[str, Any]:
     """The part of the result that says what a representative can now decide on."""
     return {
-        "reports": [report.model_dump(mode="json") for report in reports],
-        "reports_unavailable_reason": could_not_keep,
+        "report": None if report is None else report.model_dump(mode="json"),
+        "report_unavailable_reason": could_not_keep,
     }
 
 
-async def _say_they_are_ready(
-    events: EventStream, kept: tuple[Report, ...], could_not_keep: str | None
+async def _say_it_is_ready(
+    events: EventStream, kept: Report | None, could_not_keep: str | None
 ) -> dict[str, Any]:
-    """Announce the finished reports as the last thing the investigation says.
+    """Announce the finished report as the last thing the investigation says.
 
     Numbered through the same stream as everything else, so it takes its place in
     order rather than being given a number invented here. **Handed straight back to
@@ -392,15 +384,14 @@ async def _say_they_are_ready(
     """
     if could_not_keep is not None:
         summary = could_not_keep
-    elif not kept:
+    elif kept is None:
         summary = "There is nothing to review on this claim."
     else:
-        summary = f"{len(kept)} report(s) ready for review."
+        summary = "The report is ready for review."
 
     event = await events.emit(
         EventKind.REPORT_READY,
         summary,
-        kept=str(len(kept)),
         outcome="kept" if could_not_keep is None else "not_kept",
     )
     return event.model_dump(mode="json")

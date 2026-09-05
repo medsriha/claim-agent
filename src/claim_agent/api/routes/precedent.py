@@ -165,7 +165,7 @@ async def search_precedent(
     """
     return store.similar_to(
         search.to_query(),
-        limit=search.limit if search.limit is not None else policy.precedent_results_per_line,
+        limit=search.limit if search.limit is not None else policy.precedent_results_per_product,
         minimum_similarity=(
             search.minimum_similarity
             if search.minimum_similarity is not None

@@ -1,4 +1,4 @@
-"""Layer R — reworking one product's report after a representative sent it back."""
+"""Layer R — reworking a claim's report after a representative sent it back (FR-R.1a)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 from claim_agent.agent.budget import RunBudget
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
-from claim_agent.agent.investigate import LineInvestigation, settle_conclusion
+from claim_agent.agent.investigate import ClaimFindings, settle_conclusion
 from claim_agent.agent.ledger import RunLedger
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.loop import run_agent_pass
@@ -48,10 +48,10 @@ logger = get_logger(__name__)
 
 # What the run is asked once it has stopped looking at things.
 CLOSING_REQUEST = (
-    "Now give the reworked report for this one product: all four pieces of evidence, the "
-    "four questions where the evidence is there, what should be paid for, your next action, "
-    "the merchant email where that action addresses them, what you changed, what you left "
-    "alone, and your reply to the representative."
+    "Now give the reworked report for this claim: all four pieces of evidence, the four "
+    "questions where the evidence is there, every product that should be paid for, your next "
+    "action, the merchant email where that action addresses them, what you changed, what you "
+    "left alone, and your reply to the representative."
 )
 # What a representative is told when the run did not reach an answer.
 _COULD_NOT_REWORK = (
@@ -65,7 +65,7 @@ class ReportUnderReview(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    line: ClaimLine
+    lines: tuple[ClaimLine, ...]
     context: ClaimContext
     attachments: tuple[Attachment, ...] = ()
     recommendation: Recommendation
@@ -75,7 +75,6 @@ class ReportUnderReview(BaseModel):
     concerns: tuple[str, ...] = ()
     drafted_email: DraftedEmail | None = None
     conversation: tuple[EarlierExchange, ...] = ()
-    siblings: tuple[ClaimLine, ...] = ()
 
 
 class Reply(BaseModel):
@@ -94,19 +93,19 @@ class Reply(BaseModel):
         return False
 
 
-class LineRevision(Reply):
-    """A reworked report for one damaged product (FR-R.9)."""
+class ClaimFindingsRevision(Reply):
+    """A reworked report for an investigated claim (FR-R.9)."""
 
-    investigation: LineInvestigation | None = None
+    findings: ClaimFindings | None = None
 
     @property
     def reworked(self) -> bool:
         """Whether the report was actually reworked."""
-        return self.investigation is not None
+        return self.findings is not None
 
 
 class ClaimRevision(Reply):
-    """A reworked report about a whole claim rather than one product (FR-1a.4, FR-0.4)."""
+    """A reworked report on a claim that was never investigated (FR-1a.4, FR-0.4)."""
 
     recommendation: Recommendation | None = None
     ambiguity: str | None = None
@@ -126,7 +125,7 @@ class ClaimRevision(Reply):
         )
 
 
-async def rework_line(
+async def rework_claim_findings(
     *,
     under_review: ReportUnderReview,
     feedback: str,
@@ -138,9 +137,9 @@ async def rework_line(
     events: EventStream,
     policy: Policy,
     precedent: PrecedentSet | None = None,
-) -> LineRevision:
-    """Rework one product's report around what a representative said (FR-R.1 to FR-R.11)."""
-    line = under_review.line
+) -> ClaimFindingsRevision:
+    """Rework a claim's report around what a representative said (FR-R.1 to FR-R.11)."""
+    lines = under_review.lines
     # One budget and one record per run, built here rather than taken as arguments, so a
     # rework can never end up sharing an allowance with the investigation that preceded it
     # (FR-1.3).
@@ -149,10 +148,9 @@ async def rework_line(
     cache = ObservationCache()
 
     await events.emit(
-        EventKind.LINE_STARTED,
-        f"Reworking {line.product_name} around what the representative said.",
-        claim_line_id=line.claim_line_id,
-        product=line.product_name,
+        EventKind.INVESTIGATION_STARTED,
+        "Reworking this claim around what the representative said.",
+        products=str(len(lines)),
     )
 
     invoice = await invoice_for_claim(record=record, evidence=evidence_client, cache=cache)
@@ -163,7 +161,7 @@ async def rework_line(
             order=record.order,
             attachments=under_review.attachments,
             context=under_review.context,
-            claim_line=line,
+            claim_lines=lines,
             recommendation=under_review.recommendation,
             amount=under_review.amount,
             evidence=under_review.evidence,
@@ -172,7 +170,6 @@ async def rework_line(
             drafted_email=under_review.drafted_email,
             feedback=feedback,
             conversation=under_review.conversation,
-            other_lines=under_review.siblings,
             precedent=precedent,
         ),
         tools=investigation_tools(
@@ -189,7 +186,6 @@ async def rework_line(
             ledger=ledger,
             events=events,
             policy=policy,
-            claim_line_id=line.claim_line_id,
         ),
         concludes_with=RevisionConclusion,
         closing_request=CLOSING_REQUEST,
@@ -198,16 +194,15 @@ async def rework_line(
         budget=budget,
         ledger=ledger,
         events=events,
-        claim_line_id=line.claim_line_id,
     )
 
     if outcome.answer is None:
-        return await _a_rework_that_did_not_happen(outcome.reason, line=line, events=events)
+        return await _a_rework_that_did_not_happen(outcome.reason, events=events)
 
     reworked = _carrying_forward(outcome.answer, under_review)
     investigated = settle_conclusion(
         replace(outcome, answer=reworked),
-        line=line,
+        lines=lines,
         # Nothing is pinned from the claim's shared evidence, which is the point of a
         # rework: FR-R.5's own example of feedback is a correction to a shared finding, and
         # pinning them would make that the one correction impossible to make.
@@ -217,27 +212,22 @@ async def rework_line(
         contact_email=record.case.contact_email,
         directed_by_representative=reworked.representative_directed_outcome,
     )
-    investigated = _noting_the_other_products(
-        investigated, answer=reworked, siblings=under_review.siblings
-    )
-
     logger.info(
-        "claim_line_reworked",
+        "claim_reworked",
         case_id=record.case.case_id,
-        claim_line_id=line.claim_line_id,
+        products=len(lines),
         recommendation=investigated.outcome.recommendation.value,
         changed=len(reworked.changed),
         needs_reply=reworked.needs_more_from_representative,
     )
     await events.emit(
-        EventKind.LINE_FINISHED,
-        f"Finished reworking {line.product_name}.",
-        claim_line_id=line.claim_line_id,
+        EventKind.INVESTIGATION_FINISHED,
+        "Finished reworking this claim.",
         recommendation=investigated.outcome.recommendation.value,
     )
 
-    return LineRevision(
-        investigation=investigated,
+    return ClaimFindingsRevision(
+        findings=investigated,
         reply=reworked.reply_to_representative,
         changed=reworked.changed,
         left_unchanged=reworked.left_unchanged,
@@ -246,18 +236,17 @@ async def rework_line(
 
 
 async def _a_rework_that_did_not_happen(
-    reason: str | None, *, line: ClaimLine, events: EventStream
-) -> LineRevision:
+    reason: str | None, *, events: EventStream
+) -> ClaimFindingsRevision:
     """Report a run that stopped before it could answer (FR-1.16, NFR-4)."""
-    logger.info("claim_line_rework_gave_up", claim_line_id=line.claim_line_id, reason=reason)
+    logger.info("claim_rework_gave_up", reason=reason)
     await events.emit(
-        EventKind.LINE_FINISHED,
-        f"Could not rework {line.product_name}.",
-        claim_line_id=line.claim_line_id,
+        EventKind.INVESTIGATION_FINISHED,
+        "Could not rework this claim.",
         outcome="not_reworked",
     )
     said = f"{reason} {_COULD_NOT_REWORK}" if reason else _COULD_NOT_REWORK
-    return LineRevision(investigation=None, reply=said)
+    return ClaimFindingsRevision(findings=None, reply=said)
 
 
 def _carrying_forward(
@@ -299,29 +288,6 @@ def _as_a_question_answered(assessment: Assessment) -> AssessmentJudgement:
     )
 
 
-def _noting_the_other_products(
-    investigated: LineInvestigation,
-    *,
-    answer: RevisionConclusion,
-    siblings: Sequence[ClaimLine],
-) -> LineInvestigation:
-    """Say when a correction bears on the claim's other products too (FR-R.1a, FR-1a.3)."""
-    if not answer.concerns_shared_evidence or not siblings:
-        return investigated
-
-    others = ", ".join(sorted(sibling.product_name for sibling in siblings))
-    return investigated.model_copy(
-        update={
-            "concerns": (
-                *investigated.concerns,
-                "This correction is about evidence every product on the claim shares, so it "
-                f"bears on {others} as well. Those reports still carry the earlier finding "
-                "and have to be sent back separately.",
-            )
-        }
-    )
-
-
 async def rework_claim_report(
     *,
     case_record: CaseRecord,
@@ -339,7 +305,7 @@ async def rework_claim_report(
 ) -> ClaimRevision:
     """Answer a representative who wrote back about a claim whose split was never settled."""
     await events.emit(
-        EventKind.LINE_STARTED,
+        EventKind.INVESTIGATION_STARTED,
         "Answering the representative about this claim.",
     )
 
@@ -418,7 +384,7 @@ async def rework_screening_report(
 ) -> ClaimRevision:
     """Answer a representative who wrote back about a claim the quick checks turned away."""
     await events.emit(
-        EventKind.LINE_STARTED,
+        EventKind.INVESTIGATION_STARTED,
         "Answering the representative about this claim.",
     )
 

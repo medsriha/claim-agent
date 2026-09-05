@@ -1,11 +1,11 @@
 /** One structured report a representative reads and decides on. */
 import { useState } from "react";
 
-import { approveReport, readClaim, sendReportBack } from "../api/reportsClient";
+import { approveReport, sendReportBack } from "../api/reportsClient";
 import { ApiFailure } from "../api/failure";
 import type { DraftedEmail, Report, ReportReview } from "../api/types";
 import { formatMoney, humanise } from "../display";
-import { StructuredReport } from "./LineReport";
+import { StructuredReport } from "./ClaimReport";
 import { RevisionThread } from "./RevisionThread";
 import { Spinner } from "./Spinner";
 
@@ -22,16 +22,23 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
   const [subject, setSubject] = useState(report.drafted_email?.subject ?? "");
   const [body, setBody] = useState(report.drafted_email?.body ?? "");
   const [feedback, setFeedback] = useState("");
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // What a representative would pay, as text. Never parsed, never added to anything: the
+  // service does the arithmetic and a second one here could disagree with it (FR-1.21).
+  const [amount, setAmount] = useState(report.amount_usd ?? "");
+  const [why, setWhy] = useState("");
   const [busy, setBusy] = useState<Busy>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  // Reports the claim gained while this card was open. A message can settle what an unsettled
-  // claim is for, which has the whole claim investigated again and produces a report per
-  // damaged product — reports this screen has never seen, under ids it does not know.
-  const [produced, setProduced] = useState<readonly Report[]>([]);
 
   const settled = current.state === "approved";
   const email = current.drafted_email;
   const reworded = email !== null && (subject !== email.subject || body !== email.body);
+  const payable =
+    current.amount_usd !== null &&
+    (current.recommendation === "approve" || current.recommendation === "approve_high_value");
+  // A changed figure is what the service reads as a correction and remembers against the
+  // merchant (FR-C.2). Compared as text, because these are figures and not numbers.
+  const overridden = payable && amount.trim() !== "" && amount.trim() !== current.amount_usd;
 
   const act = async (what: Busy, run: () => Promise<Report>): Promise<void> => {
     setBusy(what);
@@ -42,10 +49,9 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
       setSubject(answered.drafted_email?.subject ?? "");
       setBody(answered.drafted_email?.body ?? "");
       setFeedback("");
-      if (answered.revisions.at(-1)?.reinvestigated === true) {
-        const claim = await readClaim(answered.case_id);
-        setProduced(claim.reports.filter((report) => report.report_id !== answered.report_id));
-      }
+      setFeedbackOpen(false);
+      setAmount(answered.amount_usd ?? "");
+      setWhy("");
     } catch (error: unknown) {
       setProblem(
         error instanceof ApiFailure
@@ -88,18 +94,16 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
         <p className="report-settled">Email sent.</p>
       ) : (
         <div className="report-actions">
-          <label className="report-field">
-            <span>Write back to the agent</span>
-            <textarea
-              className="report-body"
-              rows={3}
-              value={feedback}
+          {payable && (
+            <ApprovedAmount
+              amount={amount}
+              why={why}
+              changed={overridden}
               disabled={busy !== null}
-              onChange={(event) => {
-                setFeedback(event.target.value);
-              }}
+              onAmount={setAmount}
+              onWhy={setWhy}
             />
-          </label>
+          )}
 
           <div className="report-buttons">
             {current.recommendation !== "request_rep_clarification" && (
@@ -111,6 +115,8 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
                   void act("approving", () =>
                     approveReport(current.report_id, {
                       ...(reworded ? { email: { subject, body } } : {}),
+                      ...(overridden ? { amount_usd: amount.trim() } : {}),
+                      ...(overridden && why.trim() !== "" ? { rep_words: why.trim() } : {}),
                     }),
                   )
                 }
@@ -119,26 +125,69 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
                 Send Email
               </button>
             )}
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={busy !== null || feedback.trim() === ""}
-              onClick={() =>
-                void act("reworking", () => sendReportBack(current.report_id, feedback))
-              }
-            >
-              {busy === "reworking" ? <Spinner /> : null}
-              Send back
-            </button>
+            {!feedbackOpen && (
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={busy !== null}
+                onClick={() => {
+                  setFeedbackOpen(true);
+                }}
+              >
+                Feedback
+              </button>
+            )}
           </div>
+
+          {feedbackOpen && (
+            <fieldset className="report-feedback">
+              <legend>Feedback</legend>
+              <label className="report-field">
+                <span>Feedback, follow-up, or question</span>
+                <textarea
+                  className="report-body"
+                  rows={4}
+                  value={feedback}
+                  autoFocus
+                  disabled={busy !== null}
+                  placeholder="Explain what should change, share a follow-up, or ask a question."
+                  onChange={(event) => {
+                    setFeedback(event.target.value);
+                  }}
+                />
+              </label>
+              <div className="report-feedback-buttons">
+                <button
+                  type="button"
+                  className="button-secondary"
+                  disabled={busy !== null}
+                  onClick={() => {
+                    setFeedback("");
+                    setFeedbackOpen(false);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={busy !== null || feedback.trim() === ""}
+                  onClick={() =>
+                    void act("reworking", () =>
+                      sendReportBack(current.report_id, feedback.trim()),
+                    )
+                  }
+                >
+                  {busy === "reworking" ? <Spinner /> : null}
+                  Send feedback
+                </button>
+              </div>
+            </fieldset>
+          )}
         </div>
       )}
 
       {problem !== null && <p className="report-problem">{problem}</p>}
-
-      {produced.map((report) => (
-        <ReportCard key={report.report_id} report={report} unavailableReason={null} />
-      ))}
     </article>
   );
 }
@@ -238,6 +287,62 @@ function ReviewHistory({ reviews }: { reviews: readonly ReportReview[] }): React
   );
 }
 
+/**
+ * The figure a representative would pay, and why they changed it.
+ *
+ * The field is filled in with what the service advised, so approving without touching it sends
+ * nothing and is recorded as agreement. Changing it is the correction the merchant's next claim
+ * will be given (FR-C.2), which is why the reason field appears only once it has changed.
+ */
+function ApprovedAmount({
+  amount,
+  why,
+  changed,
+  disabled,
+  onAmount,
+  onWhy,
+}: {
+  amount: string;
+  why: string;
+  changed: boolean;
+  disabled: boolean;
+  onAmount: (value: string) => void;
+  onWhy: (value: string) => void;
+}): React.JSX.Element {
+  return (
+    <div className="report-amount-fields">
+      <label className="report-field">
+        <span>Approved amount</span>
+        <input
+          className="report-amount-input"
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          disabled={disabled}
+          onChange={(event) => {
+            onAmount(event.target.value);
+          }}
+        />
+      </label>
+
+      {changed && (
+        <label className="report-field">
+          <span>Why the change</span>
+          <input
+            className="report-body"
+            type="text"
+            value={why}
+            disabled={disabled}
+            onChange={(event) => {
+              onWhy(event.target.value);
+            }}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
 function ReportHeading({ report }: { report: Report }): React.JSX.Element {
   return (
     <header className="report-heading">
@@ -245,7 +350,11 @@ function ReportHeading({ report }: { report: Report }): React.JSX.Element {
         Claim {report.case_id}
         {report.account_name === null ? "" : ` · ${report.account_name}`}
       </p>
-      <h3>{report.product_name ?? "This claim"}</h3>
+      <h3>
+        {report.product_names.length === 0
+          ? "This claim"
+          : report.product_names.join(", ")}
+      </h3>
       <p>
         {report.recommendation === null ? (
           <span>Stopped before investigation</span>

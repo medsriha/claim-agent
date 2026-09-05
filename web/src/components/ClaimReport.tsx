@@ -1,4 +1,4 @@
-/** Render the canonical report data. No report prose is supplied by the backend. */
+/** Render one claim's canonical report data. No report prose is supplied by the backend. */
 import { formatDayCount, formatMoney, humanise } from "../display";
 import type {
   Assessment,
@@ -78,6 +78,8 @@ function InvestigationContent({
         finding={content.finding_summary ?? outcome.explanation}
         concerns={concerns}
       />
+
+      <DamagedProducts lines={content.lines} />
 
       <ReportContext
         context={content.context}
@@ -304,6 +306,37 @@ function ReportContext({
   );
 }
 
+/**
+ * Every damaged product the claim covers (FR-2.9a, FR-1b.4).
+ *
+ * One claim gets one recommendation and one figure, so this is where a representative sees
+ * what that figure is actually for. What each product cost is in the amount working below.
+ */
+function DamagedProducts({
+  lines,
+}: {
+  lines: InvestigationReportContent["lines"];
+}): React.JSX.Element | null {
+  if (lines.length === 0) {
+    return null;
+  }
+  return (
+    <details className="line-details">
+      <summary className="line-details-summary">
+        Damaged products ({String(lines.length)})
+      </summary>
+      <ul className="line-list">
+        {lines.map((line) => (
+          <li key={line.claim_line_id}>
+            {String(line.claimed.quantity)} × {line.claimed.name}
+            {line.match === "matched" ? "" : ` — ${humanise(line.match)}`}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function AmountWorking({
   amount,
 }: {
@@ -315,7 +348,7 @@ function AmountWorking({
 
       {amount.components.length === 0 ? (
         <p className="line-none">
-          Nothing could be priced for this product
+          Nothing could be priced for this claim
           {amount.priced_from === null
             ? ", because no invoice could be obtained."
             : ` from invoice ${amount.priced_from}.`}

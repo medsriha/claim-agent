@@ -274,10 +274,10 @@ export type RunEventKind =
   | "evidence_settled"
   | "claim_split"
   | "precedent_gathered"
-  | "line_started"
+  | "investigation_started"
   | "tool_called"
   | "thinking"
-  | "line_finished"
+  | "investigation_finished"
   | "report_ready"
   | "failed";
 
@@ -285,15 +285,12 @@ export type RunEventKind =
  * One thing the investigation said while it was working.
  *
  * `summary` is a finished sentence written by the service, ready to put on screen
- * unchanged. `claim_line_id` names the damaged product it is about, and is `null` for the
- * things that concern the whole claim — several products are investigated at once, so
- * without it there would be no telling which of them a line belonged to.
+ * unchanged. One claim is one investigation, so every message is about the claim in hand.
  */
 export interface RunEvent {
   sequence: number;
   kind: RunEventKind;
   summary: string;
-  claim_line_id: string | null;
   detail: Record<string, string>;
 }
 
@@ -398,10 +395,16 @@ export interface Proposal {
   readonly amount_usd: string | null;
 }
 
-/** Settled per-product findings. The UI, rather than the backend, lays these fields out. */
+/**
+ * Settled findings for one claim. The UI, rather than the backend, lays these fields out.
+ *
+ * `lines` is every damaged product the claim covers. There is one outcome, one amount and
+ * one email across all of them; what each product contributed to the figure is in
+ * `amount.components`.
+ */
 export interface InvestigationReportContent {
   readonly kind: "investigation";
-  readonly line: ClaimLine;
+  readonly lines: readonly ClaimLine[];
   readonly context: ClaimContext;
   readonly attachments: readonly Attachment[];
   readonly evidence: readonly EvidenceFinding[];
@@ -492,8 +495,8 @@ export interface Report {
   readonly report_id: string;
   readonly version: number;
   readonly case_id: string;
-  readonly claim_line_id: string | null;
-  readonly product_name: string | null;
+  /** Every damaged product the claim covers, and empty when it names none. */
+  readonly product_names: readonly string[];
   readonly account_name: string | null;
   readonly user_id: string | null;
   readonly stage: ReportStage;
@@ -524,7 +527,12 @@ export interface Approval {
   readonly rep_words?: string;
 }
 
-/** Every report on one claim, as the service returns them (FR-2.9b). */
+/**
+ * The report on one claim, as the service returns it (FR-2.9b).
+ *
+ * A claim has at most one, so this holds none or one. An empty list means nobody has asked
+ * for the claim to be investigated.
+ */
 export interface ClaimView {
   readonly case_id: string;
   readonly reports: readonly Report[];
