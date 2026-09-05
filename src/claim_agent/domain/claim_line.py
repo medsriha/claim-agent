@@ -1,27 +1,3 @@
-"""A claim line: one claimed product, and how it is tied to the order it came from.
-
-A merchant opens one support case, but that case can cover several damaged
-products. Everything after the split works on one product at a time — the
-investigation, the report a rep reads, the approval, and the payment — because
-ShipBob's payment endpoint takes one product per call, and because a rep may well
-want to pay for one item while asking for a better photograph of another.
-
-That one product is a **claim line**, and this file is its shape.
-
-The other half of the file is matching. A claim line has to correspond to a real
-product on the order, carrying that product's name, code and price with it
-(FR-1a.2). A claimed product that is not on the order cannot be reimbursed, and
-saying so plainly is a useful finding rather than an error. A claimed product that
-matches two different order lines is a third outcome again, and the one that
-matters most: two similar products at different prices mean the payout cannot be
-worked out, so the claim has to go to a person instead of a guess being made
-(FR-1.13).
-
-Nothing here reaches out to anything and nothing here reads a clock. The same
-claimed products matched against the same order always produce the same claim
-lines, with the same identifiers, in the same order (NFR-1).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

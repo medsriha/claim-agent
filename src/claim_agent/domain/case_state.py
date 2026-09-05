@@ -1,32 +1,3 @@
-"""Whether a claim is even in a state worth answering.
-
-Before anybody works out what a claim is worth, there is a cheaper question: is producing
-a recommendation for this claim the right thing to do at all? Four of ShipBob's five
-sample claims say no in some way, and nothing in the system noticed any of it:
-
-* **One is already closed.** Somebody finished with it. Recommending a payout on a closed
-  case is answering a question that is no longer open.
-* **One is waiting on the merchant.** They have already been asked something and have not
-  replied. Sending them a second email is the wrong move, and it is the move this system
-  would make.
-* **Every single one has an internal contact address.** All five are `@shipbob.com`, and
-  four of them are plus-addresses on one person's mailbox. A drafted "merchant email" would
-  go to ShipBob's own staff.
-* **A case can be dated before its own delivery.** The day counter already hands back a
-  negative number for that and deliberately declines to judge it, because deciding what a
-  negative age means is a judgement rather than arithmetic. This is where it gets said out
-  loud.
-
-**No requirement covers any of this.** It came from reading the sample data. The nearest
-ones are FR-0.2, which is where a claim's age is judged, and NFR-4, which says a failure
-ends in front of a person.
-
-**Nothing here stops a claim or decides anything.** It reports what it found and a person
-decides. That is deliberate: every one of these is a reason to look twice, and none of them
-is proof on its own. A case marked closed may have been closed in error, and an internal
-address is what a test system looks like — which is exactly what this data is.
-"""
-
 from __future__ import annotations
 
 from enum import StrEnum

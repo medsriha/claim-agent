@@ -1,26 +1,3 @@
-"""What a support representative decided about a claim, and how it differed from the advice.
-
-Every time a representative reviews something the system produced, they do one of three things
-(FR-2.8): accept it as it stands, accept it after changing something, or send it back with
-feedback so the investigation runs again. FR-C.1 says each of those produces one durable record
-saying which claim it was about, which version of the report they were looking at, what they
-chose, what they changed, anything they said, and when.
-
-**A review action writes one of these.** Approving a report or sending one back records exactly
-one, in `claim_agent.report.review`. A development tool also invents them for demonstrations
-(FR-C.8), so a machine can hold both kinds and they are not told apart here.
-
-**Two kinds of decision live here, and they must not be added together.** A claim the quick
-checks stopped never reaches the AI: it has no products in it, nobody was asked how sure they
-were, and deciding it costs nothing (FR-C.1 says the record has to cover this case, and calls it
-the cheapest decision in the system). A claim that was investigated is the opposite on every
-count. Counting them as one population makes the advice look better than it is, because the
-cheap deterministic decisions are the ones people agree with most.
-
-**Recording a decision is not carrying it out.** Writing down what somebody chose sends no email
-and moves no money, and nothing in this system does either.
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal

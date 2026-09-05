@@ -1,26 +1,3 @@
-"""The facts a damaged-in-transit claim is made of, written as plain data.
-
-A "claim" here is a merchant telling ShipBob that a parcel arrived damaged. To
-judge one you need the support case the merchant opened, the shipment it is
-about, and the order the goods came from. This file holds those three, plus the
-two records an investigation adds — the images the merchant uploaded and the
-priced invoice ShipBob generates — plus the email we draft back to the merchant
-and the record of a correction a rep made once before.
-
-Nothing in here reaches out to anything: no web requests, no database, no AI.
-That is deliberate. The rules built on top of these shapes have to give the same
-answer every time and be testable without a network (FR-0.6).
-
-Two habits run through the file and are worth knowing before reading it:
-
-- **Every time is stored in UTC.** ShipBob sends times with an offset attached.
-  Converting once, here, means two dates can later be compared without anyone
-  having to ask which clock each was written on.
-- **A blank string means "nothing was given".** ShipBob writes `""` where a field
-  has no value. Left as it is, an empty shipment id would read like a real answer
-  and a case with nothing to investigate would look complete (FR-0.2).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

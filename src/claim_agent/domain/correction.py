@@ -1,5 +1,3 @@
-"""One plain sentence saying what a representative changed, for the merchant's next claim (FR-C.2)."""
-
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
