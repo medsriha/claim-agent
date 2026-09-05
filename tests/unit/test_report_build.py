@@ -1,5 +1,3 @@
-"""Turning a screening or an investigation into the report somebody acts on (FR-2.1, FR-0.4)."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

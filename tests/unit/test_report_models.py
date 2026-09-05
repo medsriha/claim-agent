@@ -1,5 +1,3 @@
-"""What a report is, and the states it refuses to exist in (FR-2.1, FR-2.9, FR-C.1)."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

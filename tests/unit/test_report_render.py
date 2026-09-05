@@ -1,5 +1,3 @@
-"""Writing what was established into the report a representative reads (FR-2.1 to FR-2.7)."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

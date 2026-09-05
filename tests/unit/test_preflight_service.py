@@ -1,16 +1,3 @@
-"""The pre-flight screen end to end: what it reads, what it decides, and what it never touches.
-
-The individual rules have their own test files next door. These tests are about the
-running order that joins them up — that the right records are read, that a failure to
-read one is never mistaken for a record that does not exist, that the verdict matches
-the reasons, and that the same claim screened twice comes back identical (FR-0.1,
-FR-0.3, FR-0.6, NFR-8).
-
-Every request is answered by a stand-in ShipBob in the same process, and the store of
-past corrections is a real database file in a throwaway directory, so nothing here
-touches the network and no two tests can see each other's data.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

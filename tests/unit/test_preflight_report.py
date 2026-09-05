@@ -1,9 +1,3 @@
-"""The write-up a rep gets when a claim cannot be processed at all (FR-0.4).
-
-The email inside the write-up has its own tests next door; these are about the write-up
-around it — what it summarises, what it keeps, and what it deliberately never says.
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal
