@@ -3,6 +3,13 @@
 Backend service that investigates ShipBob damaged-in-transit claims and returns a structured
 report plus a drafted merchant email. The agent recommends and a representative decides.
 
+## Demo
+
+[▶ Watch the 1 minute 39 second app walkthrough](media/demo.mov)
+
+See a claim move from investigation to a representative's decision, including the evidence,
+recommendation, drafted reply, and feedback workflow.
+
 ## Run it
 
 ```bash
