@@ -1,10 +1,3 @@
-"""Asking for similar past claims over HTTP (FR-S.4, FR-S.5, FR-S.13, FR-S.14).
-
-Everything goes through the real application, against a store on a throwaway
-database file. Nothing here reaches ShipBob or a model: precedent is the one thing
-this service knows without asking anybody.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

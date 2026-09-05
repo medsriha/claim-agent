@@ -1,16 +1,3 @@
-"""Changing the claim policy over HTTP, and the change reaching the next claim.
-
-This file is where the point of the admin panel is actually proved (FR-0.7, NFR-7).
-Reading and writing the thresholds is the easy half; the half worth a test is that a
-claim screened after a change is judged by the new numbers, with nothing restarted in
-between, and that a change the policy refuses leaves every later claim exactly as it
-was.
-
-CASE-1001 does the work throughout. It was delivered on 11 February and filed on 19
-February — eight days — so it passes the sixty-day age limit comfortably, and dropping
-that limit below eight turns it away. Both numbers come from REQUIREMENTS.md.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

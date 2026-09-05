@@ -1,35 +1,3 @@
-"""A chat model that answers from a script instead of from Anthropic.
-
-Every test of the investigation needs a model, and no test may have a real one:
-the suite must never touch the network, and it has to give the same answer on a
-machine with no credentials as it does in the build. So this stands in for one.
-
-**Hand it the answers before the test runs.** Queue one reply for each call the
-code under test will make, in the order it will make them, and this hands them
-back one at a time. A queued reply can be:
-
-- a filled-in form (any pydantic model), which comes back from a question asked
-  through `with_structured_output` — that is how the investigation asks anything;
-- a chat message, which comes back from an ordinary call. A message carrying tool
-  calls is how a tool-use loop gets driven: the loop calls the tools, feeds the
-  results back, and asks again, and the next queued reply answers that;
-- a plain string, which is shorthand for a chat message with those words in it;
-- an exception, which is raised rather than returned. That is how a test says "the
-  provider failed on this call" and checks what the code does about it.
-
-**Running out of script is a failure, never an empty answer.** If the code asks
-one more question than the test queued a reply for, this stops with a message
-saying so. A stand-in that quietly answers nothing turns a real bug into a
-confusing assertion much further down.
-
-**It writes down what it was asked.** `asked` grows by one entry per question,
-carrying the messages that were sent, the form that was asked for, and the tools
-that were bound at the time — so a test can check the wording the model was given
-without reaching inside anything. `bound_tools` is the running list of every tool
-ever offered to it, which is how a test can show that a write tool was never among
-them (FR-1.2) without the model having to be asked anything at all.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
