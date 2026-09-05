@@ -1,37 +1,3 @@
-"""What happens when a representative writes back about a report.
-
-A representative reads a report and types something: what is wrong with it, a question, an
-answer to a question it asked them, or a request to look at the claim again. **Whatever they
-type, the agent receives it and answers.** There is no message this system refuses to pass on,
-and no report kind that swallows one — the reply may be that a rule cannot be bent, but it is
-a reply, written for them, about their claim.
-
-What the agent may then *change* depends on what the report is, and that is decided here
-rather than by what the agent wrote:
-
-- **A report about an investigated claim** is reworked in full: findings, judgements, the
-  figure and the merchant's email, across every product on it (FR-R.9, FR-R.1a).
-- **A report about a claim nobody could split into products** may have what is still unclear,
-  what the merchant is asked for, and its email reworked. It can never be given an amount,
-  because nothing on it was ever priced — so where the representative settles the split, the
-  claim is investigated instead, which is the only honest route from "we cannot tell which
-  product" to "here is what to pay" (FR-1a.4).
-- **A report for a claim the quick checks turned away** may have only its merchant email
-  reworded. Its verdict is arithmetic and no message can overturn one (FR-0.6, FR-R.8).
-
-**Every path produces one report**, because a claim has one (FR-2.9b). Where a message causes
-the claim to be investigated, the findings become the next version of the very report the
-message was written on, so the conversation that led there stays attached to them (FR-R.13).
-
-**Nothing here sends anything or moves any money**, whichever path a message takes. The agent
-holds the investigation's read-only tools and no others (FR-R.6, FR-3.1).
-
-**Nothing here raises for anything that can happen to a claim.** A model that cannot be
-reached, ShipBob failing, a run that used up its steps: each comes back as a reply saying so,
-with the report unchanged, because a representative must be left with something to act on
-rather than an error page (NFR-4).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

@@ -1,9 +1,3 @@
-"""Errors this service raises deliberately.
-
-Each carries the HTTP status and machine-readable code its API response should
-use, so handlers stay a single translation step rather than a decision tree.
-"""
-
 from __future__ import annotations
 
 from typing import Any

@@ -1,22 +1,3 @@
-"""The four judgements made once the evidence is all in.
-
-Having all four pieces of evidence is not the same as having a claim worth paying.
-Once the evidence is present and usable, four questions have to be answered
-(FR-1.8 to FR-1.11):
-
-- Is the damage actually visible in the photographs?
-- Can the damaged product be identified?
-- Does that product appear on the invoice?
-- Was the outer packaging photographed?
-
-These are **assessments the system reports, with its reasoning**, not verdicts that
-settle the claim. A rep has to be able to disagree with any single one of them
-without throwing away the other three, which is why each carries its own words and
-is not rolled into a single score (FR-2.3).
-
-Nothing here reaches out to anything.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

@@ -1,5 +1,3 @@
-"""The one comparison that decides whether a figure counts as high value (FR-0.5, FR-C.7)."""
-
 from __future__ import annotations
 
 from decimal import Decimal
