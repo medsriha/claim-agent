@@ -1,27 +1,3 @@
-"""The claim policy in force right now, and the one place a change to it lands.
-
-`claim_agent.policy` says what the thresholds *are* and where their starting
-values come from. This module answers a different question: which policy is the
-service judging claims by at this moment, given that someone can change one from
-the admin panel while the service is running (FR-0.7, NFR-7).
-
-Two promises are worth understanding before reading the code, because the shape
-of the class exists to keep them:
-
-- **A policy is replaced whole, never edited value by value.** A claim judged
-  half by the old age limit and half by the new one could not be explained
-  afterwards, and editing in place is how that happens.
-- **A claim reads the policy once.** Screening asks for the policy when the
-  request arrives and passes that one answer to all four checks, so a change
-  landing midway through a screening cannot affect it. The claim after it sees
-  the new values.
-
-Nothing here is written to disk. A change lives in the running process, and a
-restart puts every value back to whatever the environment says — deliberate for a
-demonstration, and listed in DESIGN.md under "Future production" as the trap it
-would be in anything longer-lived.
-"""
-
 from __future__ import annotations
 
 from datetime import datetime

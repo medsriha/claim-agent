@@ -1,10 +1,3 @@
-"""Runtime settings: environment, credentials, and outbound endpoints.
-
-Claim policy values do not belong here — they live in `claim_agent.policy`
-(FR-0.7, NFR-7). This module is about *how the process runs*, not *how claims
-are judged*.
-"""
-
 from __future__ import annotations
 
 from functools import lru_cache

@@ -1,9 +1,3 @@
-"""Structured logging setup.
-
-Every log line is a dict, so production issues can be filtered by `case_id`,
-`claim_line_id`, or `request_id` rather than grepped out of prose (NFR-5).
-"""
-
 from __future__ import annotations
 
 import logging

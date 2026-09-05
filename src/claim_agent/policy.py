@@ -1,23 +1,3 @@
-"""Claim policy values — the single named place they live (FR-0.7, NFR-7).
-
-Every value here is a lever an operator may need to change without touching
-logic, so each is overridable with a `POLICY_`-prefixed environment variable.
-
-`reimbursement_cap_usd` is stated in REQUIREMENTS.md (FR-1.20). The rest are
-judgement calls that REQUIREMENTS.md explicitly leaves unspecified: the defaults
-below are provisional placeholders and need ShipBob sign-off before production.
-
-**Some values are marked `NOT_ON_PANEL`.** The admin panel is built from this
-file, so by default a value here is a value someone can change from a screen
-while the service runs. That is only useful for a value the running service
-actually reads: seven of the ones marked belong to the AI investigation, which is
-being built and is not yet reachable, so changing them from a panel would do
-nothing observable and would suggest otherwise. Once the investigation runs, they
-are the marks to revisit. The marking changes nothing about the value itself —
-every one of them is still read, still overridable from the environment, and
-still used wherever it is used.
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal
