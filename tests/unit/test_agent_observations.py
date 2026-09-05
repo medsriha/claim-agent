@@ -1,10 +1,3 @@
-"""The memo that stops one claim paying twice for the same expensive answer (NFR-8).
-
-Nothing here touches a network, a disk or a model. The expensive work is stood in for by
-a small function that counts how often it was run, which is the whole of what these tests
-are about.
-"""
-
 from __future__ import annotations
 
 import asyncio

@@ -1,23 +1,3 @@
-"""Reworking one product's report after a representative sent it back (FR-R.1 to FR-R.12).
-
-Every model here answers from a script the test wrote beforehand, so nothing reaches a
-network or a model provider and no key is needed. What is left to observe is what the code
-does with a reworked answer, which is the whole subject of this file.
-
-Three groups are worth finding quickly.
-
-**Carrying work forward (FR-R.5)** is the group that matters most. A reworked answer that
-mentions only the one thing being corrected must not quietly turn the other findings into
-"never established" — an approval that collapsed because somebody queried one sentence would
-be the worst failure this layer could have.
-
-**The rules still bind (FR-R.7, FR-R.8).** A reconsidered figure goes through the same
-capping path as the first one, and feedback cannot talk an outcome past a rule.
-
-**Failing toward the person (NFR-4).** A run that gives up comes back as a rework that did
-not happen, carrying the previous findings and a sentence saying why — never as an exception.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

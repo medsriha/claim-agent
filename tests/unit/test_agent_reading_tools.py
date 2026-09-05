@@ -1,10 +1,3 @@
-"""The four reading tools added after studying ShipBob's sample data.
-
-No requirement asks for any of them, so these tests name the nearest ones: the dollar
-cap (FR-1.20), never narrowing two candidates to one (FR-1.13), the same answer twice
-(NFR-1), and a failure ending in front of a person (NFR-4).
-"""
-
 from __future__ import annotations
 
 import httpx

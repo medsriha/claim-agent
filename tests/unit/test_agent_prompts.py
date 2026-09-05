@@ -1,24 +1,3 @@
-"""What the model is told, and the stand-in that lets us test it without asking one.
-
-Two things are checked here, and they belong together because the second is how
-everything later gets to check the first.
-
-**The wording.** A prompt cannot be tested for being persuasive, so nothing here
-tries. What it can be tested for is the handful of things that would quietly break
-the system if they drifted: that the words the model is told to use are spelled
-exactly as the code spells them, that no prompt turns the investigation into a
-fixed run of steps when the whole point is that it chooses (FR-1.1), that it is
-told it cannot send or pay (FR-1.2), that text read out of an image is marked as
-evidence rather than instruction, that no figure is ever written by the model
-(FR-1.21), and that words we did not write are always fenced off.
-
-**The scripted model.** A short check that the stand-in itself behaves: a queued
-answer comes back, a queued failure is raised, tool calls survive, and running out
-of script fails loudly instead of answering with nothing.
-
-Nothing here reaches Anthropic, and nothing here needs a key.
-"""
-
 from __future__ import annotations
 
 import re

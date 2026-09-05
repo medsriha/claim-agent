@@ -1,15 +1,3 @@
-"""The tool-use loop: what it does, what it costs, and how it stops (FR-1.1, FR-1.3).
-
-Every model here answers from a script written by the test that uses it, so nothing
-reaches a network or a model provider and no credentials are needed. That is also what
-makes these tests about the loop rather than about the model: the answers are fixed, so
-what is left to observe is what the loop does with them.
-
-The step allowances are small ones set by each test rather than the policy defaults, so
-that a run can use up a whole budget in three lines and the test can say plainly what it
-is about.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
