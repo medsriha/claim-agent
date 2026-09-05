@@ -1,23 +1,3 @@
-"""Reading and changing the claim policy over HTTP (FR-0.7, NFR-7).
-
-Almost every threshold this system judges a claim by is a placeholder we invented
-so the code would run — only the $100 reimbursement cap is a real ShipBob figure.
-They all live in one file so they can be corrected without touching any logic, but
-until this existed, correcting one meant setting an environment variable and
-restarting the service. Three of these addresses let someone read the values, change
-them, and put them back, and a change takes effect on the very next claim screened.
-
-**A fourth empties every store the service keeps**, so a demonstration can start from a system
-that remembers nothing. It is here rather than anywhere else because it is an operator's act on
-the running service, like a threshold change — and like one, it is undone by nobody, since the
-whole point of those stores is that the system does not forget.
-
-**There is no sign-in.** Anyone who can reach these addresses can change what every
-claim after them is judged by, and nothing records who did it. That is the same
-choice the rest of this demonstration makes, and it is written up in DESIGN.md
-under "Future production" rather than being quietly hoped over.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

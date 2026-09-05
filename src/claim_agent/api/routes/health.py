@@ -1,10 +1,3 @@
-"""Health check — whether this service is running.
-
-Deployment tooling calls this to decide if the process is alive and should keep
-receiving traffic. It reports liveness only: that this service can answer, not that
-ShipBob or the model behind it can be reached.
-"""
-
 from __future__ import annotations
 
 from fastapi import APIRouter

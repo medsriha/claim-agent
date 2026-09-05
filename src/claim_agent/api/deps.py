@@ -1,16 +1,3 @@
-"""Request-scoped dependencies.
-
-Settings, policy and the long-lived helpers a route needs are read off
-`app.state`, not from module-level caches, so a test (or a second app in the same
-process) can build an application with different values and have every route see
-them.
-
-The claim policy is the one that can change while the service runs, because the
-admin panel can change it (FR-0.7). A route asks for it once, when the request
-arrives, and hands that one answer to everything it calls — so a change landing
-midway through a screening cannot affect the claim being screened.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
