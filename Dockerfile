@@ -24,9 +24,6 @@ COPY tools/ tools/
 COPY tests/ tests/
 RUN uv sync --locked
 
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
 RUN useradd --create-home --uid 10001 claims \
     && mkdir -p /data /cache \
     && chown claims:claims /data /cache
@@ -34,5 +31,4 @@ USER claims
 
 EXPOSE 8000
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["uvicorn", "claim_agent.app:app", "--host", "0.0.0.0", "--port", "8000"]

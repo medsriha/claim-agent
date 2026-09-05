@@ -22,6 +22,13 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    command:
+      - sh
+      - -c
+      - >-
+        python -m tools.seed_precedents --if-empty ||
+        echo "Demo data could not be written. Starting the service anyway.";
+        exec uvicorn claim_agent.app:app --host 0.0.0.0 --port 8000
     env_file:
       - path: .env
         required: false
@@ -29,7 +36,6 @@ services:
       SHIPBOB_BASE_URL: http://mock:8080
       DATABASE_PATH: /data/claim_agent.db
       ATTACHMENT_CACHE_DIR: /cache
-      SEED_DEMO_DATA: "true"
     volumes:
       - claim-data:/data
       - attachment-cache:/cache
