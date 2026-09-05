@@ -11,6 +11,7 @@ from tests.unit.test_agent_investigate import a_conclusion
 from tests.unit.test_report_render import a_context, a_line, a_stopped_claim
 
 from claim_agent.agent.budget import BudgetSnapshot
+from claim_agent.agent.revise import LineRevision
 from claim_agent.agent.run import ClaimInvestigation
 from claim_agent.agent.schemas import ClaimSplit
 from claim_agent.agent.triage import ClaimTriage
@@ -25,14 +26,20 @@ from claim_agent.domain.models import (
     TerminalReason,
     Verdict,
 )
-from claim_agent.domain.outcome import Recommendation
+from claim_agent.domain.outcome import OutcomeDecision, Recommendation
 from claim_agent.preflight.models import CaseRecord, GateResult, PreflightResult
-from claim_agent.report.build import build_investigation_reports, build_screening_report
+from claim_agent.report.build import (
+    build_investigation_reports,
+    build_revised_report,
+    build_screening_report,
+)
 from claim_agent.report.models import (
     InvestigationReportContent,
+    Report,
     ReportState,
     ScreeningReportContent,
 )
+from claim_agent.report.review import send_back
 
 CASE = Case.model_validate(CASE_1001)
 ORDER = Order.model_validate(ORDER_1001)
@@ -311,6 +318,138 @@ def test_an_unsafe_split_email_falls_back_to_the_representative() -> None:
     assert report.drafted_email is None
     assert report.content.kind == "clarification"
     assert report.content.requested_details == ()
+
+
+# --- The next version, after a representative sent it back (FR-R.9, FR-R.13) ---
+
+
+def a_report_to_rework() -> Report:
+    """One investigated product's report, as it stands when a note arrives."""
+    return build_investigation_reports(
+        a_passing_screening(),
+        ClaimInvestigation(
+            case_id=CASE.case_id,
+            triage=a_triage((COLLAGEN, "COLLAGEN1")),
+            lines=(a_line(),),
+        ),
+        at=A_MOMENT,
+    )[0]
+
+
+def a_rework(**overrides: Any) -> LineRevision:
+    """What a rework produced, with everything a test does not care about defaulted."""
+    fields: dict[str, Any] = {
+        "investigation": a_line(
+            outcome=OutcomeDecision(
+                recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
+                recommended_by_agent=Recommendation.REQUEST_REP_CLARIFICATION,
+                explanation="The outer packaging was never photographed after all.",
+            ),
+            drafted_email=None,
+            concerns=("The image thought to be the box is the product itself.",),
+        ),
+        "reply": "You were right about the packaging photograph.",
+        "changed": ("Marked the outer packaging photograph missing.",),
+        "left_unchanged": ("The invoice, which the note did not bear on.",),
+    }
+    fields.update(overrides)
+    return LineRevision.model_validate(fields)
+
+
+def test_fr_r_13_a_rework_produces_the_next_version_and_leaves_the_last_one_alone() -> None:
+    """FR-R.13: reworking a report must leave the version the rep was looking at intact."""
+    before = a_report_to_rework()
+
+    after = build_revised_report(before, a_rework(), feedback="Look at the box again.", at=A_MOMENT)
+
+    assert after.report_id == before.report_id
+    assert after.version == before.version + 1
+    assert before.version == 1
+    assert before.content != after.content
+
+
+def test_fr_r_13_the_note_and_what_changed_are_kept_as_a_round_of_the_conversation() -> None:
+    """FR-R.13: the feedback that prompted each revision and what changed are both kept."""
+    after = build_revised_report(
+        a_report_to_rework(), a_rework(), feedback="Look at the box again.", at=A_MOMENT
+    )
+
+    assert len(after.revisions) == 1
+    turn = after.revisions[0]
+    assert turn.turn == 1
+    assert turn.from_version == 1
+    assert turn.feedback == "Look at the box again."
+    assert turn.reply == "You were right about the packaging photograph."
+    assert turn.changed == ("Marked the outer packaging photograph missing.",)
+    assert turn.reworked
+
+
+def test_fr_r_12_a_second_round_is_added_to_the_first_rather_than_replacing_it() -> None:
+    """FR-R.12: each cycle carries the full feedback history."""
+    once = build_revised_report(
+        a_report_to_rework(), a_rework(), feedback="Look at the box again.", at=A_MOMENT
+    )
+
+    twice = build_revised_report(once, a_rework(), feedback="Now the amount.", at=A_MOMENT)
+
+    assert [turn.feedback for turn in twice.revisions] == [
+        "Look at the box again.",
+        "Now the amount.",
+    ]
+    assert [turn.turn for turn in twice.revisions] == [1, 2]
+    assert twice.version == 3
+
+
+def test_fr_r_9_the_next_version_carries_the_reworked_findings_and_email() -> None:
+    """FR-R.9, FR-R.11: a full report in the same structure, with its email rewritten."""
+    after = build_revised_report(
+        a_report_to_rework(), a_rework(), feedback="Look at the box again.", at=A_MOMENT
+    )
+
+    assert after.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert after.amount_usd is None
+    assert after.drafted_email is None
+    assert isinstance(after.content, InvestigationReportContent)
+    assert "the product itself" in after.content.concerns[0]
+
+
+def test_a_reworked_report_goes_back_to_a_person_to_decide_on() -> None:
+    """FR-2.9: approving is still the only way out, so a reworked report awaits review."""
+    after = build_revised_report(
+        a_report_to_rework(), a_rework(), feedback="Look at the box again.", at=A_MOMENT
+    )
+
+    assert after.state is ReportState.AWAITING_REVIEW
+
+
+def test_a_rework_that_did_not_happen_leaves_every_finding_as_it_was() -> None:
+    """NFR-4: a model that could not be reached must not degrade a sound report."""
+    before = a_report_to_rework()
+
+    after = build_revised_report(
+        before,
+        LineRevision(investigation=None, reply="The model could not be reached."),
+        feedback="Look at the box again.",
+        at=A_MOMENT,
+    )
+
+    assert after.content == before.content
+    assert after.recommendation == before.recommendation
+    assert after.drafted_email == before.drafted_email
+    assert after.version == before.version + 1
+    assert after.revisions[0].reworked is False
+    assert after.revisions[0].reply == "The model could not be reached."
+
+
+def test_what_a_representative_already_decided_travels_with_the_next_version() -> None:
+    """FR-C.1: a rework is not a fresh start, and the record of a decision must survive it."""
+    before = a_report_to_rework()
+    parked = send_back(before, feedback="Look at the box again.", at=A_MOMENT).report
+
+    after = build_revised_report(parked, a_rework(), feedback="Look at the box again.", at=A_MOMENT)
+
+    assert after.decisions_taken == 1
+    assert after.reviews[0].rep_words == "Look at the box again."
 
 
 # --- The same findings always produce the same report (NFR-1) ----------------

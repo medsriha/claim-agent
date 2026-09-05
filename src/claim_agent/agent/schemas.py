@@ -373,3 +373,74 @@ class InvestigationConclusion(_WithoutSubjectiveConfidence):
             "request_rep_clarification."
         ),
     )
+
+
+class RevisionConclusion(InvestigationConclusion):
+    """A reworked conclusion, after a representative said what was wrong (FR-R.9, FR-R.10).
+
+    **This is the investigation's own form with three fields added, and that is the point.**
+    FR-R.9 asks for a full report in the same structure as the first one — same schema, same
+    requirements — rather than a patch, so this inherits every field instead of restating them.
+    A rule that binds a first answer therefore binds a reworked one, and the two cannot drift.
+
+    Everything inherited means exactly what it meant the first time: report on all four pieces
+    of evidence, answer the four questions when the evidence is there, name what should be paid
+    for, choose one of the three next actions, and write the merchant's email — carrying the
+    parts the representative did not dispute forward unchanged (FR-R.5). Code fills any part
+    left out from the earlier report, so leaving one out cannot quietly turn an established
+    finding into a missing one.
+
+    `changed` and `left_unchanged` are what let a representative confirm they were understood
+    without re-reading the whole report (FR-R.10). `reply_to_representative` is the answer to
+    what they actually said — including a refusal, where they asked for something the rules
+    forbid (FR-R.8), and including a question, where the rework cannot be settled without
+    something only they can supply.
+
+    `needs_more_from_representative` says that the reply contains such a question. It changes
+    nothing about the recommendation; it tells a screen that the conversation is waiting on a
+    person rather than finished.
+
+    `concerns_shared_evidence` says the feedback was about the invoice, the customer
+    confirmation or the photograph of the outer box — the three that describe the parcel and
+    are settled once for the whole claim (FR-1a.3). Correcting one of those ought to correct
+    every product on the claim; this system flags that and does not do it (FR-R.1a).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    changed: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Each finding, judgement, amount or piece of wording you changed in response to "
+            "the feedback, one per item, and why you changed it. Empty only if you changed "
+            "nothing at all."
+        ),
+    )
+    left_unchanged: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "The parts of the earlier report the feedback did not bear on, which you have "
+            "carried forward as they were. One short item each."
+        ),
+    )
+    reply_to_representative: str = Field(
+        description=(
+            "Your answer to the representative in one or two short sentences, written to them "
+            "rather than about them. Say plainly if what they asked for is something the rules "
+            "do not allow, and ask them directly if you need something only they can tell you."
+        )
+    )
+    needs_more_from_representative: bool = Field(
+        default=False,
+        description=(
+            "True when your reply asks the representative a question you need answered before "
+            "this can be settled."
+        ),
+    )
+    concerns_shared_evidence: bool = Field(
+        default=False,
+        description=(
+            "True when the feedback is about the invoice, the customer confirmation or the "
+            "photograph of the outer box, which every product on this claim shares."
+        ),
+    )

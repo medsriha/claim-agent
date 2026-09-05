@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from claim_agent.agent.email import finish_email
 from claim_agent.agent.investigate import LineInvestigation
+from claim_agent.agent.revise import LineRevision
 from claim_agent.agent.run import ClaimInvestigation
 from claim_agent.domain.case_facts import read_case_facts
 from claim_agent.domain.decision import DecisionStage
@@ -29,6 +30,7 @@ from claim_agent.report.models import (
     InvestigationReportContent,
     Report,
     ReportState,
+    RevisionTurn,
     ScreeningReportContent,
     SiblingLine,
 )
@@ -272,6 +274,101 @@ def _one_product(
             ),
         ),
         created_at=at,
+    )
+
+
+def build_revised_report(
+    report: Report,
+    revision: LineRevision,
+    *,
+    feedback: str,
+    at: UtcDatetime,
+) -> Report:
+    """Write the next version of a report after a representative sent it back (FR-R.9, FR-R.13).
+
+    A whole report, not a patch. It has the same name and the same identity as the one before
+    it, one higher version number, and the conversation so far with one more round on the end.
+    The version the representative was looking at is left exactly as it was — reading it back is
+    how somebody sees what they saw when they decided.
+
+    The report comes back **awaiting review** whatever happened, because approving is still the
+    only way out and a reworked report has to be decided on by a person like any other (FR-2.9).
+
+    What a representative already did to this report travels with it: how many decisions have
+    been taken on it, and what each of them was. A rework is not a fresh start, and losing that
+    record would lose the audit trail of where a human intervened (FR-C.1).
+
+    Args:
+        report: The report as it stood when the note arrived.
+        revision: What the rework produced, or that it did not happen.
+        feedback: What the representative said, in their own words, kept exactly as written.
+        at: When this version is being written. Handed in rather than read from a clock, so the
+            same rework writes the same version twice (NFR-1).
+
+    Returns:
+        The next version. **When the rework did not happen the findings are the previous ones,
+        unchanged**, and the turn on it says so — a model that could not be reached must not be
+        allowed to degrade a sound report, and a representative must not be left with an error
+        page instead of the work they were deciding on (NFR-4).
+    """
+    turn = RevisionTurn(
+        turn=len(report.revisions) + 1,
+        from_version=report.version,
+        feedback=feedback,
+        reply=revision.reply,
+        changed=revision.changed,
+        left_unchanged=revision.left_unchanged,
+        needs_reply=revision.needs_reply,
+        reworked=revision.reworked,
+    )
+    carried_forward = {
+        "version": report.version + 1,
+        "state": ReportState.AWAITING_REVIEW,
+        "revisions": (*report.revisions, turn),
+        "created_at": at,
+    }
+
+    reworked = revision.investigation
+    if reworked is None:
+        return report.model_copy(update=carried_forward)
+
+    content = report.content
+    if not isinstance(content, InvestigationReportContent):
+        # Only an investigated product can be reworked, and the route refuses anything else
+        # before a run is ever started. Reaching here would mean that check was removed, so
+        # the findings are left alone rather than rebuilt from a shape they do not fit.
+        logger.warning("revised_report_has_no_investigation", report_id=report.report_id)
+        return report.model_copy(update=carried_forward)
+
+    return report.model_copy(
+        update={
+            **carried_forward,
+            "recommendation": reworked.outcome.recommendation,
+            "amount_usd": (
+                reworked.amount.amount_usd
+                if reworked.outcome.recommendation is Recommendation.APPROVE
+                else None
+            ),
+            "confidence": reworked.confidence,
+            "drafted_email": reworked.drafted_email,
+            "content": content.model_copy(
+                update={
+                    "line": reworked.line,
+                    "evidence": reworked.evidence,
+                    "assessments": reworked.assessments,
+                    "outcome": reworked.outcome,
+                    "amount": reworked.amount,
+                    "concerns": reworked.concerns,
+                    "requested_details": reworked.requested_details,
+                    "finding_summary": _finding_summary(reworked),
+                    "corrections_considered": (
+                        reworked.conclusion.corrections_considered
+                        if reworked.conclusion is not None
+                        else ()
+                    ),
+                }
+            ),
+        }
     )
 
 

@@ -451,6 +451,27 @@ export interface ReportReview {
 }
 
 /**
+ * One round of the conversation about a report (FR-R.13).
+ *
+ * A representative said something was wrong; the agent reworked the report and answered.
+ * `reworked` false means it could not be reworked at all, and the findings above the
+ * conversation are the ones that were already there — `reply` says why.
+ *
+ * `needs_reply` means the agent asked a question and is waiting on a person. It changes
+ * nothing about what is recommended.
+ */
+export interface RevisionTurn {
+  readonly turn: number;
+  readonly from_version: number;
+  readonly feedback: string;
+  readonly reply: string;
+  readonly changed: readonly string[];
+  readonly left_unchanged: readonly string[];
+  readonly needs_reply: boolean;
+  readonly reworked: boolean;
+}
+
+/**
  * One report a representative decides on (FR-2.1).
  *
  * `content` is the canonical report data. The UI constructs its presentation directly from
@@ -480,6 +501,7 @@ export interface Report {
   readonly drafted_email: DraftedEmail | null;
   readonly content: ReportContent;
   readonly reviews: readonly ReportReview[];
+  readonly revisions: readonly RevisionTurn[];
   readonly created_at: string;
 }
 

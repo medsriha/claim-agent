@@ -651,6 +651,42 @@ so is what they record.
     The thing most likely to look wrong is a long report inside its scrolling frame next to the
     controls under it.
 
+## v8 — the conversation about a report
+
+Sending a report back used to be a note that went nowhere. It now reaches an agent that reworks
+the report and answers, so the card grows a thread: what the representative said, what the agent
+said back, what it changed, and what it deliberately left alone.
+
+- [x] UI-38 — The conversation, drawn as a thread.
+  - **What was built:** `components/RevisionThread.tsx`, and `revisions` on the report type. Each
+    round is two things somebody said, oldest first, with two short lists under them.
+  - **Conclusion:** every sentence in it comes from the service. The screen adds "You", "The
+    agent", "Changed" and "Left alone" and nothing else — it does not summarise a round, does not
+    reorder them, and does not say whether a rework was any good.
+  - **Be aware:** a round the agent could not answer is **marked**, in the stop colour, rather
+    than hidden. An unchanged report that failed and an unchanged report that was reviewed and
+    left alone look identical otherwise, and only one of them is worth sending back again.
+
+- [x] UI-39 — The note box, and waiting while the agent works.
+  - **What was built:** the box on `ReportCard.tsx` is now a message box. It disables itself while
+    the rework runs and the button shows the spinner that was already there.
+  - **Conclusion: this is the first thing on this screen that changes what the system concluded.**
+    Approving records a decision and rewording changes what a report carries; this sends a
+    sentence to an agent and gets a different report back.
+  - **Be aware:** there is **no progress and no commentary** while it runs, and a rework is
+    several model calls. The service narrates itself into a stream nobody is reading — wiring
+    that up is written down in DESIGN.md under **Would improve**, and it is the obvious next
+    thing here.
+  - **Be aware:** `chat/pageWords.ts` went from two sentences to three. The new one says the
+    conversation is waiting on the representative, because the service sends that as a flag and
+    a flag cannot be read.
+
+- [ ] UI-40 — Tried in a browser.
+  - **Not done.** The thread was driven through the real endpoints from the test suite, and the
+    project builds, typechecks and lints clean. Nobody has watched a rework happen on screen. The
+    thing most likely to look wrong is a long conversation pushing the note box off the bottom of
+    a tall report card, and the thing most likely to *feel* wrong is the silence while it runs.
+
 ## Reference — what the endpoint returns
 
 Field names as they appear on the wire, so UI-3 does not have to be reverse-engineered from
@@ -709,5 +745,9 @@ is still waiting.
 An email **can** be reworded now (UI-23) and **can** be sent (UI-24), but the send reaches
 nothing and the edit is kept nowhere. Both are simulations on a screen, not stages of the
 system — and the real rewording endpoint now exists beside them, unused.
+
+Sending a report back is **not** a simulation any more (UI-38, UI-39): the note reaches the
+service, an agent reworks the report around it, and what comes back is a new version. What is
+missing there is any sign of it happening — the screen goes quiet for as long as the rework takes.
 
 There are also **no tests for the UI**, and it is outside the checks that run before a push.

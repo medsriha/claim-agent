@@ -42,6 +42,7 @@ failure that happened to a claim.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TypeVar
 
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, ConfigDict
@@ -81,6 +82,15 @@ from claim_agent.shipbob.evidence_client import EvidenceClient
 from claim_agent.storage.precedent_store import PrecedentSet
 
 logger = get_logger(__name__)
+
+AnyConclusion = TypeVar("AnyConclusion", bound=InvestigationConclusion)
+"""Any answer built on the investigation's own form.
+
+It is the investigation's conclusion on a first pass and a reworked one after a
+representative sent the report back, which is that same form with three fields added
+(FR-R.9). Naming it is what lets one settling function serve both without either caller
+having to check what it was handed.
+"""
 
 CLOSING_REQUEST = (
     "Now give your conclusion for this one product: what each of the four pieces of "
@@ -319,7 +329,7 @@ async def investigate_line(
         claim_line_id=line.claim_line_id,
     )
 
-    investigated = _settle(
+    investigated = settle_conclusion(
         outcome,
         line=line,
         shared_evidence=shared_evidence,
@@ -346,8 +356,8 @@ async def investigate_line(
     return investigated
 
 
-def _settle(
-    outcome: LoopOutcome[InvestigationConclusion],
+def settle_conclusion(
+    outcome: LoopOutcome[AnyConclusion],
     *,
     line: ClaimLine,
     shared_evidence: Sequence[EvidenceFinding],
@@ -365,6 +375,30 @@ def _settle(
     rules applied, and its email finished. And an email the checks refuse also goes to a
     person, because a representative cannot be shown wording that broke the rule about
     who writes figures (FR-1.21, NFR-4).
+
+    **Reworking a report after a representative sent it back runs through here too**, and
+    that is deliberate: FR-R.7 says a reconsidered figure takes the same controlled path as
+    the first one, and FR-R.8 says feedback cannot make a rule give way. Both are true for
+    free if a reworked answer is settled by the very same function. That is why this takes
+    any conclusion built on the investigation's form rather than that form alone — a
+    reworked answer is the same form with three fields added (FR-R.9).
+
+    Args:
+        outcome: What one pass came back with — its conclusion, or nothing and a reason.
+        line: The one product being settled.
+        shared_evidence: What the claim settled once about the invoice, the customer
+            confirmation and the outer packaging, which wins over this run's own read of
+            them (FR-1a.3). Empty when nothing was settled, and when the caller has
+            already merged an earlier pass's findings into the conclusion itself, which is
+            what a rework does.
+        invoice: ShipBob's priced record of the shipment, or `None` if it could not be had.
+        policy: The thresholds this claim is judged by, the reimbursement cap included.
+        contact_email: Where a merchant email would go. `None` when the claim names nobody.
+
+    Returns:
+        The finished write-up: the evidence, the judgements, the recommendation that
+        stands, the figure and its working, the concerns, the email, and the record of how
+        it was reached.
     """
     if outcome.answer is None:
         return _a_run_that_gave_up(
@@ -455,7 +489,7 @@ def _requested_details(
 
 
 def _a_run_that_gave_up(
-    outcome: LoopOutcome[InvestigationConclusion],
+    outcome: LoopOutcome[AnyConclusion],
     *,
     line: ClaimLine,
     shared: Sequence[EvidenceFinding],
@@ -586,7 +620,7 @@ def _hand_it_to_a_person(
     )
 
 
-def _ran_out_of_steps(outcome: LoopOutcome[InvestigationConclusion]) -> bool:
+def _ran_out_of_steps(outcome: LoopOutcome[AnyConclusion]) -> bool:
     """Say whether the run stopped without concluding because its steps ran out (FR-1.16).
 
     Both halves matter. A run that spent its last step and *did* conclude has finished

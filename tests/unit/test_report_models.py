@@ -18,6 +18,7 @@ from claim_agent.report.models import (
     InvestigationReportContent,
     Report,
     ReportState,
+    RevisionTurn,
     ScreeningReportContent,
     SiblingLine,
 )
@@ -341,3 +342,46 @@ def test_a_sibling_row_carries_what_a_representative_needs_to_see_at_a_glance() 
 
     assert sibling.state is ReportState.AWAITING_REVIEW
     assert sibling.amount_usd is None
+
+
+# --- The conversation on a report (FR-R.13) -----------------------------------
+
+
+def a_turn(**overrides: Any) -> RevisionTurn:
+    """One round of a representative and the agent talking about a report."""
+    fields: dict[str, Any] = {
+        "turn": 1,
+        "from_version": 1,
+        "feedback": "The packaging photo is the box, not the product.",
+        "reply": "You were right; I have marked it missing.",
+        "changed": ("Marked the outer packaging photograph missing.",),
+    }
+    fields.update(overrides)
+    return RevisionTurn(**fields)
+
+
+def test_a_report_that_has_never_been_sent_back_carries_no_conversation() -> None:
+    """FR-R.13: an empty conversation is the ordinary case, not a missing record."""
+    assert a_report().revisions == ()
+
+
+def test_the_rounds_of_a_conversation_have_to_be_numbered_in_order() -> None:
+    """FR-R.13: a record of how a decision was reached has to be readable in sequence."""
+    with pytest.raises(ValidationError, match="numbered in order"):
+        a_report(version=3, revisions=(a_turn(), a_turn(turn=3, from_version=2)))
+
+
+def test_a_round_cannot_answer_a_version_that_did_not_exist_yet() -> None:
+    """FR-R.13: a note is written on a version the representative was actually looking at."""
+    with pytest.raises(ValidationError, match="came before"):
+        a_report(version=2, revisions=(a_turn(from_version=2),))
+
+
+def test_a_round_says_whether_the_report_was_actually_reworked() -> None:
+    """NFR-4: a rework that could not run is recorded rather than looking like one that did."""
+    report = a_report(
+        version=2,
+        revisions=(a_turn(reply="The model could not be reached.", changed=(), reworked=False),),
+    )
+
+    assert report.revisions[0].reworked is False

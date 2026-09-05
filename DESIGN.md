@@ -88,10 +88,12 @@ and then held to a fixed limit that no claim may exceed. The figure is an estima
 rather than a sum to check — see the note on that under stage 3's own section.
 
 **4. A person decides, then we act.** The rep reads the report. They can approve it, edit the
-email wording, or send it back with feedback in their own words — in which case we rework the
-report around what they said and hand it back for another look. There is no timeout and no
-automatic approval; a person approving is the only way out. Once they do, we send the email and
-submit the payment, and we record exactly what was sent.
+email wording, or send it back with feedback in their own words — in which case the same agent
+reworks the report and the email around what they said, tells them what it changed, and hands it
+back for another look. That can go round as many times as they like, and each round is shown the
+whole conversation so far. There is no timeout and no automatic approval; a person approving is
+the only way out. Once they do, we send the email and submit the payment, and we record exactly
+what was sent.
 
 A rep's correction is also remembered against that merchant, so the next claim from them starts
 better informed.
@@ -144,17 +146,27 @@ remain structurally unavailable to the agent. See "Additional tools prompted by 
 **The screen shows all of it.** A representative picks a claim and watches the quick checks,
 then the similar past claims, then the investigation reporting each thing it does as it does
 it, and finally a report per damaged product with the working behind its figure and a draft
-email. Two things are worth being clear about: the AI recommends and never decides, and the
+email. Under each report they can type what is wrong with it and watch it come back reworked,
+with the conversation so far above the box. Two things are worth being clear about: the AI recommends and never decides, and the
 the money is the AI's judgement of what the damage is worth, held to a limit no claim may
 exceed. That last part changed recently and deliberately; the figure used to be arithmetic
 nobody could argue with, and now it is an estimate somebody has to weigh.
 
-**Half of stage 4 exists now.** What an investigation found is written into a report a person
+**Most of stage 4 exists now.** What an investigation found is written into a report a person
 reads, kept, and fetched back; a representative can read a claim's reports, approve one — as it
-stands, after rewording the email, or at a different figure — or send it back with a note. What
-they chose is recorded. The other half does not exist: **nothing has ever been sent to a merchant
-or paid out**, an approval stops at being written down, and a report sent back is picked up by
-nothing. There is also no sign-in on any of it.
+stands, after rewording the email, or at a different figure — or send it back with a note saying
+what is wrong. What they chose is recorded.
+
+**A report sent back is now picked up.** The same agent that investigated the product reworks the
+report and the merchant's email around what the representative said, answers them directly, and
+says what it changed and what it deliberately left alone. The result is the next version of the
+report, waiting to be decided on; every earlier version is kept, and so is the whole conversation,
+which the agent is shown again each time so a later note cannot undo an earlier correction. What
+the representative said is also remembered against the merchant, so their next claim starts
+knowing it.
+
+The part that does not exist is the acting: **nothing has ever been sent to a merchant or paid
+out**, and an approval stops at being written down. There is also no sign-in on any of it.
 
 **There is a third screen, for the business rather than for one claim.** It shows how often
 representatives took the advice exactly as it stood, how far they changed it when they did, how
@@ -2369,6 +2381,128 @@ answers rather than failures. Nothing here raises.
 `tests/unit/test_domain_evidence_integrity.py`.
 
 ---
+### Sending a report back, and the conversation that follows
+
+**What it does** — Lets a representative reply to a report in their own words — "the packaging
+photo is the box, not the product", "why so little?", "check the invoice again" — and have the
+system rework the report and the merchant's email around what they said, then hand it back. The
+representative can reply again, as many times as they like, and the system remembers the whole
+exchange.
+
+**Why we need it** — Sending a report back already recorded a note and then did nothing with it;
+this is the half that was missing. It is how a representative uses their judgement without doing
+the work by hand: they say what is wrong, and the system does the reworking (FR-R.1 to FR-R.13,
+and the third of the three things FR-2.8 says a representative may do). It also feeds what they
+said back into what the system knows about that merchant, so the same correction does not have
+to be made again on their next claim (FR-R.14).
+
+**How it works**
+
+1. A representative types a note on a report and sends it back. What they said is recorded as a
+   decision, exactly as before, and the report is parked.
+2. Their note is also written down against the merchant, so the next claim from that merchant
+   starts knowing about it.
+3. The same agent that investigated the product is asked again. It is given the report as it
+   stands — every finding, every judgement, the amount and its working, the concerns, and the
+   email — plus the whole conversation so far, and then the new note.
+4. It is told plainly that the earlier findings are **a record of what was seen**, not its own
+   conclusions to defend, and that the representative is right about what is wrong. Its job is to
+   work out what follows from that.
+5. It can look again at a particular photograph where the note points there. It holds exactly the
+   same tools as the first pass, which means it still cannot send anything or pay anybody.
+6. It answers with a complete report — the same shape as the first one, not a patch — plus three
+   extra things: what it changed, what it deliberately left alone, and a reply to the
+   representative in plain words. The reply is where it asks a question, if it needs something
+   only the representative can tell it.
+7. The same rules that governed the first pass run again over that answer. The amount goes
+   through the same path — read as exact money, held to the limit — and the merchant's email is
+   rewritten to match whatever now stands.
+8. The result is filed as the **next version** of the report, with the conversation attached, and
+   goes back to the representative to decide on. The version they were looking at is untouched.
+
+**What it connects to** — It reads the report from the report store and the case, parcel and order
+from ShipBob. It uses the same agent, the same tools, the same rules and the same email builder as
+the first investigation. It writes a new report version, a decision record, and one merchant
+correction. Nothing it can reach is able to send an email or move money.
+
+**Choices we made**
+
+- **The same agent, not a second one.** Revision is the same task with one more input, so it runs
+  the same code that investigated the product in the first place: the same tools, the same answer
+  form, and the same rules applied afterwards. Two agents would need two copies of every rule, and
+  any drift between them would show up as a representative's correction quietly changing how a
+  rule is applied.
+- **The agent's answer form is literally the investigation's form with three fields added.** Not a
+  copy of it. That is what makes "the same schema, same requirements" true in code rather than by
+  intention.
+- **A representative's note is authoritative about what is wrong, and about nothing else.** It
+  cannot make a claim the eligibility rules stopped eligible, cannot raise the limit, and cannot
+  excuse a missing piece of evidence. Where a note asks for one of those, the agent is told to say
+  so plainly in its reply rather than quietly complying or quietly ignoring it. This is the one
+  place the system does not defer to the person.
+- **Findings the note does not touch are carried forward by code, not by asking nicely.** If the
+  reworked answer says nothing about a piece of evidence or one of the four questions, the earlier
+  finding is used. Left to the wording alone, a reworked answer that mentioned only the one thing
+  being corrected would have quietly turned the other three into "we never established that", and
+  an approved claim would have collapsed because somebody queried a sentence.
+- **Every note produces a new version, even when the reworking fails.** A model that could not be
+  reached, or a run that used up its steps, still produces a version — one whose findings are the
+  previous ones unchanged and whose reply says plainly that the report could not be reworked and
+  why. The alternative was an error page, which would have lost both the note and the record of it.
+- **One call, one reply.** The representative waits while the agent works, with no running
+  commentary. The investigation streams what it is doing; this does not, because it was not worth
+  a second streaming endpoint for a step that takes a fraction of the time. It is written up under
+  [Would improve](#would-improve).
+- **A claim the quick checks stopped cannot be reworked**, and neither can a claim whose split was
+  never settled. There is no investigation to redo in either case, and in the first the verdict
+  came from fixed rules that feedback is not allowed to overturn. Both still accept a note — it is
+  recorded, and the reply says why nothing was reworked.
+- **The note is shown to the agent inside a marked block**, like anything else the system did not
+  write itself. The wording around it says what makes this block different: it is authoritative
+  about what is wrong with the report, and still cannot change the rules.
+- **The revision gets the same step allowance as an investigation.** It is the same agent doing
+  the same kind of work, and a separate number to keep in step with the first one would be one
+  more provisional value nobody has signed off.
+- **Feedback about evidence shared across the claim is flagged, not propagated.** If the note is
+  about the invoice, the customer confirmation or the photograph of the box, those findings are
+  shared by every product on the claim — so correcting one product ought to correct the others.
+  The agent says when a note is of that kind and the reworked report carries a concern naming it,
+  so a representative knows to send the sibling back too. **Doing it for them is not built.**
+
+**When things go wrong**
+
+- **The model cannot be reached, or the run gives up.** The report comes back unchanged with a
+  reply saying so, and the representative can send it back again or approve it as it stands.
+- **ShipBob cannot be reached** to re-read the case. The same: a version whose reply says the
+  claim's records could not be read.
+- **The reworked email is refused** by the checks that keep money out of model wording. The report
+  goes to the representative with no email and the reason among its concerns, exactly as it would
+  during a first pass.
+- **The merchant correction cannot be written.** The reworking still happens. Losing a note
+  against a merchant is worth less than losing the reworking the representative is waiting for,
+  and it is logged.
+- **The report was already approved.** The note is refused. An approval is final.
+
+**Not ready for production** — The reworking runs inside the web request, so a slow model holds a
+connection open and a dropped connection loses the answer (the note and its record survive). There
+is still no sign-in, so the conversation cannot say which representative said what. Shared-evidence
+feedback is flagged and not propagated. All of these are in
+[Future production](#future-production).
+
+**On screen** — The report card grows a conversation under it: what the representative said, what
+the agent said back, what it changed and what it left alone, oldest first. The message box at the
+bottom is how the next note is sent. While the agent works, the box is disabled and a spinner runs
+— the screen says nothing about what it is doing, because the service is not telling it.
+
+**Where the code is** — `src/claim_agent/agent/revise.py` is the layer;
+`src/claim_agent/agent/prompts.py` holds every word it says to the model and
+`src/claim_agent/agent/schemas.py` the form it answers on; `src/claim_agent/report/build.py` turns
+that into the next version of the report and `src/claim_agent/report/models.py` defines what a
+turn of the conversation holds; `src/claim_agent/api/routes/reports.py` is the way in. On the
+screen: `web/src/components/RevisionThread.tsx`.
+
+---
+
 
 ## Future production
 
@@ -2448,10 +2582,10 @@ finds in production.
   server forwards requests to the system on the page's behalf, which is what avoids opening an
   unauthenticated service up to any web page anywhere. A built page served from a real address
   has no such helper, and nothing has been decided about what it would use instead.
-- **Anything on the screen beyond the quick checks.** It shows what has been built, which is one
-  stage of four. Approving a report, sending an email back with feedback, seeing a claim's
-  separate products — all of those are later requirements with nothing behind them yet. The
-  wording of an email *can* be edited, but only on screen: see the two entries below.
+- **Anything on the screen beyond the quick checks.** It shows what has been built. Approving a
+  report and sending one back with feedback are both real now and both reach the service; seeing
+  a claim's separate products is still a later requirement with nothing drawing it. The wording
+  of an email *can* be edited, but only on screen: see the two entries below.
 - **Any real routing after representative clarification.** The report now asks the rep directly
   and generates no merchant email. A later operational workflow still has to decide where the
   claim goes after the rep clarifies it.
@@ -2469,10 +2603,15 @@ finds in production.
   requirement that a representative's corrections improve the next claim from that merchant is
   still entirely unmet, even though the screen now has the edit that would feed it.
 
-- **The revision loop, and the sending that follows an approval.** Splitting a claim into
-  products, investigating each one, and the report a person decides from all exist now. Reworking
-  a report around what a representative said, and sending an approved email or paying anything,
-  do not.
+- **The sending that follows an approval.** Splitting a claim into products, investigating each
+  one, the report a person decides from, and reworking that report around what a representative
+  said all exist now. Sending an approved email or paying anything does not.
+- **Propagating a correction across a claim's other products.** Three of the four pieces of
+  evidence describe the parcel rather than any one product, so correcting one of them ought to
+  correct every product on the claim. The agent says when a note is of that kind and the reworked
+  report carries a concern naming the other products, and that is as far as it goes: a
+  representative has to send each of them back themselves, and a claim with four products means
+  making the same correction four times.
 - **Anywhere to keep a screening asked for on its own.** Investigating a claim writes a report
   down, and a screening request does not — so a claim the checks turn away is only kept if
   somebody asks for it to be investigated. Nothing records what a run did step by step either, so
@@ -2567,6 +2706,30 @@ finds in production.
   come from until the review stage exists.
 
 ### Could break
+
+- **Reworking a report happens inside the web request that asked for it.** A representative sends
+  a note and waits with a spinner while a model call or several run. Three things follow. A slow
+  model holds a connection open, so enough people sending reports back at once would exhaust the
+  connections before it exhausted anything else. A dropped connection loses the reworked report —
+  the note and its record survive, because they are written first, so sending it back again is
+  safe, but the work is paid for twice. And nothing bounds how long the request may take beyond
+  the run's own step allowance.
+- **An agent shown its earlier answer may argue for it.** Reworking a report puts the report's own
+  findings in front of the same agent that produced them, which is exactly the setup that makes a
+  model defend what it already said. Two things push back — the findings are worded as
+  observations somebody recorded, and the answer has to state what it changed, which makes an
+  unchanged conclusion visible. Neither is a guarantee. Nothing measures how often a note produces
+  a report that changed nothing it should have changed.
+- **A note is remembered against the merchant whatever it says.** Every send-back writes one
+  correction, in the representative's own words, and nothing judges whether it was worth
+  remembering. A merchant sent back four times over a typo accumulates four notes, and every
+  future claim from them starts with all four in front of the agent. The requirement that a
+  correction be written from a *difference* rather than a narrative is about approvals and has no
+  equivalent here.
+- **Nothing stops a report going round for ever.** A representative may send one back any number
+  of times, and each round costs model calls and grows the history the next round is shown. That
+  is deliberate — approving is the only exit, by requirement — but there is no limit, no warning,
+  and no measure of a conversation that is not converging.
 
 - **A claim whose money is not in dollars can still be measured against a dollar limit.** The
   currency tool exists, but nothing forces the investigation to use it. A run that does not call it
@@ -2760,6 +2923,15 @@ finds in production.
   about before anybody compared two reports.
 
 ### Would improve
+
+- **Stream a rework the way an investigation is streamed.** The service already narrates itself
+  while it works, and a rework emits those messages into a stream nobody is reading. Sending them
+  to the screen would replace a silent spinner with the agent saying which photograph it is
+  looking at again — and it is the same machinery, so the cost is a second streaming endpoint
+  rather than anything new.
+- **Rework the claim's other products when a correction is about evidence they share.** Today the
+  reworked report names them and a representative sends each one back by hand. Doing it for them
+  is what FR-R.1a actually asks for.
 
 - **Work out the currency before the investigation starts** and hand it to the run as a fact, the
   way precedent already is. That removes the "did it remember to check?" failure entirely.

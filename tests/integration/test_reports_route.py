@@ -2,19 +2,31 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 import pytest
+import respx
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from langchain_core.messages import AIMessage
+from tests.fakes.model import scripted
+from tests.fixtures.attachments import INVOICE_342578703
+from tests.fixtures.shipbob import CASE_1001, ORDER_1001, SHIPMENT_1001, mock_shipbob
 from tests.unit.test_report_models import a_report, a_screening_report
 
+from claim_agent.agent.llm import StructuredModel
+from claim_agent.agent.schemas import EvidenceJudgement, RevisionConclusion
+from claim_agent.api.deps import get_models
 from claim_agent.app import create_app
+from claim_agent.domain.evidence import EvidenceKind, EvidenceState
+from claim_agent.domain.outcome import Recommendation
 from claim_agent.report.models import Report, ReportState
 from claim_agent.settings import Settings
 from claim_agent.storage.decision_store import DecisionStore
+from claim_agent.storage.merchant_memory import MerchantMemory
 from claim_agent.storage.report_store import ReportStore
 
 pytestmark = pytest.mark.integration
@@ -300,13 +312,18 @@ async def test_a_claim_the_quick_checks_stopped_can_be_approved(
     assert decisions.count() == 1
 
 
-# --- Sending a report back (FR-2.8) ------------------------------------------
+# --- Sending a report back, and what comes back (FR-2.8, FR-R.1 to FR-R.14) ---
 
 
-async def test_sending_a_report_back_parks_it_and_records_the_note(
+async def test_sending_a_report_back_records_the_note_in_the_reps_own_words(
     client: AsyncClient, store: ReportStore, decisions: DecisionStore
 ) -> None:
-    """FR-2.8: the rep says what is wrong in their own words, and it is kept as written."""
+    """FR-2.8, FR-C.1: the rep says what is wrong in their own words, kept as written.
+
+    Nothing is stood in for here, so nothing reworks the report — ShipBob cannot be reached
+    from a test process. What the note itself does is still the whole of what this checks,
+    and the rework has its own tests below.
+    """
     store.record(a_report())
 
     body = (
@@ -316,9 +333,68 @@ async def test_sending_a_report_back_parks_it_and_records_the_note(
         )
     ).json()
 
-    assert body["state"] == "changes_requested"
     assert body["reviews"][-1]["rep_words"] == ("The packaging photo is the box, not the product.")
     assert decisions.count() == 1
+
+
+async def test_a_note_the_agent_could_not_answer_still_leaves_a_report_to_act_on(
+    client: AsyncClient, store: ReportStore
+) -> None:
+    """NFR-4: a rework that could not run must never cost a rep the work they were deciding on.
+
+    ShipBob is unreachable from this test process, so the rework never starts. What comes
+    back is the next version with every finding unchanged and a sentence saying why.
+    """
+    before = a_report()
+    store.record(before)
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1001-L01/send-back", json={"feedback": "Look at the box again."}
+        )
+    ).json()
+
+    assert body["version"] == before.version + 1
+    assert body["state"] == "awaiting_review"
+    assert body["recommendation"] == before.recommendation
+    assert body["revisions"][-1]["reworked"] is False
+    assert "could not be read" in body["revisions"][-1]["reply"]
+
+
+async def test_fr_r_14_what_a_representative_said_is_remembered_against_the_merchant(
+    client: AsyncClient, store: ReportStore, settings: Settings
+) -> None:
+    """FR-R.14, FR-3.8: the system should be better on the merchant's next claim, not just this one."""
+    store.record(a_report())
+
+    await client.post(
+        "/reports/RPT-CASE-1001-L01/send-back",
+        json={"feedback": "This merchant always sends the invoice separately, by email."},
+    )
+
+    remembered = MerchantMemory(settings.database_path).corrections_for("334430")
+    assert [correction.summary for correction in remembered] == [
+        "This merchant always sends the invoice separately, by email."
+    ]
+    assert remembered[0].case_id == "CASE-1001"
+
+
+async def test_a_claim_the_quick_checks_stopped_records_the_note_and_reworks_nothing(
+    client: AsyncClient, store: ReportStore, decisions: DecisionStore
+) -> None:
+    """FR-R.8: feedback cannot overturn a verdict that came from fixed rules."""
+    store.record(a_screening_report())
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1004/send-back", json={"feedback": "Sixty days is too strict."}
+        )
+    ).json()
+
+    assert decisions.count() == 1
+    assert body["revisions"][-1]["reworked"] is False
+    assert "eligibility checks" in body["revisions"][-1]["reply"]
+    assert body["content"] == a_screening_report().content.model_dump(mode="json")
 
 
 async def test_two_different_notes_on_one_report_are_two_decisions(
@@ -383,3 +459,180 @@ async def test_a_store_that_cannot_be_read_fails_rather_than_reporting_an_empty_
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "storage_unavailable"
+
+
+# --- The rework itself, end to end (FR-R.1, FR-R.9, FR-R.12, FR-R.13) --------
+
+
+def a_reworked_answer(**overrides: Any) -> RevisionConclusion:
+    """What the agent comes back with: the box was never photographed after all."""
+    fields: dict[str, Any] = {
+        "evidence": (
+            EvidenceJudgement(
+                kind=EvidenceKind.OUTER_PACKAGING_PHOTO,
+                state=EvidenceState.MISSING,
+                observed="That image is the product itself, so the box was never photographed.",
+            ),
+        ),
+        "recommendation": Recommendation.REQUEST_INFO,
+        "reasoning": "The outer box was never photographed, so the claim cannot be settled yet.",
+        "requested_details": ("a photograph of the outer shipping box with the label visible",),
+        "changed": ("Marked the outer packaging photograph missing, as you said.",),
+        "left_unchanged": ("The invoice and the customer confirmation.",),
+        "reply_to_representative": "You were right, and I have gone back to the merchant for it.",
+        "email_subject": "About your damaged shipment",
+        "email_body": (
+            "Please send a photograph of the outer shipping box with the label visible."
+        ),
+    }
+    fields.update(overrides)
+    return RevisionConclusion.model_validate(fields)
+
+
+@pytest.fixture
+def a_scripted_rework(app: FastAPI, shipbob: respx.Router) -> Iterator[list[RevisionConclusion]]:
+    """Answer the rework from a script, and serve CASE-1001 from a stand-in ShipBob.
+
+    The list handed back is the queue: append an answer for each rework a test will drive,
+    in the order it will drive them.
+    """
+    mock_shipbob(shipbob, case=CASE_1001, shipment=SHIPMENT_1001, order=ORDER_1001)
+    # The rework prices the shipment before it starts, the same way an investigation does, so
+    # the stand-in has to answer that too or the request escapes to a name nothing serves.
+    shipbob.post("/invoices/generate").respond(200, json=INVOICE_342578703)
+    answers: list[RevisionConclusion] = []
+
+    def models() -> tuple[object, StructuredModel]:
+        """Both models, from the script, built only once a rework actually needs them."""
+        return (
+            scripted(*[AIMessage(content="I have read the note.") for _ in answers]),
+            StructuredModel(scripted(*answers), max_attempts=1),
+        )
+
+    app.dependency_overrides[get_models] = lambda: models
+    yield answers
+    app.dependency_overrides.clear()
+
+
+async def test_fr_r_1_a_note_gets_the_report_reworked_and_handed_back(
+    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+) -> None:
+    """FR-R.1, FR-R.9: the rep says what is wrong, and the agent reworks the whole report."""
+    store.record(a_report())
+    a_scripted_rework.append(a_reworked_answer())
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1001-L01/send-back",
+            json={"feedback": "The packaging photo is the box, not the product."},
+        )
+    ).json()
+
+    assert body["version"] == 2
+    assert body["state"] == "awaiting_review"
+    assert body["recommendation"] == "request_info"
+    assert body["amount_usd"] is None
+
+
+async def test_fr_r_10_the_reworked_report_says_what_changed_and_what_did_not(
+    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+) -> None:
+    """FR-R.10: a rep confirms their feedback was understood without re-reading everything."""
+    store.record(a_report())
+    a_scripted_rework.append(a_reworked_answer())
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1001-L01/send-back",
+            json={"feedback": "The packaging photo is the box, not the product."},
+        )
+    ).json()
+
+    turn = body["revisions"][-1]
+    assert turn["reworked"] is True
+    assert turn["feedback"] == "The packaging photo is the box, not the product."
+    assert turn["reply"] == "You were right, and I have gone back to the merchant for it."
+    assert turn["changed"] == ["Marked the outer packaging photograph missing, as you said."]
+    assert turn["left_unchanged"] == ["The invoice and the customer confirmation."]
+
+
+async def test_fr_r_11_the_merchant_email_is_rewritten_to_match(
+    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+) -> None:
+    """FR-R.11: a revised recommendation with a stale email is an inconsistent state."""
+    store.record(a_report())
+    a_scripted_rework.append(a_reworked_answer())
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1001-L01/send-back",
+            json={"feedback": "The packaging photo is the box, not the product."},
+        )
+    ).json()
+
+    assert "outer shipping box" in body["drafted_email"]["body"]
+    assert body["drafted_email"]["is_draft"] is True
+
+
+async def test_fr_r_13_the_version_the_representative_decided_on_can_still_be_read_back(
+    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+) -> None:
+    """FR-R.13: every version is kept, because it is the record of how a decision was reached."""
+    store.record(a_report())
+    a_scripted_rework.append(a_reworked_answer())
+
+    await client.post(
+        "/reports/RPT-CASE-1001-L01/send-back", json={"feedback": "Look at the box again."}
+    )
+
+    first = (await client.get("/reports/RPT-CASE-1001-L01?version=1")).json()["report"]
+    assert first["recommendation"] == "approve"
+    assert first["revisions"] == []
+
+
+async def test_fr_r_12_a_second_note_carries_the_first_one_into_the_rework(
+    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+) -> None:
+    """FR-R.12: each cycle carries the full feedback history, so a correction is not undone."""
+    store.record(a_report())
+    a_scripted_rework.append(a_reworked_answer())
+    a_scripted_rework.append(
+        a_reworked_answer(
+            changed=("Also asked for a clearer invoice.",),
+            reply_to_representative="Added the invoice to what the merchant is asked for.",
+        )
+    )
+
+    await client.post(
+        "/reports/RPT-CASE-1001-L01/send-back", json={"feedback": "The packaging photo is wrong."}
+    )
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1001-L01/send-back",
+            json={"feedback": "Ask for the invoice again while you are there."},
+        )
+    ).json()
+
+    assert body["version"] == 3
+    assert [turn["feedback"] for turn in body["revisions"]] == [
+        "The packaging photo is wrong.",
+        "Ask for the invoice again while you are there.",
+    ]
+    assert [turn["turn"] for turn in body["revisions"]] == [1, 2]
+
+
+async def test_a_reworked_report_can_then_be_approved(
+    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+) -> None:
+    """FR-2.9: a case may cycle any number of times and still needs a person to release it."""
+    store.record(a_report())
+    a_scripted_rework.append(a_reworked_answer())
+
+    await client.post(
+        "/reports/RPT-CASE-1001-L01/send-back", json={"feedback": "Look at the box again."}
+    )
+    response = await client.post("/reports/RPT-CASE-1001-L01/approve", json={})
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "approved"
+    assert response.json()["version"] == 2

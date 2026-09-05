@@ -1962,3 +1962,78 @@ p {
   color: var(--sb-stop);
   font-size: 0.85rem;
 }
+
+/* The conversation between a representative and the agent about one report (FR-R.13).
+   Laid out as a thread rather than a table: each round is two things somebody said, and
+   reading it top to bottom is how a representative checks they were understood. */
+
+.revision-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.revision-thread h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sb-ink-soft);
+}
+
+.revision-thread ol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.revision-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--sb-canvas);
+  border-radius: var(--sb-radius-small);
+}
+
+.revision-said {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--sb-ink);
+}
+
+/* A round the agent could not answer. Marked rather than hidden: a report that is
+   unchanged because a run failed must not read like one that was reviewed and left. */
+.revision-said.is-not-reworked {
+  color: var(--sb-stop);
+}
+
+.revision-who {
+  display: inline-block;
+  min-width: 5.5rem;
+  font-weight: 600;
+  color: var(--sb-ink-soft);
+}
+
+.revision-list {
+  font-size: 0.8rem;
+  color: var(--sb-ink-soft);
+}
+
+.revision-list-heading {
+  font-weight: 600;
+}
+
+.revision-list ul {
+  margin: 0.15rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.revision-waiting {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--sb-ink-soft);
+  font-style: italic;
+}

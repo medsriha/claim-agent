@@ -112,6 +112,46 @@ class ReportReview(BaseModel):
     over_the_cap_by: Decimal | None = None
 
 
+class RevisionTurn(BaseModel):
+    """One round of the conversation between a representative and the agent (FR-R.13).
+
+    A representative sends a report back with a note; the agent reworks it and answers. That
+    exchange is one turn, and every turn a report has been through is kept on it, oldest
+    first. Together they are the record of how a decision was reached and where a person
+    intervened.
+
+    There is exactly one turn per version after the first, because every note produces a new
+    version — including a note whose rework did not happen, whose turn says so and whose
+    findings are the previous ones unchanged.
+
+    Fields:
+        turn: Which round this is, counting from 1.
+        from_version: The version of the report the representative was looking at when they
+            wrote the note. Reading that version back is how somebody sees what they saw.
+        feedback: What they said, in their own words, exactly as written.
+        reply: What the agent said back to them. Where the rework did not happen, this is
+            the reason it did not.
+        changed: What the agent changed in response, one item each (FR-R.10).
+        left_unchanged: What the note did not bear on, carried forward as it was.
+        needs_reply: Whether the agent's reply asks the representative a question. It changes
+            nothing about what is recommended; it says the conversation is waiting on a
+            person rather than finished.
+        reworked: Whether the report was actually reworked. False means the run could not be
+            completed and the findings above are the previous ones.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    turn: int
+    from_version: int
+    feedback: str
+    reply: str
+    changed: tuple[str, ...] = ()
+    left_unchanged: tuple[str, ...] = ()
+    needs_reply: bool = False
+    reworked: bool = True
+
+
 class SiblingLine(BaseModel):
     """One other damaged product on the same claim, looked up at read time."""
 
@@ -156,6 +196,7 @@ class Report(BaseModel):
     drafted_email: DraftedEmail | None
     content: ReportContent
     reviews: tuple[ReportReview, ...] = ()
+    revisions: tuple[RevisionTurn, ...] = ()
     created_at: UtcDatetime
 
     @model_validator(mode="before")
@@ -265,6 +306,15 @@ class Report(BaseModel):
             raise ValueError("A report cannot have had fewer than no decisions taken on it.")
         if self.decisions_taken != len(self.reviews):
             raise ValueError("Every review action must have one structured review entry.")
+        for position, turn in enumerate(self.revisions, start=1):
+            # The conversation is the record of how a decision was reached (FR-R.13), so it has
+            # to be readable in the order it happened. A turn out of sequence, or one claiming
+            # to answer a version that did not exist when it was written, is a garbled record
+            # rather than a surprising one.
+            if turn.turn != position:
+                raise ValueError("The rounds of a conversation must be numbered in order.")
+            if not 1 <= turn.from_version < self.version:
+                raise ValueError("A round must answer a version of this report that came before.")
         return self
 
 

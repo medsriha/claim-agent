@@ -158,7 +158,7 @@ async def investigate_claim(
         logger.info("claim_split_unsettled", case_id=triage.case_id, ambiguity=triage.ambiguity)
         return ClaimInvestigation(case_id=triage.case_id, triage=triage)
 
-    invoice = await _invoice_if_one_can_be_had(record=record, evidence=evidence, cache=shared_cache)
+    invoice = await invoice_for_claim(record=record, evidence=evidence, cache=shared_cache)
 
     # Looked up before the products fan out, and one product at a time. The store is a
     # file on disk and reading it blocks, so doing it here keeps that off the runs that
@@ -441,7 +441,7 @@ def _held_back_by_the_claim_cap(line: LineInvestigation, complaint: str) -> Line
     )
 
 
-async def _invoice_if_one_can_be_had(
+async def invoice_for_claim(
     *, record: CaseRecord, evidence: EvidenceClient, cache: ObservationCache
 ) -> Invoice | None:
     """Fetch the priced invoice once for the whole claim, or come back with nothing.
@@ -451,6 +451,10 @@ async def _invoice_if_one_can_be_had(
     price this shipment, or the case names no shipment or no merchant — and the products
     that needed a price then request representative clarification with that as the stated reason rather than being
     priced from somewhere else (FR-1.18).
+
+    **Reworking one product after a representative sent it back uses this too** (FR-R.7).
+    A reconsidered figure is priced against the same record the first one was, and a
+    second way of getting hold of it would be a second thing that could disagree.
     """
     shipment_id = record.case.shipment_id
     user_id = record.case.user_id

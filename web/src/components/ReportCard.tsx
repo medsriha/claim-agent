@@ -6,9 +6,10 @@ import { ApiFailure } from "../api/failure";
 import type { DraftedEmail, Report, ReportReview } from "../api/types";
 import { formatMoney, humanise } from "../display";
 import { StructuredReport } from "./LineReport";
+import { RevisionThread } from "./RevisionThread";
 import { Spinner } from "./Spinner";
 
-type Busy = "approving" | "sending back" | null;
+type Busy = "approving" | "reworking" | null;
 
 interface ReportCardProps {
   report: Report;
@@ -57,6 +58,8 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
 
       <ReviewHistory reviews={current.reviews} />
 
+      <RevisionThread revisions={current.revisions} />
+
       {email === null ? (
         <p className="report-note">No merchant email was produced for this report.</p>
       ) : settled || unavailableReason !== null ? (
@@ -78,11 +81,12 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
       ) : (
         <div className="report-actions">
           <label className="report-field">
-            <span>A note, if you are sending this back</span>
+            <span>What is wrong with this report</span>
             <textarea
               className="report-body"
               rows={3}
               value={feedback}
+              disabled={busy !== null}
               onChange={(event) => {
                 setFeedback(event.target.value);
               }}
@@ -112,10 +116,10 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
               className="button-secondary"
               disabled={busy !== null || feedback.trim() === ""}
               onClick={() =>
-                void act("sending back", () => sendReportBack(current.report_id, feedback))
+                void act("reworking", () => sendReportBack(current.report_id, feedback))
               }
             >
-              {busy === "sending back" ? <Spinner /> : null}
+              {busy === "reworking" ? <Spinner /> : null}
               Send back
             </button>
           </div>

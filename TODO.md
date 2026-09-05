@@ -406,11 +406,16 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
     the specific details the merchant must provide; rep-clarification reports carry no email.
   - **Be aware:** it is a separate structured field rendered once by the report card. A rewording
     replaces its subject and body, while its recipient always comes from the claim.
-- [ ] FR-2.8 — **two of the three actions.** Approving works, and so does rewording the email
-  before approving (which is a flag on the approval, not an action of its own — FR-2.8 reads it
-  that way and `RepAction` already said so). Sending a report back records the note and parks the
-  report, and **nothing picks it up**, because the stage that reworks one is Layer R. Do not tick
-  this until that exists.
+- [x] FR-2.8 — all three actions. Approving works, rewording the email before approving works
+  (which is a flag on the approval, not an action of its own — FR-2.8 reads it that way and
+  `RepAction` already said so), and sending a report back now records the note **and** gets the
+  report reworked around it.
+  - **Conclusion:** the third action was the one that had nothing behind it. It has Layer R
+    behind it now, so the note reaches the agent that wrote the report and comes back as the
+    next version of it.
+  - **Be aware:** the substance/wording line the requirement draws is enforced by where each
+    action goes, not by asking. A rewording only ever replaces the email's subject and body on
+    an approval; anything about what the report *says* has to go through feedback.
 - [x] FR-2.9 — approving is the only exit, and it is final.
   - **Conclusion:** written as an explicit state machine and tested transition by transition.
     `approved` is terminal: it cannot be sent back, and a *different* approval on it is refused
@@ -434,24 +439,64 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
 
 ## Layer R — Revision
 
-- [ ] FR-R.1
-- [ ] FR-R.1a
-- [ ] FR-R.2
-- [ ] FR-R.3
-- [ ] FR-R.4
-- [ ] FR-R.5
-- [ ] FR-R.6
-- [ ] FR-R.7 — Revision is not built. The requirement now follows FR-1.21: feedback about the
-  amount lets the agent propose a new exact figure with reasoning, and code reapplies the same
-  caps; unrelated feedback carries the existing amount forward unchanged.
-- [ ] FR-R.8
-- [ ] FR-R.9
-- [ ] FR-R.10
-- [ ] FR-R.11
-- [ ] FR-R.12
-- [ ] FR-R.13
-- [ ] FR-R.14 — blocked on FR-C.1 and FR-C.2, not on Layer R. There is no step anywhere that
-  captures a rep's correction, so there is nothing for this requirement to feed forward.
+- [x] FR-R.1 — a rework runs when a representative sends a report back, and on nothing else.
+  - **Conclusion:** there is one caller, `POST /reports/{id}/send-back`, and it records the note
+    as a decision before it starts. Nothing schedules, retries or triggers a rework by itself.
+- [ ] FR-R.1a — **half.** A rework touches one product's report and leaves its siblings alone,
+  which is the first half. The second half — feedback about evidence the whole claim shares
+  propagating to every line that relied on it — is **not built**. The agent flags such a note and
+  the reworked report carries a concern naming the other products, so a representative knows to
+  send each of them back by hand. Do not tick this until the propagation exists.
+- [x] FR-R.2 — the rework starts from the report in full, not from zero.
+  - **What was built:** the run is handed the report's findings, judgements, figure and working,
+    concerns and email, the whole conversation so far, and the case re-read from ShipBob. It does
+    not re-split the claim and does not touch the other products.
+  - **Be aware:** the case is re-read rather than remembered, because a report stores no copy of
+    it. That is three cheap reads and it means a rework is built from ShipBob's records now.
+- [x] FR-R.3 — the earlier findings go in as observations of record, and the note is authoritative.
+  - **Be aware:** this is a wording guarantee, not a structural one. `agent/prompts.py` frames the
+    findings in the passive and says the representative is right about what is wrong; nothing
+    measures whether the model actually stops defending itself. DESIGN.md lists it under **Could
+    break**.
+- [x] FR-R.4 — the rework holds the investigation's tools, so it can look again where the note
+  points. Targeted by wording; nothing forces or forbids a second look.
+- [x] FR-R.5 — undisputed findings carry forward, **and code is what carries them**.
+  - **Conclusion:** the rework's answer is merged over the earlier report's before any rule runs,
+    so an answer that mentions only the thing being corrected keeps everything else. Left to the
+    wording alone this was the most dangerous case in the layer: an approval would have collapsed
+    because somebody queried one sentence.
+- [x] FR-R.6 — the same tool surface, tested by reading the tools the run was actually offered
+  and comparing them with the whole enumerated list.
+- [x] FR-R.7 — a reconsidered figure goes through the same controlled path as the first one.
+  - **Conclusion:** it is literally the same function. `settle_conclusion` in
+    `agent/investigate.py` settles a first answer and a reworked one alike, so the cap, the
+    parsing and the rules cannot drift apart between the two.
+  - **Be aware:** the per-claim cap is *not* reapplied across siblings on a rework. That check
+    needs every product's figure at once, and a rework answers for one product.
+- [x] FR-R.8 — the rules do not give way, and the agent says so rather than complying quietly.
+  - **Be aware:** a claim the quick checks stopped cannot be reworked at all. The note is still
+    recorded, and the reply says the verdict came from fixed rules. Our reading of "feedback
+    cannot make an ineligible claim eligible".
+- [x] FR-R.9 — a complete revised report, in the same structure. The answer form is the
+  investigation's form **subclassed**, with three fields added, so "same schema" is true in code
+  rather than by intention.
+- [x] FR-R.10 — what changed and what was left alone, both stated, both shown on screen.
+- [x] FR-R.11 — the email is rewritten from the reworked answer, through the same builder, with
+  the capped figure added by code afterwards.
+- [x] FR-R.12 — every round carries the full history, and the agent is told that earlier
+  corrections still stand.
+- [x] FR-R.13 — every version is kept, with the note that prompted it and what changed.
+  - **Be aware:** **every** note produces a version, including one whose rework failed — that
+    version's findings are the previous ones and its round says so. A model that could not be
+    reached must not be able to degrade a sound report.
+- [x] FR-R.14 — the note is remembered against the merchant, so their next claim starts with it.
+  - **Be aware:** it is stored in the representative's own words, unjudged. FR-C.2's rule that a
+    correction comes from a *difference* governs approvals; a note is a correction by definition.
+    The cost is that a merchant sent back four times over a typo accumulates four notes — see
+    DESIGN.md's **Could break**.
+  - **This also builds the writing half of FR-3.8**, which had a tested store and no caller. That
+    requirement stays unticked because FR-C.2's other writer, from an approval that differed, is
+    still missing.
 
 ## Layer 3 — Execution after approval
 
@@ -463,9 +508,11 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
 - [ ] FR-3.5
 - [ ] FR-3.6
 - [ ] FR-3.7
-- [ ] FR-3.8 — half built, and the half that exists is the reading half. Do not tick this on
-  the strength of the store: `MerchantMemory.record_correction` exists and is tested, and
-  nothing in `src/` calls it. The writer is specified in FR-C.2.
+- [ ] FR-3.8 — **most of it, but not all.** The reading half has always worked, and the writing
+  half now has one caller: sending a report back writes the representative's note against the
+  merchant (FR-R.14). What is still missing is FR-C.2's other writer — a correction derived from
+  an approval that *differed* from the recommendation — so a representative who silently approves
+  at a different figure still teaches the system nothing.
 
 ## Claim precedent — finding similar past claims
 
@@ -580,17 +627,21 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
 
 ## Carry-forward — what a rep decided, and what the next claim knows
 
-**Read this before starting.** These eight requirements are all unbuilt, and they are the reason
-three earlier ones cannot be finished — FR-3.8, FR-R.14 and FR-S.1's writer all wait on the same
-missing step: nothing in this system records that a rep decided anything.
+**Read this before starting.** FR-C.1 is built — a review action now leaves a durable record —
+and FR-R.14 was finished on the back of it: a report sent back writes the representative's note
+against the merchant. What is still missing is the rest, and in particular the two writers that
+would close the loop: a correction derived from an approval that *differed* from the
+recommendation (FR-C.2), and the closing of a claim line that would make it precedent (FR-C.3).
+So FR-3.8 is most of the way there and FR-S.1's writer has no caller at all.
 
 What already exists, so it is not rebuilt:
 
 - **Merchant memory, read side.** `corrections_for(user_id)` → `preflight/service.py` →
   the computed context → the agent's prompt → the rep's screen. Done under FR-0.5.
-- **Merchant memory, write side.** `MerchantMemory.record_correction` works and is tested. Its
-  only caller in the repo is `tools/seed_merchant_memory.py`, which writes invented data on
-  purpose. Nothing in `src/` calls it.
+- **Merchant memory, write side.** `MerchantMemory.record_correction` works and is tested, and
+  it now has a real caller: the send-back route writes the representative's note against the
+  merchant (FR-R.14). `tools/seed_merchant_memory.py` still writes invented data on purpose,
+  beside it.
 - **Precedent, read side.** Retrieval, similarity, the per-line lookup, and two HTTP routes. Done
   under FR-S.1–FR-S.8 and FR-S.13.
 - **Precedent, write side.** `capture_closed_line` in `domain/precedent.py` and

@@ -8,7 +8,9 @@
  * for invented wording across the components.
  *
  * The list got shorter when the investigation was built: the sentence explaining that the
- * stage did not exist went away, because the stage does.
+ * stage did not exist went away, because the stage does. It grew by one when a report could
+ * be sent back and reworked, because the service says the conversation is waiting on a
+ * person with a flag rather than with words.
  *
  * Before adding to it, be sure the service really cannot say the thing instead.
  */
@@ -37,4 +39,13 @@ export const PAGE_WORDS = {
     "The past claims could not be looked up, so nothing is known about how similar claims " +
     "were handled. This is not the same as there being none.",
 
+  /**
+   * Shown under a round of the conversation where the agent asked the representative
+   * something (FR-R.10).
+   *
+   * The service sends a flag saying its reply contains a question, not a sentence saying
+   * the conversation is waiting. The question itself is the agent's own words and is shown
+   * as they wrote it; this only says what the flag means, because a flag cannot be read.
+   */
+  waitingOnYou: "Waiting on your answer to that question.",
 } as const;
