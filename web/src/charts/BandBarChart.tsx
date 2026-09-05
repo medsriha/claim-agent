@@ -1,13 +1,12 @@
 /**
  * A handful of named things, each with one figure.
  *
- * Used three ways on this screen: how often each recommendation was changed (lying on its side,
- * because four names read better beside their bars than squeezed under them), and the two halves
- * of the calibration panel.
+ * One use on this screen: how often a representative accepted the advice in each band of stated
+ * confidence, with what the system claimed shaded behind each bar.
  *
- * **The categories here are nominal**, so every bar is the same colour and the labels do the
- * telling apart. Colouring each bar differently would spend the one channel that carries identity
- * on information the bar's length already shows.
+ * **Every bar is the same colour**, because the bars are one measure across named groups rather
+ * than several things being compared. Colouring each one differently would spend the channel that
+ * carries identity on information the bar's length already shows.
  */
 import { ChartFrame } from "./ChartFrame";
 import type { Surface, TableTwin, TipRow } from "./ChartFrame";
@@ -39,7 +38,6 @@ interface BandBarChartProps {
   gridlines: readonly { at: number; label: string }[];
   /** One per bar, or `null` for no shading. Same length as `bars` when given. */
   references: readonly Reference[] | null;
-  orientation: "vertical" | "horizontal";
   token: string;
   height: number;
   table: TableTwin;
@@ -63,7 +61,6 @@ export function BandBarChart({
   domain,
   gridlines,
   references,
-  orientation,
   token,
   height,
   table,
@@ -78,14 +75,10 @@ export function BandBarChart({
       axisBand={sublabels === null ? PLOT.axisBand : 42}
       count={bars.length}
       legend={legend}
-      gridlines={orientation === "vertical" ? gridlines : []}
+      gridlines={gridlines}
       domain={domain}
       table={table}
-      xFor={(plot, index) =>
-        orientation === "vertical"
-          ? bandCentre(plot, bars.length, index)
-          : (left(plot) + right(plot)) / 2
-      }
+      xFor={(plot, index) => bandCentre(plot, bars.length, index)}
       tipFor={(index) => ({
         heading: humanise(bars[index]?.label ?? ""),
         rows: [{ token, name: "Figure", value: bars[index]?.text ?? "—" }] as readonly TipRow[],
@@ -96,7 +89,6 @@ export function BandBarChart({
           bars={bars}
           domain={domain}
           references={references}
-          orientation={orientation}
           token={token}
           surface={surface}
           sublabels={sublabels}
@@ -110,7 +102,6 @@ interface BarsProps {
   bars: readonly Point[];
   domain: { minimum: number; maximum: number };
   references: readonly Reference[] | null;
-  orientation: "vertical" | "horizontal";
   token: string;
   surface: Surface;
   sublabels: readonly string[] | null;
@@ -120,17 +111,11 @@ function Bars({
   bars,
   domain,
   references,
-  orientation,
   token,
   surface,
   sublabels,
 }: BarsProps): React.JSX.Element {
   const { plot, active, show, clear } = surface;
-
-  if (orientation === "horizontal") {
-    return <Lying bars={bars} domain={domain} token={token} surface={surface} />;
-  }
-
   const floor = crisp(bottom(plot));
   const slot = bandWidth(plot, bars.length);
   const thickness = Math.min(24, slot * 0.42);
@@ -207,82 +192,6 @@ function Bars({
               y={plot.padTop}
               width={slot}
               height={Math.max(0, bottom(plot) - plot.padTop)}
-              fill="transparent"
-              onPointerEnter={() => {
-                show(index, "pointer");
-              }}
-              onPointerLeave={clear}
-            />
-          </g>
-        );
-      })}
-    </g>
-  );
-}
-
-interface LyingProps {
-  bars: readonly Point[];
-  domain: { minimum: number; maximum: number };
-  token: string;
-  surface: Surface;
-}
-
-/** Bars on their side, so four long names read straight rather than turned on end. */
-function Lying({ bars, domain, token, surface }: LyingProps): React.JSX.Element {
-  const { plot, active, show, clear } = surface;
-  const baseline = crisp(left(plot) + 76);
-  const usable = Math.max(1, right(plot) - baseline - 44);
-  const slot = Math.max(0, (plot.height - plot.padTop) / Math.max(1, bars.length));
-  const thickness = Math.min(24, slot * 0.42);
-
-  return (
-    <g>
-      <line
-        className="chart-axis-line"
-        x1={baseline}
-        y1={plot.padTop}
-        x2={baseline}
-        y2={plot.padTop + slot * bars.length}
-      />
-
-      {bars.map((bar, index) => {
-        const across = plot.padTop + slot * index + (slot - thickness) / 2;
-        const share = bar.value === null ? 0 : (bar.value - domain.minimum) / Math.max(0.0001, domain.maximum - domain.minimum);
-        const end = baseline + share * usable;
-
-        return (
-          <g key={bar.label}>
-            <text
-              className="chart-label"
-              x={baseline - 8}
-              y={across + thickness / 2 + 4}
-              textAnchor="end"
-            >
-              {humanise(bar.label)}
-            </text>
-
-            {bar.value !== null && (
-              <path
-                d={barPath(baseline, end, across, thickness, "right")}
-                fill={`var(${token})`}
-                opacity={active?.index === index ? 0.82 : 1}
-              />
-            )}
-
-            <text
-              className="chart-value-label"
-              x={end + 8}
-              y={across + thickness / 2 + 4}
-              textAnchor="start"
-            >
-              {bar.text}
-            </text>
-
-            <rect
-              x={baseline}
-              y={plot.padTop + slot * index}
-              width={Math.max(0, right(plot) - baseline)}
-              height={slot}
               fill="transparent"
               onPointerEnter={() => {
                 show(index, "pointer");

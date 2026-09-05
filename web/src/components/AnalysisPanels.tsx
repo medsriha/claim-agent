@@ -1,15 +1,13 @@
 /**
  * The pieces of the analysis screen that are not charts.
  *
- * The filter row, the one big figure, the tiles, the savings and what they rest on, the table of
- * candidate rules, and the small branch that decides whether a panel has anything to show.
+ * The period it covers, the one big figure, the tiles, the savings, and the small branch that
+ * decides whether a panel has anything to show.
  *
- * Every sentence on any of them came from the service. These components add labels — "Period",
- * a column heading — and nothing that could be mistaken for a finding.
+ * Every sentence on any of them was written by the service that worked the figures out. These
+ * components add labels and nothing that could be mistaken for a finding.
  */
-import { humanise } from "../display";
-import { Spinner } from "./Spinner";
-import type { Assumption, Figure, GateTable, Panel, Preset } from "../api/analysisTypes";
+import type { Figure, Panel } from "../api/analysisTypes";
 
 /**
  * Show a panel's contents, or the service's own sentence saying why there are none.
@@ -37,49 +35,16 @@ export function PanelState<Drawn>({
   return children(panel.data);
 }
 
-interface FilterRowProps {
-  presets: readonly Preset[];
-  periodLabel: string;
-  busy: boolean;
-  onPick: (key: string) => void;
-}
-
 /**
- * The one row of controls, scoping everything below it.
+ * Which stretch of time everything below covers.
  *
- * The choices are the service's, and what goes back is the key it sent. The screen never works
- * out a date: two people asking for "12 months" get the same window because the service decided
- * where it starts, not the browser.
+ * A line rather than a row of buttons. There was a choice of three periods once; it went when the
+ * screen stopped asking a service for them, because offering a choice means carrying a set of
+ * figures for each and three sets nobody switches between is weight in the page for nothing. The
+ * sentence stays, because a dashboard that does not say what it covers is not saying much.
  */
-export function FilterRow({
-  presets,
-  periodLabel,
-  busy,
-  onPick,
-}: FilterRowProps): React.JSX.Element {
-  return (
-    <section className="analysis-filters">
-      <div className="filter-group">
-        <span className="filter-label">Period</span>
-        {presets.map((preset) => (
-          <button
-            className={preset.applied ? "chip chip-picked" : "chip"}
-            type="button"
-            key={preset.key}
-            disabled={busy}
-            aria-pressed={preset.applied}
-            onClick={() => {
-              onPick(preset.key);
-            }}
-          >
-            {preset.label}
-          </button>
-        ))}
-        {busy && <Spinner />}
-      </div>
-      <p className="filter-period">{periodLabel}</p>
-    </section>
-  );
+export function PeriodLine({ label }: { label: string }): React.JSX.Element {
+  return <p className="analysis-period">{label}</p>;
 }
 
 /** The one figure the screen leads on. */
@@ -123,20 +88,8 @@ export function FigureTiles({
   );
 }
 
-/**
- * What the time saved is worth, and the numbers that figure rests on.
- *
- * The assumptions are shown rather than hidden, with the service's own explanation and its own
- * mark saying they are provisional. A saving in dollars is a measurement multiplied by an hourly
- * rate somebody chose, and a reader who cannot see the rate has no way to argue with the total.
- */
-export function SavingsPanel({
-  savings,
-  assumptions,
-}: {
-  savings: readonly Figure[];
-  assumptions: readonly Assumption[];
-}): React.JSX.Element {
+/** What the time saved is worth. */
+export function SavingsPanel({ savings }: { savings: readonly Figure[] }): React.JSX.Element {
   return (
     <section className="panel">
       <h3 className="panel-title">What that is worth</h3>
@@ -149,61 +102,6 @@ export function SavingsPanel({
           </div>
         ))}
       </div>
-
-      <h4 className="subhead">What those figures assume</h4>
-      <ul className="assumptions">
-        {assumptions.map((assumption) => (
-          <li className="assumption" key={assumption.label}>
-            <span className="assumption-head">
-              <span className="assumption-label">{assumption.label}</span>
-              <span className="assumption-value">{assumption.value}</span>
-              <span className="assumption-marker">{assumption.marker}</span>
-            </span>
-            <span className="assumption-why">{assumption.description}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/**
- * The candidate rules, as a table and nothing else.
- *
- * There is no button, no switch and no colour on the verdict, and the rows are drawn in the order
- * the service scored them rather than sorted. All three are deliberate. Sorting by coverage would
- * be the screen ranking automation candidates, and a green "meets bar" would read as a
- * recommendation — when the requirements say a person approving is the only way a claim is ever
- * released. The caveat travels with the table so one cannot be shown without the other.
- */
-export function AutomationGates({ gates }: { gates: GateTable }): React.JSX.Element {
-  return (
-    <section className="panel">
-      <h3 className="panel-title">{gates.title}</h3>
-      <div className="table-scroll">
-        <table className="lines">
-          <thead>
-            <tr>
-              {gates.columns.map((column) => (
-                <th key={column}>{column}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {gates.rows.map((row) => (
-              <tr key={`${row.value_band}-${row.confidence_band}`}>
-                <td>{humanise(row.value_band)}</td>
-                <td>{humanise(row.confidence_band)}</td>
-                <td className="numeric">{row.decisions_text}</td>
-                <td className="numeric">{row.coverage_text}</td>
-                <td className="numeric">{row.agreement_text}</td>
-                <td className="gates-verdict">{humanise(row.verdict)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="gates-caveat">{gates.caveat}</p>
     </section>
   );
 }

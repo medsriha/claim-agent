@@ -20,7 +20,6 @@ export default defineConfig({
       "/cases": { target: CLAIMS_SERVICE, changeOrigin: true },
       "/admin": { target: CLAIMS_SERVICE, changeOrigin: true },
       "/precedent": { target: CLAIMS_SERVICE, changeOrigin: true },
-      "/analysis": { target: CLAIMS_SERVICE, changeOrigin: true },
       "/health": { target: CLAIMS_SERVICE, changeOrigin: true },
     },
   },

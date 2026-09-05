@@ -58,8 +58,18 @@ export function Thread({ messages, working, caseId, onRetry }: ThreadProps): Rea
       </ol>
 
       {working && (
-        <p className="working" role="status">
-          Screening {caseId}…
+        <p
+          className="working"
+          role="status"
+          aria-label={`Screening ${caseId}. The agent is thinking and the backend is still processing.`}
+        >
+          <span className="working-wave" aria-hidden="true">
+            <span>Screening</span>{" "}
+            <span>{caseId}</span>
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
         </p>
       )}
     </div>

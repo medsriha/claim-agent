@@ -238,6 +238,41 @@ p {
   font-weight: 600;
 }
 
+.working-wave > span {
+  display: inline-block;
+  animation: working-wave 1.4s ease-in-out infinite;
+}
+
+.working-wave > span:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.working-wave > span:nth-child(3) {
+  animation-delay: 180ms;
+}
+
+.working-wave > span:nth-child(4) {
+  animation-delay: 270ms;
+}
+
+.working-wave > span:nth-child(5) {
+  animation-delay: 360ms;
+}
+
+@keyframes working-wave {
+  0%,
+  60%,
+  100% {
+    color: var(--sb-ink-soft);
+    transform: translateY(0);
+  }
+
+  30% {
+    color: var(--sb-brand);
+    transform: translateY(-3px);
+  }
+}
+
 /* Before any claim is picked. Deliberately not a box: there is no content to frame. */
 .intro {
   display: flex;
@@ -839,7 +874,8 @@ p {
  * one anyway, because the conversation settles all at once for them. Belt and braces.
  */
 @media (prefers-reduced-motion: reduce) {
-  .spinner {
+  .spinner,
+  .working-wave > span {
     animation: none;
   }
 }
@@ -1631,35 +1667,8 @@ p {
   max-width: 1180px;
 }
 
-.analysis-filters {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 1rem;
-  padding: 0.75rem 0;
-  background: var(--sb-canvas);
-  border-bottom: 1px solid var(--sb-line);
-}
-
-.filter-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.filter-label {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--sb-ink-faint);
-}
-
-.filter-period {
+/* Which stretch of time everything below covers. */
+.analysis-period {
   font-size: 12.5px;
   color: var(--sb-ink-faint);
 }
@@ -1669,14 +1678,6 @@ p {
   flex-direction: column;
   gap: 1rem;
   margin-top: 1rem;
-}
-
-/* While a new period loads, the figures already on screen stay put and dim. No skeleton and no
-   change of height, so nothing jumps and the period they cover is still readable. */
-.analysis-stale {
-  opacity: 0.55;
-  pointer-events: none;
-  transition: opacity 120ms ease;
 }
 
 .analysis-generated {
@@ -1715,71 +1716,86 @@ p {
   color: var(--sb-ink-faint);
 }
 
-.assumptions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin-top: 0.5rem;
-  list-style: none;
-}
-
-.assumption {
-  padding-left: 0.7rem;
-  border-left: 3px solid var(--sb-flag-tint);
-}
-
-.assumption-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-.assumption-label {
-  font-weight: 600;
-  color: var(--sb-ink);
-}
-
-.assumption-value {
-  font-family: var(--sb-font-mono);
-  font-size: 0.9rem;
-  color: var(--sb-ink);
-}
-
-.assumption-marker {
-  padding: 1px 7px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--sb-flag);
-  background: var(--sb-flag-tint);
-  border-radius: 999px;
-}
-
-.assumption-why {
-  display: block;
-  margin-top: 0.15rem;
-  max-width: 78ch;
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: var(--sb-ink-soft);
-}
-
-.gates-verdict {
-  font-weight: 600;
-}
-
 /* Deliberately no colour on the verdict. Three states would need the pass, flag and stop
    colours, and flag against stop is very nearly indistinguishable with the commonest form of
    colour blindness — and a green "meets bar" would read as a recommendation, which this screen
    is not making. */
 
-.gates-caveat {
-  margin-top: 0.7rem;
-  max-width: 78ch;
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: var(--sb-ink-soft);
+/* --- Which claims come back ready --------------------------------------- */
+
+.readiness-group {
+  margin-top: 0.9rem;
+}
+
+/* How far apart a group's parts are, beside its name. It is the point of the group, so it sits
+   with the heading rather than under the bars where it would read as a footnote. */
+.readiness-spread {
+  margin-left: 0.6rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--sb-ink-faint);
+}
+
+.readiness-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+  list-style: none;
+}
+
+/* Label, bar, figure, count. The bar takes whatever is left, so every row's figures line up
+   however long the longest name is. */
+.readiness-row {
+  display: grid;
+  grid-template-columns: 19rem 1fr 3rem 7.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.87rem;
+}
+
+.readiness-label {
+  color: var(--sb-ink);
+}
+
+.readiness-track {
+  height: 0.65rem;
+  background: var(--sb-canvas);
+  border-radius: 3px;
+}
+
+/* The width is worked out by the browser from a share the service sent. Nothing in the page
+   turns one into the other. */
+.readiness-bar {
+  display: block;
+  height: 100%;
+  background: var(--sb-chart-1);
+  border-radius: 3px;
+}
+
+.readiness-figure {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  color: var(--sb-ink);
+}
+
+.readiness-volume {
+  font-size: 0.8rem;
+  text-align: right;
+  color: var(--sb-ink-faint);
+}
+
+@media (width <= 620px) {
+  .readiness-row {
+    grid-template-columns: 1fr 3rem;
+  }
+
+  .readiness-track,
+  .readiness-volume {
+    grid-column: 1 / -1;
+  }
 }
 
 /* --- The charts --------------------------------------------------------- */
@@ -1936,10 +1952,9 @@ p {
   color: var(--sb-ink-soft);
 }
 
-/* Both of these move, and neither has to. Everything they carry is still there. */
+/* The tooltip moves, and it does not have to. Everything it carries is still there. */
 @media (prefers-reduced-motion: reduce) {
-  .chart-tip,
-  .analysis-stale {
+  .chart-tip {
     transition: none;
   }
 }

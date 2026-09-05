@@ -88,12 +88,14 @@ export interface StackedChart {
  *
  * The difference between the two is deliberately not sent. Whether the measured bar lands inside
  * the claimed band is for a reader to see, and a subtraction is not this screen's to do.
+ *
+ * `band` names the range in words; `stated_low` and `stated_high` are the same range as numbers,
+ * for drawing the shaded box behind the bar.
  */
 export interface CalibrationBand {
   readonly band: string;
   readonly stated_low: number;
   readonly stated_high: number;
-  readonly stated_text: string;
   readonly agreement: Point;
   readonly volume: Point;
 }
@@ -114,6 +116,39 @@ export interface BarChart {
   readonly domain: Domain;
   readonly gridlines: readonly Gridline[];
   readonly bars: readonly Point[];
+  readonly summary: string;
+}
+
+/**
+ * One kind of claim: how often it came back ready, and how much of the work it is.
+ *
+ * `ready` is the share that went out exactly as produced. `volume` is how many decisions that
+ * share was worked out from, so a reader can tell a real pattern from three claims that agreed.
+ */
+export interface ReadinessRow {
+  readonly label: string;
+  readonly ready: Point;
+  readonly volume: Point;
+}
+
+/**
+ * One way of cutting the claims up, with each part of it.
+ *
+ * `spread_text` says how far apart the readiest and least ready parts are, which is the measure
+ * of whether the cut is worth anything at all: parts that all come back ready about as often
+ * cannot tell anybody which claims to expect trouble from.
+ */
+export interface ReadinessGroup {
+  readonly name: string;
+  readonly spread_text: string;
+  readonly rows: readonly ReadinessRow[];
+}
+
+/** Which kinds of claim come back ready to send, and which need a person. */
+export interface Readiness {
+  readonly title: string;
+  readonly groups: readonly ReadinessGroup[];
+  readonly domain: Domain;
   readonly summary: string;
 }
 
@@ -188,6 +223,7 @@ export interface AnalysisView {
   readonly approval_trend: Panel<TimeChart>;
   readonly intervention_mix: Panel<StackedChart>;
   readonly calibration: Panel<Calibration>;
+  readonly readiness: Panel<Readiness>;
   readonly disagreement: Panel<BarChart>;
   readonly review_time: Panel<TimeChart>;
   readonly gates: Panel<GateTable>;

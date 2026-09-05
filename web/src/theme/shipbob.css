@@ -35,28 +35,31 @@
 
   /* The chart colours, for the analysis screen.
 
-     Four steps of one blue, light to dark, for a measure that is genuinely *ordered*: how far a
-     representative went in changing what was recommended. One hue climbing is how a reader sees
-     the order in the colour itself. They were checked rather than picked by eye — against this
-     page's own white, for even steps of lightness and for staying apart under colour blindness.
+     Four hues in a fixed order, plus a hairline for the axis. They were checked rather than
+     picked by eye — against this page's own white, for lightness, for staying apart under colour
+     blindness, and for reading clearly against the background.
 
-     Two rules travel with them. The palest step is a fill and nothing else; it is too light to
-     be a line or to carry type. And because the steps mean an order, they must never stand in
-     for a set of unordered things — something nominal, like the four recommendations, takes one
-     colour for all of it and lets the labels do the telling apart.
+     They started as four steps of one blue, because how far a representative went in changing a
+     recommendation is genuinely an *order* and one hue climbing is how a reader sees an order in
+     the colour. That was abandoned: four steps of one hue that all stay light enough to read on
+     white sit too close together to tell apart in a stacked chart, which is the whole job. Four
+     hues lose the ordering and win the legibility, and the legend carries the meaning instead.
+
+     Aqua and yellow sit below three-to-one against white. That is allowed here only because
+     every chart using them also has a legend and a table holding the same figures, so nothing
+     rests on seeing a pale fill.
 
      The pass, stop and flag colours above are deliberately not usable here. Flag against stop is
      very nearly indistinguishable to a reader with the commonest form of colour blindness, and
-     pass against flag is worse. That costs nothing where each one sits beside a word, as they do
-     on the screening screen, and would cost a great deal in a chart where colour is the only
-     thing telling two things apart.
+     pass against flag is worse. That costs nothing where each sits beside a word, as on the
+     screening screen, and would cost a great deal in a chart.
 
      The axis is a hairline a step darker than --sb-line, so an axis reads as an axis and a
      gridline reads as a gridline. Gridlines use --sb-line itself. */
-  --sb-chart-band-1: #86b6ef;
-  --sb-chart-band-2: #3987e5;
-  --sb-chart-band-3: #1c5cab;
-  --sb-chart-band-4: #0d366b;
+  --sb-chart-1: #2a78d6;
+  --sb-chart-2: #eb6834;
+  --sb-chart-3: #1baf7a;
+  --sb-chart-4: #eda100;
   --sb-chart-axis: #b9bed2;
 
   /* A system stack: nothing to download, so no flash of unstyled text. */
