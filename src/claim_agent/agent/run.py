@@ -1,5 +1,3 @@
-"""Investigating a whole claim: split it into products, then look into all of them at once."""
-
 from __future__ import annotations
 
 from langchain_core.language_models import BaseChatModel

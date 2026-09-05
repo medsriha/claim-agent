@@ -1,5 +1,3 @@
-"""The forms the AI fills in. It never replies with prose to be interpreted."""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator

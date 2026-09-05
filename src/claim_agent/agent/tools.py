@@ -1,11 +1,3 @@
-"""Everything an investigation can do, and the one place it is all assembled (FR-1.2).
-
-Read-only by construction: sending email and paying a merchant live in
-`claim_agent.execution`, which nothing in this package imports. Adding a writing tool here
-would delete that guarantee. A tool never raises into the investigation either — every
-failure comes back as an ordinary result the model can reason about (NFR-4).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence

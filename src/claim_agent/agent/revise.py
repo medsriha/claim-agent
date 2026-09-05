@@ -1,5 +1,3 @@
-"""Layer R — reworking a claim's report after a representative sent it back (FR-R.1a)."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
