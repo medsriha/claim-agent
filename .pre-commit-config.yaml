@@ -10,7 +10,10 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
+      # The README's looping demo is a 2.4 MB image; the limit stays low enough
+      # to still catch a stray recording or database file.
       - id: check-added-large-files
+        args: [--maxkb=3072]
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
