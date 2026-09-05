@@ -1,15 +1,3 @@
-"""Investigating a claim over HTTP, and what the stream says while it happens.
-
-Everything here goes through the real application: the real screen, the real
-dependencies, the real route. Only two things are stood in for — ShipBob, which is
-intercepted in this process, and the model, which answers from a script. So what these
-tests observe is the wiring, which is the part unit tests cannot see.
-
-The stream is the subject. A representative watching one has to be told what is
-happening, told it in an order, and told *something* whatever goes wrong — a connection
-that simply stops is the failure this whole shape exists to prevent (NFR-4).
-"""
-
 from __future__ import annotations
 
 import json

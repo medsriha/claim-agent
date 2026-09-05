@@ -1,5 +1,3 @@
-"""Errors reach the caller in one consistent shape, and leak nothing (NFR-6)."""
-
 from __future__ import annotations
 
 import pytest

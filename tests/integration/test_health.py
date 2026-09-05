@@ -1,5 +1,3 @@
-"""The service answers over HTTP and tags every response for tracing."""
-
 from __future__ import annotations
 
 import pytest

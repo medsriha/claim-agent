@@ -1,10 +1,3 @@
-"""Asking over HTTP how the system has been doing.
-
-The address itself has no requirement behind it. What these tests defend is that the reply gives
-the screen everything it needs and nothing it would have to work out for itself (FR-1.21, NFR-2),
-and that an empty period never looks like a broken store (NFR-4).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

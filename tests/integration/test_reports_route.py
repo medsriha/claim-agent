@@ -1,5 +1,3 @@
-"""Reading a claim's reports and acting on one, over HTTP (FR-2.8, FR-2.9, FR-2.9b, FR-C.1)."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator
