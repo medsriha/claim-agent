@@ -1,5 +1,9 @@
 name: claim-agent
 
+# Every health check here names 127.0.0.1 rather than localhost: inside a container that
+# name resolves to the IPv6 address first, nothing here listens on it, and the screen's
+# check has no fallback — it reported a working screen as unhealthy.
+
 services:
   mock:
     build: .
@@ -42,9 +46,6 @@ services:
       retries: 12
       start_period: 5s
 
-  # Every health check below names 127.0.0.1 rather than localhost: inside a container that
-  # name resolves to the IPv6 address first, nothing here listens on it, and the screen's
-  # check has no fallback — it reported a working screen as unhealthy.
   web:
     build: ./web
     depends_on:
