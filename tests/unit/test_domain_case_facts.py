@@ -1,24 +1,3 @@
-"""Reading the structured facts hidden in a merchant's case description.
-
-The five sample claims write the same facts two different ways. Four of them use
-the field names from ShipBob's claim form — `Damage Type:`, `Defect Type:`,
-`Number of affected orders:` — and one, CASE-1001, writes the lot as ordinary
-sentences with no field names at all. There is a test for each of the five, and
-each one checks every value that came out, because a reader who cannot tell what
-a description is supposed to yield cannot tell when the reading has gone wrong.
-
-The rest of the file is about the parts that are easy to get wrong: the four ways
-a description can disagree with ShipBob's own records, descriptions that say
-nothing, and text written to catch out a careless pattern — a product with
-"Carrier" in its name, a sentence saying the damage was *not* caused by the
-carrier, and a description that answers the same question twice with two
-different answers.
-
-No requirement covers this feature; see DESIGN.md. The rules it works under are
-FR-0.6 and NFR-1 (the same claim reads the same way every time), FR-1.13 (never
-narrow two candidates to one) and NFR-4 (fail toward the human).
-"""
-
 from __future__ import annotations
 
 from datetime import date

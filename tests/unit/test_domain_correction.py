@@ -1,10 +1,3 @@
-"""The sentence written against a merchant when a representative changed something (FR-C.2).
-
-FR-C.2 asks for two things and both are tested here: a correction is written only from a
-*difference*, and it says enough for the next investigation to act on. "The amount was wrong"
-carries nothing, so every sentence carries the figures.
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal

@@ -1,9 +1,3 @@
-"""Keeping what representatives decided (FR-C.1).
-
-Nothing in the service writes one of these yet, so these tests are the only thing exercising the
-write side, exactly as they are for the store of past claims.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

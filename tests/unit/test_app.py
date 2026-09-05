@@ -1,5 +1,3 @@
-"""The app factory injects what it is given, so nothing reads global state."""
-
 from __future__ import annotations
 
 from decimal import Decimal

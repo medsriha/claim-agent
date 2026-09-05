@@ -1,11 +1,3 @@
-"""That the sample claims can actually demonstrate carrying a correction forward (FR-C.8).
-
-FR-C.8 says the real sample data cannot show any of this: five claims, five different merchants,
-so no claim ever sees a correction produced by another. A constructed second claim for an existing
-merchant is what fixes that, and it is one edited field away from silently not working — the
-merchant would still look right on screen, and nothing would carry across.
-"""
-
 from __future__ import annotations
 
 from tests.fixtures.shipbob import CASE_1001, CONSTRUCTED_REPEAT_MERCHANT_CASE
