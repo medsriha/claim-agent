@@ -33,4 +33,4 @@ docker compose run --rm api pytest
 
 ## Demo
 
-<img src="media/demo.webp" alt="Walkthrough of a claim moving from investigation to a representative's decision" width="500">
+<img src="media/demo.webp" alt="Walkthrough of a claim moving from investigation to a representative's decision" width="800">
