@@ -1,10 +1,3 @@
-"""The policy in force can be changed while the service runs (FR-0.7, NFR-7).
-
-The admin panel changes claim thresholds without a restart, and these tests pin the
-two promises that makes safe: a claim already being judged never sees a change, and
-"in force since" only moves when something genuinely changed.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

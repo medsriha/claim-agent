@@ -1,5 +1,3 @@
-"""Deliberate failures carry the response they should produce."""
-
 from __future__ import annotations
 
 import pytest

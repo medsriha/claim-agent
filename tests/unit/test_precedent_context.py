@@ -1,13 +1,3 @@
-"""Gathering precedent before the investigation starts (FR-S.5, FR-S.6, FR-S.13).
-
-The point of these tests is that precedent arrives *with* the claim rather than
-being something the model may decide to look up, and that a store which cannot be
-read never stops a claim.
-
-The search itself is per damaged product, because that is what a past claim resembles.
-What comes back is one set, because one run reads it (FR-1b.1).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

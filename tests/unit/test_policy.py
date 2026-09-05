@@ -1,5 +1,3 @@
-"""Policy is the one named place for claim thresholds (FR-0.7, NFR-7)."""
-
 from __future__ import annotations
 
 from decimal import Decimal

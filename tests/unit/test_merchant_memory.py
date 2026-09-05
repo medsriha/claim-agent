@@ -1,9 +1,3 @@
-"""Remembering what a rep corrected on a merchant's earlier claims (FR-0.5, FR-3.8).
-
-Everything here works against a database file in a throwaway directory, so the
-suite never writes into the project and no two tests can see each other's data.
-"""
-
 from __future__ import annotations
 
 import sqlite3
