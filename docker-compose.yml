@@ -1,9 +1,5 @@
 name: claim-agent
 
-# Every health check here names 127.0.0.1 rather than localhost: inside a container that
-# name resolves to the IPv6 address first, nothing here listens on it, and the screen's
-# check has no fallback — it reported a working screen as unhealthy.
-
 services:
   mock:
     build: .
@@ -19,7 +15,6 @@ services:
       retries: 12
       start_period: 5s
 
-  # The claims service.
   api:
     build: .
     depends_on:
@@ -27,15 +22,14 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
-
     env_file:
       - path: .env
         required: false
     environment:
-
       SHIPBOB_BASE_URL: http://mock:8080
       DATABASE_PATH: /data/claim_agent.db
       ATTACHMENT_CACHE_DIR: /cache
+      SEED_DEMO_DATA: "true"
     volumes:
       - claim-data:/data
       - attachment-cache:/cache
