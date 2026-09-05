@@ -1,66 +1,9 @@
-"""Everything an investigation can do, and the one place it is all assembled.
+"""Everything an investigation can do, and the one place it is all assembled (FR-1.2).
 
-An investigation reads and reasons, and that is all. It can list the images on a
-claim, look at one of those images and say what it is, ask ShipBob to price the
-shipment, and ask ShipBob's own arithmetic whether the products it believes were
-damaged could be priced at all. It can also work out what currency the claim's money
-is in, check whether a document a merchant sent adds up, read the facts written into
-the claim's own description, and compare ShipBob's prices with the customer's
-receipt. Three further cross-checks decide whether the evidence is sufficient, find
-possible order-line matches for a damaged product, and read which remedy the merchant
-asked for. This file is the whole list (FR-1.2).
-
-**There is no tool here that emails a merchant or pays one, and that absence is the
-guarantee.** Not a rule the model is asked to follow — a rule it cannot break,
-because the ability is not in its hands. Sending and paying live in
-`claim_agent.execution`, which nothing in this package imports and which runs only
-after a representative has approved something. If you are ever tempted to add a
-tool that changes anything at ShipBob, that is the requirement you would be
-deleting. Adding another *reading* tool is allowed and has happened; adding a
-writing one is not.
-
-**Seven tools were added after the original four, and their policy is still worth
-examining before relying on them.** They came out of reading ShipBob's sample data:
-currency, document arithmetic, case facts, price comparison, evidence sufficiency,
-product matching, and requested remedy. FR-1.2 now names the full eleven-tool surface,
-but the thresholds and detailed behaviour behind the added cross-checks remain our
-reading rather than signed-off ShipBob policy. DESIGN.md records each limitation.
-
-**A tool never raises into the investigation (NFR-4).** Every failure this system
-knows how to have — ShipBob unreachable, an image that will not download, a model
-that will not answer, an allowance used up — comes back as an ordinary result the
-model can read and reason about, so the run can carry on and still reach a
-recommendation, or run out of budget trying. A mistake in *our own* code is the one
-thing left to travel, because a defect should look like a defect rather than like
-ShipBob being down.
-
-**Two ways of not having a usable image, and they must never be confused.** An image
-the merchant sent that is too dark or too cropped to conclude anything from is
-*unusable*: they can send another, and the result says so, so they can be asked for
-something specific (FR-1.5, FR-1.7). An image *we* could not fetch or could not get
-an answer about is *unreadable*: the merchant can do nothing about it, must not be
-asked to, and the claim needs a person instead (NFR-4).
-
-**Nothing a tool hands the model carries a recommended amount (FR-1.21).** The
-arithmetic tool answers whether an amount could be worked out and never what it is —
-see `AmountCheck` for why that line is drawn exactly there. Invoice prices are a
-different matter and are shown, for the same stated reason the prompts already show
-the order's prices: two similar products at different prices is precisely what the
-model must notice and refuse to guess between.
-
-**Every call is written down twice, on purpose.** Once in the run's ledger, which
-travels inside the finished report and is how a representative audits a decision
-(NFR-3, NFR-5), and once on the event stream, which is how somebody watching sees
-the investigation choosing what to look at next while it is still working (FR-1.1).
-Failures are written down exactly like successes; a record that only kept the
-successes would make a run look tidier than it was.
-
-**A note on where the tool descriptions live.** The sentences below that describe
-each tool are words the model reads, and by the rule at the top of `prompts.py` they
-belong in that file with every other word we say to it. They are here because a tool
-and its description are declared together, and splitting them would let a tool's
-arguments and its description drift apart. Worth moving if that file ever grows a
-home for them.
+Read-only by construction: sending email and paying a merchant live in
+`claim_agent.execution`, which nothing in this package imports. Adding a writing tool here
+would delete that guarantee. A tool never raises into the investigation either — every
+failure comes back as an ordinary result the model can reason about (NFR-4).
 """
 
 from __future__ import annotations
@@ -117,6 +60,7 @@ CHECK_EVIDENCE_IS_ENOUGH: Final = "check_evidence_is_enough"
 MATCH_DAMAGED_PRODUCT: Final = "match_damaged_product"
 READ_REQUESTED_REMEDY: Final = "read_requested_remedy"
 
+# Every tool an investigation has, in one tuple, so the surface can be checked at a glance.
 TOOL_NAMES: Final = (
     LIST_ATTACHMENTS,
     INSPECT_IMAGE,
@@ -130,19 +74,6 @@ TOOL_NAMES: Final = (
     MATCH_DAMAGED_PRODUCT,
     READ_REQUESTED_REMEDY,
 )
-"""Every tool an investigation has, in one tuple, so the surface can be checked at a glance.
-
-**Every one of them only reads or works something out.** That is the property FR-1.2
-actually requires, and a test checks it by name and by import graph rather than by
-counting: no tool here sends, pays, submits, or changes anything at ShipBob.
-
-The first four are the original surface. The remaining seven were added after reading
-ShipBob's sample data closely: currency, document arithmetic, case facts, price comparison,
-evidence sufficiency, product matching, and requested remedy. FR-1.2 now names the complete
-surface. DESIGN.md records where the added tools came from and which of their detailed policy
-choices still need ShipBob sign-off.
-"""
-
 
 # --- What the model is told each tool does ---------------------------------
 # These sentences are read by the model, so they say what a tool answers and what
@@ -228,22 +159,14 @@ _READ_REQUESTED_REMEDY_DESCRIPTION: Final = (
     "guessing, and it is a second opinion on your own reading, not a replacement for it."
 )
 
+# What the model is told when it calls a tool with arguments that will not parse.
 _ARGUMENTS_DID_NOT_FIT: Final = (
     "That call did not fit this tool's arguments. Read the tool's arguments again and "
     "make the call properly."
 )
-"""What the model is told when it calls a tool with arguments that will not parse.
 
-The tool library checks a call against its arguments before our code runs, and would
-otherwise raise. NFR-4 says a failure ends in front of a person, never in a stopped
-run, so a malformed call is answered with a sentence the model can act on instead.
-"""
-
-
-# --- Where a memo of an expensive answer is filed ---------------------------
-# One claim's answers are remembered so that two products investigated at the same
-# time never pay for the same work twice (NFR-8). Each key names its question
-# completely, so two questions that could differ can never share one.
+# One claim's answers are remembered so two products investigated at the same time never
+# pay for the same work twice (NFR-8). Each key names its question completely.
 
 _ATTACHMENTS_MEMO: Final = "attachments:{case_id}"
 _INVOICE_MEMO: Final = "invoice:{shipment_id}"
@@ -254,24 +177,7 @@ _IMAGE_MEMO: Final = "image:{attachment_id}:{question}"
 
 
 class ToolOutcome(BaseModel):
-    """What every tool hands back, whether it worked or not.
-
-    A tool answers with one of these rather than raising, so a failure is something
-    the investigation can read and work around instead of something that stops it
-    (NFR-4). It travels beside the sentence the model reads, as the tool call's
-    artifact, which means the run can act on the parts of an answer without reading
-    them back out of text.
-
-    Attributes:
-        tool: Which investigation tool produced this.
-        succeeded: Whether the tool did what it set out to do. Note what this is
-            *not*: an image that turns out to be too blurry to use is a successful
-            call, because finding that out is exactly what was asked for. This is
-            false only when the tool could not answer the question at all.
-        summary: One plain sentence saying what happened, ready to put in the run's
-            record and in front of somebody watching. The model reads this too, with
-            whatever the tool found listed underneath it.
-    """
+    """What every tool hands back, whether it worked or not."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -281,41 +187,14 @@ class ToolOutcome(BaseModel):
 
 
 class AttachmentListing(ToolOutcome):
-    """The images on the claim, by id.
-
-    `attachment_ids` is empty both when the claim genuinely has no images — an
-    ordinary answer, and the only possible one for a claim like CASE-1005 (FR-1.6) —
-    and when the listing could not be fetched. `succeeded` is what tells those two
-    apart, and they must never be confused: "the merchant sent nothing" and "we could
-    not look" lead to opposite outcomes.
-
-    File names and file types are deliberately absent. They carry no signal about what
-    an image holds, and the surest way to stop anything leaning on one is never to
-    pass it on (FR-1.4).
-    """
+    """The images on the claim, by id."""
 
     tool: str = LIST_ATTACHMENTS
     attachment_ids: tuple[str, ...] = ()
 
 
 class ImageInspection(ToolOutcome):
-    """What one image turned out to be, or why nothing could be established about it.
-
-    `state` is the field to read, because it says *whose problem* an unusable image is
-    (FR-1.5, NFR-4):
-
-    * `None` — the image was read and answered about. Whether it turned out to be one
-      of the four kinds of evidence is in `observation`.
-    * `UNUSABLE` — the merchant's image cannot support a conclusion: too dark, too
-      blurry, too cropped. They can send another, and `observation.problem` says what
-      to ask them for.
-    * `UNREADABLE` — *we* could not fetch the image or could not get an answer about
-      it. The merchant can do nothing about this and must not be asked to; the claim
-      needs a person.
-
-    `observation` is `None` whenever the model was never reached — a bad id, an
-    allowance used up, a download that failed.
-    """
+    """What one image turned out to be, or why nothing could be established about it."""
 
     tool: str = INSPECT_IMAGE
     attachment_id: str
@@ -324,16 +203,7 @@ class ImageInspection(ToolOutcome):
 
 
 class ShipmentInvoice(ToolOutcome):
-    """ShipBob's priced list of what the shipment contained (FR-1.18).
-
-    `line_items` are the invoice's own lines, prices included. They are the only
-    figures a recommended amount may be worked out from, and the invoice id in
-    `invoice_id` is what a report names when it says where a figure came from.
-
-    Both are empty or `None` when ShipBob would not price the shipment, which is a
-    settled answer rather than a fault, and one the investigation has to be able to
-    carry on from.
-    """
+    """ShipBob's priced list of what the shipment contained (FR-1.18)."""
 
     tool: str = GENERATE_INVOICE
     invoice_id: str | None = None
@@ -341,26 +211,7 @@ class ShipmentInvoice(ToolOutcome):
 
 
 class AmountCheck(ToolOutcome):
-    """What a proposed amount comes to once the cap has been applied to it.
-
-    The investigation decides what the damage is worth; this says whether that figure
-    survives the reimbursement cap, and what the products cost on the invoice for
-    comparison (FR-1.21, FR-1.20).
-
-    **It may show figures, and that is a change.** Until FR-1.21 was reversed, nothing
-    here could carry an amount at all — the arithmetic produced the figure and a model
-    that had seen one could copy it into a merchant email. The model now produces the
-    figure itself, so hiding it here would achieve nothing. The guarantee that remains is
-    at the other end: the model leaves money out of the email and code adds the *capped*
-    amount, so what reaches a merchant is the figure that survived the cap.
-
-    `capped` says the proposal was above the limit and `recommended_usd` is what it became.
-    `items_total_usd` is what the products cost, which is context and not a limit — a claim
-    may reasonably come to less than the goods did.
-
-    Every figure is text, because that is how money is carried through this system without
-    passing through a floating point number.
-    """
+    """What a proposed amount comes to once the cap has been applied to it."""
 
     tool: str = COMPUTE_REIMBURSEMENT
     priced_products: tuple[str, ...] = ()
@@ -373,20 +224,7 @@ class AmountCheck(ToolOutcome):
 
 
 class CurrencyCheck(ToolOutcome):
-    """What currency this claim's money is in, and an amount turned into dollars.
-
-    ShipBob's records carry no currency at all, so `currency` is worked out from clues —
-    a symbol on the evidence, the country a tracking number ends in, the carrier's name.
-    **`is_ambiguous` means two clues contradicted each other and nothing was concluded**,
-    which is not the same as no clues at all; both leave `currency` empty and they lead a
-    representative to different places.
-
-    `usd_amount` is `None` whenever no conversion happened — no amount was given, or the
-    currency is one this system has no rate for. A `None` there means the reimbursement
-    limit **cannot** yet be applied to the figure, and that is the point of the field.
-
-    Every amount is text, like every other figure in this system.
-    """
+    """What currency this claim's money is in, and an amount turned into dollars."""
 
     tool: str = CHECK_CURRENCY
     currency: str | None = None
@@ -400,18 +238,7 @@ class CurrencyCheck(ToolOutcome):
 
 
 class DocumentTotalsCheck(ToolOutcome):
-    """Whether a document a merchant sent adds up on its own terms.
-
-    `is_consistent` is true only when something was actually checked and all of it
-    agreed. A document that printed no totals at all comes back **false** with no
-    disagreements listed, and the summary says so in words. "We checked and it is fine"
-    and "there was nothing to check" must never read the same way to somebody deciding
-    whether to trust a total (NFR-4).
-
-    `unreadable_figures` lists the text that was handed in as money and could not be read
-    exactly. It is never guessed at — a figure read wrongly is worse than one not read,
-    because nothing downstream can tell the two apart.
-    """
+    """Whether a document a merchant sent adds up on its own terms."""
 
     tool: str = CHECK_DOCUMENT_TOTALS
     line_total: str | None = None
@@ -421,16 +248,7 @@ class DocumentTotalsCheck(ToolOutcome):
 
 
 class CaseFactsReading(ToolOutcome):
-    """The facts written into the claim's own description, and where they contradict ShipBob.
-
-    `contradictions` is the field worth reading. The description and the shipment record
-    name different carriers on nearly every sample claim, and one claim's description says
-    two orders were affected while the case names one. Each entry is a plain sentence
-    saying what disagreed.
-
-    Everything else is `None` when the description simply did not say — which is ordinary,
-    and never filled in with a guess.
-    """
+    """The facts written into the claim's own description, and where they contradict ShipBob."""
 
     tool: str = READ_CASE_FACTS
     damage_type: str | None = None
@@ -442,16 +260,7 @@ class CaseFactsReading(ToolOutcome):
 
 
 class PriceComparison(ToolOutcome):
-    """How ShipBob's prices compare with the prices on the customer's own receipt.
-
-    **It deliberately does not say which is right.** Nobody has decided whether a claim is
-    priced from ShipBob's catalogue or from what the customer actually paid, so this
-    reports both figures and the gap between them and leaves the choice to a person.
-
-    `line_counts_differ` is worth as much as the money: two documents listing different
-    numbers of products usually describe different things, and one sample claim's receipt
-    shows one product where ShipBob's order shows two.
-    """
+    """How ShipBob's prices compare with the prices on the customer's own receipt."""
 
     tool: str = COMPARE_PRICES
     shipbob_total: str | None = None
@@ -463,13 +272,7 @@ class PriceComparison(ToolOutcome):
 
 
 class EvidenceSufficiency(ToolOutcome):
-    """Whether the evidence on this claim can support a recommendation.
-
-    `needs_rep_clarification` and `requests` answer different people. A kind of evidence the
-    merchant never sent is something they can fix, and `requests` holds the sentence to
-    ask them. A kind *we* could not read is something they can do nothing about and must
-    never be asked about; that sets `needs_rep_clarification` instead (FR-1.5, NFR-4).
-    """
+    """Whether the evidence on this claim can support a recommendation."""
 
     tool: str = CHECK_EVIDENCE_IS_ENOUGH
     is_supportable: bool = False
@@ -481,12 +284,7 @@ class EvidenceSufficiency(ToolOutcome):
 
 
 class ProductMatches(ToolOutcome):
-    """Which invoice lines could be the damaged product, and how sure each is.
-
-    **`is_ambiguous` means two lines scored alike and neither was chosen.** Narrowing
-    them is the judgement this system is not allowed to make, because the two can carry
-    different prices and the choice would become the payout (FR-1.13).
-    """
+    """Which invoice lines could be the damaged product, and how sure each is."""
 
     tool: str = MATCH_DAMAGED_PRODUCT
     candidates: tuple[str, ...] = ()
@@ -494,12 +292,7 @@ class ProductMatches(ToolOutcome):
 
 
 class RemedyRequested(ToolOutcome):
-    """What the merchant asked for, in their own words.
-
-    Empty means nothing in the text asked for anything recognisable, which is an ordinary
-    answer. It is never filled in with a guess: a claim whose merchant wanted a spare part
-    is not answered by a reimbursement, and silence is not a request for money.
-    """
+    """What the merchant asked for, in their own words."""
 
     tool: str = READ_REQUESTED_REMEDY
     remedies: tuple[str, ...] = ()
@@ -632,14 +425,7 @@ class ReadRemedyArguments(BaseModel):
 
 
 class NoArguments(BaseModel):
-    """A tool that takes nothing.
-
-    Two of the four are like this, and that is a decision rather than a shortcut: the
-    claim's case id, its shipment and its merchant are fixed when the run is built, so
-    the investigation cannot ask to see another case's images or ask ShipBob to price
-    a shipment that has nothing to do with this claim. Whatever it says, it is
-    answered about this claim only.
-    """
+    """A tool that takes nothing."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -684,13 +470,7 @@ class ComputeReimbursementArguments(BaseModel):
 
 @dataclass(frozen=True)
 class _ToolContext:
-    """Everything the investigation tools need, handed in when the run is built.
-
-    Nothing in this file reaches for a client, a model or a policy of its own. That is
-    what lets a test hand in a ShipBob that answers from memory and a model that
-    answers from a script, and it is what keeps one run's allowance, record and memo
-    from being shared with another run by accident.
-    """
+    """Everything the investigation tools need, handed in when the run is built."""
 
     case_id: str
     shipment_id: str | None
@@ -725,53 +505,7 @@ def investigation_tools(
     case: Case | None = None,
     shipment: Shipment | None = None,
 ) -> list[BaseTool]:
-    """Assemble the tools one investigation run is given (FR-1.2).
-
-    **This is the only place the tools are put together, and that is the point.** "What
-    can the agent do?" has exactly one answer, in one function, and every tool in it only
-    reads or works something out. Nothing that sends an email or moves money is here, or
-    can be reached from here.
-
-    Build one of these per run. The budget and the ledger belong to a single run and
-    must not be shared between two of them (FR-1.3); the memo and the event stream
-    belong to the whole claim and should be shared, so that two products investigated
-    at the same time never pay twice for looking at the same photograph (NFR-8) and a
-    watcher sees one ordered stream of messages.
-
-    Args:
-        case_id: The claim being investigated. Fixed here rather than asked for, so the
-            investigation can only ever be answered about this claim.
-        shipment_id: The parcel the claim is about, from the case. `None` when the case
-            names no shipment, and then the invoice tool says so plainly instead of
-            calling ShipBob.
-        user_id: The merchant, from the case. ShipBob needs it to price a shipment, so
-            `None` has the same effect as a missing shipment.
-        evidence: Reads the case's images and asks ShipBob to price the shipment. It is
-            the only ShipBob client an investigation holds, and it can only read.
-        fetcher: Turns an image's address into the picture itself.
-        model: Asked what an image is, and constrained to answer on a form (NFR-2).
-        cache: This claim's memo of expensive answers. One per claim.
-        budget: This run's allowances. One per run. The tools spend the image
-            allowance; steps belong to whoever drives the run and are spent there.
-        ledger: This run's record of what it did. One per run.
-        events: Says what is happening while the run is still working. Shared by the
-            whole claim.
-        policy: Read for the reimbursement cap, so the limit is a configured value
-            rather than a number buried in a branch (FR-0.7, NFR-7).
-        claim_line_id: The one damaged product this run answers for, named on every
-            event so a screen can tell several runs apart. `None` for the pass that
-            works on the claim as a whole.
-        case: The claim's own record, already read by the pre-flight screen. Handed in
-            rather than fetched again, so reading the description costs nothing and the
-            tools still hold no client that could wander off this claim. `None` leaves
-            the description unreadable, which the tool says plainly rather than failing.
-        shipment: The parcel's record, for its carrier and tracking number — the two
-            clues to what currency this claim's money is in. `None` when the case named
-            no shipment or it could not be read.
-
-    Returns:
-        The tools named in `TOOL_NAMES`, ready to bind to a model.
-    """
+    """Assemble the tools one investigation run is given (FR-1.2)."""
     context = _ToolContext(
         case_id=case_id,
         shipment_id=shipment_id,
@@ -849,16 +583,7 @@ def investigation_tools(
 
 
 async def _list_images(context: _ToolContext) -> tuple[str, AttachmentListing]:
-    """List the images on the claim, by id (FR-1.4, FR-1.6).
-
-    An empty claim is an ordinary answer and is said as one: there is nothing to look
-    at, which settles the claim quickly rather than failing it. A listing that could
-    not be fetched says so instead, because "the merchant sent nothing" and "we could
-    not look" lead to opposite outcomes.
-
-    Returns:
-        The sentence the model reads with the ids under it, and the listing beside it.
-    """
+    """List the images on the claim, by id (FR-1.4, FR-1.6)."""
     asked = f"List the images on case {context.case_id}."
     try:
         attachments = await _attachments_on_the_case(context)
@@ -896,23 +621,7 @@ async def _list_images(context: _ToolContext) -> tuple[str, AttachmentListing]:
 async def _inspect(
     context: _ToolContext, attachment_id: str, question: str | None = None
 ) -> tuple[str, ImageInspection]:
-    """Look at one image and say what it is and whether it can be relied on (FR-1.4, FR-1.5).
-
-    The costly one. It fetches the picture, shows it to the model, and takes back an
-    answer on a fixed form. The answer is remembered for the whole claim, so a second
-    run asking the same question about the same image is handed the first run's answer
-    and pays nothing (NFR-8), and the run's image allowance is spent only when the work
-    actually happens.
-
-    Four things can go wrong, and they are told apart because they lead different
-    places: an id that is on no image here, an allowance already used up, an image we
-    could not fetch or get an answer about, and an image the model says is too poor to
-    conclude anything from. Only the last of those is something the merchant can fix.
-
-    Returns:
-        The sentence the model reads with what was seen under it, and the inspection
-        beside it.
-    """
+    """Look at one image and say what it is and whether it can be relied on (FR-1.4, FR-1.5)."""
     asked = f"Look at image {attachment_id}."
     if question is not None:
         asked = f"Look at image {attachment_id} and answer: {question}"
@@ -1002,21 +711,7 @@ async def _inspect(
 
 
 async def _invoice(context: _ToolContext) -> tuple[str, ShipmentInvoice]:
-    """Ask ShipBob to price what the shipment contained (FR-1.18).
-
-    The invoice is the only document a recommended amount may be priced from, so a
-    shipment ShipBob will not price is a settled answer the investigation has to be
-    able to carry on from rather than a fault to stop at.
-
-    Prices are passed on to the model, which is the same considered choice the prompts
-    already make about the order's prices: an order can hold two similar products at
-    different prices, and the model cannot refuse to guess between them without seeing
-    that they differ (FR-1.13). It is told, twice over, never to write one back.
-
-    Returns:
-        The sentence the model reads with the priced lines under it, and the invoice
-        beside it.
-    """
+    """Ask ShipBob to price what the shipment contained (FR-1.18)."""
     asked = f"Ask ShipBob to price shipment {context.shipment_id}."
     if context.shipment_id is None or context.user_id is None:
         return await _finish(
@@ -1068,25 +763,7 @@ async def _amount_check(
     damaged_items: Sequence[DamagedItem],
     proposed_amount_usd: str,
 ) -> tuple[str, AmountCheck]:
-    """Check a figure the investigation is considering against the cap (FR-1.21, FR-1.20).
-
-    The investigation decides what the damage is worth. This lets it check that figure
-    before committing to it: what the products cost on the invoice, and whether the amount
-    is within the cap or would be brought down to it.
-
-    **It shows figures, unlike every earlier version of this tool.** That is the reversal
-    of FR-1.21 — the model produces the amount now, so withholding one here would protect
-    nothing. What still holds is that the model leaves money out of the email and code adds
-    the capped figure afterwards, so no number the model wrote reaches a merchant.
-
-    An item that is on no invoice line, or that could be either of two, prices nothing at
-    all: narrowing two candidates to one is the judgement this system is not allowed to
-    make (FR-1.13). The figure is still checked against the cap in that case, so the run
-    learns both things at once.
-
-    Returns:
-        The sentence the model reads with the products under it, and the check beside it.
-    """
+    """Check a figure the investigation is considering against the cap (FR-1.21, FR-1.20)."""
     named = ", ".join(item.product_name for item in damaged_items) or "nothing"
     asked = f"Is {proposed_amount_usd} a sound amount for: {named}?"
 
@@ -1206,21 +883,7 @@ async def _currency_check(
     symbols_seen: tuple[str, ...] = (),
     amount: str | None = None,
 ) -> tuple[str, CurrencyCheck]:
-    """Say what currency this claim's money is in, and put an amount into dollars.
-
-    ShipBob's records carry no currency field at all, and the amount a claim may be
-    reimbursed is a dollar figure. One of ShipBob's own sample claims ships by Royal Mail
-    on a tracking number ending `GB` and its evidence reads in pounds, while its order
-    totals a bare `90.00` — inside the limit as dollars, outside it as pounds. Without
-    this the investigation measures one against the other and never knows.
-
-    Two clues that contradict each other settle nothing, and the answer says so rather
-    than picking a winner: choosing quietly is how a claim gets held to the wrong limit
-    (FR-1.13).
-
-    Returns:
-        The sentence the model reads, and the finding beside it.
-    """
+    """Say what currency this claim's money is in, and put an amount into dollars."""
     asked = "What currency is this claim's money in?"
     finding = currency_for_claim(
         tracking_number=context.shipment.tracking_number if context.shipment else None,
@@ -1286,19 +949,7 @@ async def _document_totals_check(
     discount: str | None = None,
     total: str | None = None,
 ) -> tuple[str, DocumentTotalsCheck]:
-    """Add a document's own figures up again and report where it contradicts itself.
-
-    A total printed on a photographed invoice is a claim the document makes about itself,
-    not a fact, and one of ShipBob's sample documents is wrong three ways at once. The
-    arithmetic happens here rather than in the model's head so that a figure which decides
-    money is one a person can redo and get the same answer (NFR-1, NFR-3).
-
-    A figure that cannot be read exactly is never guessed at. It is listed as unread, so
-    the run can see that its picture of the document is incomplete.
-
-    Returns:
-        The sentence the model reads, with each disagreement listed under it.
-    """
+    """Add a document's own figures up again and report where it contradicts itself."""
     asked = "Does this document add up?"
     unreadable: list[str] = []
 
@@ -1362,20 +1013,7 @@ async def _document_totals_check(
 
 
 async def _case_facts(context: _ToolContext) -> tuple[str, CaseFactsReading]:
-    """Read the facts written into the claim's own description, and check them.
-
-    Every sample claim hides structured facts in prose — the damage type, the defect type,
-    how many orders are affected, the carrier, the date the carrier last tracked the
-    parcel — and nothing read them before. More usefully, those facts contradict ShipBob's
-    own records: nearly every description names the carrier as `Other` while the shipment
-    record names a real one, and one says two orders are affected while the case names a
-    single order.
-
-    None of it decides anything. Contradictions are put in front of a person.
-
-    Returns:
-        The sentence the model reads, with each contradiction listed under it.
-    """
+    """Read the facts written into the claim's own description, and check them."""
     asked = "What does this claim's own description say, and does it match ShipBob's records?"
 
     if context.case is None:
@@ -1423,20 +1061,7 @@ async def _price_comparison(
     receipt_lines: tuple[ReceiptLineArgument, ...],
     receipt_total: str | None = None,
 ) -> tuple[str, PriceComparison]:
-    """Compare ShipBob's prices with the prices on the customer's own receipt.
-
-    They disagree on every sample claim with evidence, sometimes by a lot: one order
-    ShipBob prices at `195.94` was paid at `134.99` after a discount, and another that
-    ShipBob lists as a single product shows two on the customer's receipt. An amount
-    worked out from ShipBob's catalogue alone would be wrong on all four, and silently so.
-
-    **It never says which price is right.** Nobody has decided whether a claim is priced
-    from ShipBob's records or from what the customer paid, so both figures and the gap
-    between them go in front of a person.
-
-    Returns:
-        The sentence the model reads, with each finding listed under it.
-    """
+    """Compare ShipBob's prices with the prices on the customer's own receipt."""
     asked = "Do ShipBob's prices agree with the customer's receipt?"
 
     if context.shipment_id is None or context.user_id is None:
@@ -1516,20 +1141,7 @@ async def _evidence_is_enough(
     context: _ToolContext,
     findings: tuple[EvidenceFindingArgument, ...],
 ) -> tuple[str, EvidenceSufficiency]:
-    """Say whether this claim's evidence can support a recommendation at all.
-
-    One of ShipBob's sample claims has no attachments whatsoever and is already waiting on
-    the merchant. The right answer there is a specific request — "send a photograph of the
-    outer box" — not a priced verdict worked out from nothing.
-
-    **What the merchant can fix and what only we can fix are kept apart.** Evidence they
-    never sent goes into `requests`, ready to send. Evidence we could not read is nothing
-    they can act on, must not be asked about, and requests representative clarification instead (FR-1.5, NFR-4).
-
-    The same photograph attached twice is reported alongside, because two copies of one
-    image make a claim look better evidenced than it is. It is **not** treated as proof of
-    anything: merchants re-send photographs for innocent reasons all the time.
-    """
+    """Say whether this claim's evidence can support a recommendation at all."""
     asked = "Is there enough evidence on this claim to recommend anything?"
     assessment = assess_evidence_sufficiency(
         [
@@ -1576,16 +1188,7 @@ async def _match_product(
     sku: str | None = None,
     quantity: int = 1,
 ) -> tuple[str, ProductMatches]:
-    """Find which invoice lines could be the damaged product, and how sure each is.
-
-    ShipBob and a merchant's own paperwork rarely write a product the same way — one
-    sample invoice calls a product `liquid carnitine 3000` where ShipBob calls it
-    `Blue Razz Liquid Carnitine` — so an exact comparison fails on products that are
-    obviously the same thing.
-
-    **Two lines scoring alike is reported and never resolved.** They can carry different
-    prices, so choosing between them would quietly become the payout (FR-1.13).
-    """
+    """Find which invoice lines could be the damaged product, and how sure each is."""
     asked = f"Which invoice lines could be {product_name}?"
 
     if context.shipment_id is None or context.user_id is None:
@@ -1649,16 +1252,7 @@ async def _match_product(
 
 
 async def _requested_remedy(context: _ToolContext, text: str) -> tuple[str, RemedyRequested]:
-    """Work out what the merchant actually asked to happen.
-
-    One sample claim, filed as damage in transit, asks for a replacement lid. No
-    reimbursement answers that question, and nothing in the system noticed. Another asks
-    for a refund **or** the order sent again, explicitly either way.
-
-    This reads plain words and nothing more. It will miss anything phrased politely,
-    indirectly or sarcastically, and the model reading the merchant's message is better at
-    it — so this is a second opinion, never an overrule. "Unclear" is a good answer.
-    """
+    """Work out what the merchant actually asked to happen."""
     reading = classify_remedy(text)
     return await _finish(
         context,
@@ -1676,12 +1270,7 @@ async def _requested_remedy(context: _ToolContext, text: str) -> tuple[str, Reme
 
 
 def _comparison_findings(comparison: PriceReconciliation) -> tuple[str, ...]:
-    """The differences worth naming to the model, one plain sentence each.
-
-    Only the lines that actually disagree, are missing from one side, or could not be
-    tied to a single line are named. Listing the lines that matched would bury the ones
-    that did not.
-    """
+    """The differences worth naming to the model, one plain sentence each."""
     named: list[str] = []
     for line in comparison.lines:
         if line.kind is LineMatchKind.AMBIGUOUS:
@@ -1703,16 +1292,7 @@ def _comparison_findings(comparison: PriceReconciliation) -> tuple[str, ...]:
 
 
 async def _attachments_on_the_case(context: _ToolContext) -> tuple[Attachment, ...]:
-    """The claim's images, fetched once per claim however many runs ask for them.
-
-    Two tools need the listing — one to report it and one to turn an id into an address
-    — and a claim covering four damaged products has four runs asking. Filing the
-    answer in the claim's memo means ShipBob is asked once (NFR-8).
-
-    Raises:
-        ClaimAgentError: the claim does not exist, or ShipBob could not be reached. A
-            failure is deliberately not remembered, so the next caller tries again.
-    """
+    """The claim's images, fetched once per claim however many runs ask for them."""
     return await context.cache.get_or_compute(
         _ATTACHMENTS_MEMO.format(case_id=context.case_id),
         partial(context.evidence.list_attachments, context.case_id),
@@ -1722,15 +1302,7 @@ async def _attachments_on_the_case(context: _ToolContext) -> tuple[Attachment, .
 async def _invoice_for_the_shipment(
     context: _ToolContext, shipment_id: str, user_id: str
 ) -> Invoice:
-    """The shipment's priced invoice, generated once per claim (FR-1.18, NFR-8).
-
-    Filed in the claim's memo for the same reason the listing is: the tool that reports
-    the invoice and the tool that prices damaged items against it both need it, and so
-    does every run on the claim.
-
-    Raises:
-        ClaimAgentError: ShipBob will not price this shipment, or could not be reached.
-    """
+    """The shipment's priced invoice, generated once per claim (FR-1.18, NFR-8)."""
     return await context.cache.get_or_compute(
         _INVOICE_MEMO.format(shipment_id=shipment_id),
         partial(context.evidence.generate_invoice, shipment_id=shipment_id, user_id=user_id),
@@ -1740,19 +1312,7 @@ async def _invoice_for_the_shipment(
 async def _analyse(
     context: _ToolContext, attachment: Attachment, question: str | None
 ) -> ImageObservation:
-    """Fetch one image, show it to the model, and take back an answer on a form.
-
-    Runs only when this claim has no answer to this question yet, because the memo
-    calls it only on a miss. The image allowance is spent here, at the start, so that
-    an attempt which fails part way still counts: a download that broke cost what a
-    download that worked costs, and an allowance that only counted successes would let
-    a run with unreachable images look at far more of them than intended (NFR-8).
-
-    Raises:
-        ClaimAgentError: the image could not be fetched, or the model could not be
-            reached or would not answer on the form. Either way this is our failure and
-            not the merchant's, and the caller turns it into an unreadable result.
-    """
+    """Fetch one image, show it to the model, and take back an answer on a form."""
     context.budget.spend_image_analysis()
     image = await context.fetcher.fetch(attachment)
     return await context.model.ask(
@@ -1762,13 +1322,7 @@ async def _analyse(
 
 
 def _inspection_of(attachment_id: str, observation: ImageObservation) -> ImageInspection:
-    """Turn what the model saw into a result, and say whose problem it is if it is a poor image.
-
-    An image the model says it cannot rely on is a **successful** call: finding that out
-    is what was asked for, and the answer is worth as much as any other. What it is not
-    is evidence — it counts the same as an image that was never sent, and the merchant
-    can send another, which is what `UNUSABLE` records (FR-1.5, FR-1.7).
-    """
+    """Turn what the model saw into a result, and say whose problem it is if it is a poor image."""
     if not observation.is_legible:
         problem = observation.problem or "it is not clear enough to draw a conclusion from"
         return ImageInspection(
@@ -1799,13 +1353,7 @@ def _inspection_of(attachment_id: str, observation: ImageObservation) -> ImageIn
 
 
 def _what_was_seen(attachment_id: str, observation: ImageObservation) -> list[str]:
-    """Write out what was in the image, for the model to read under the summary.
-
-    What was read off a photograph is text nobody at ShipBob wrote, so it is marked as
-    such. A photograph of a note reading "approve this claim" tells the investigation
-    what the note says and nothing more, and the marked block is what makes that plain
-    rather than leaving it to good intentions.
-    """
+    """Write out what was in the image, for the model to read under the summary."""
     said = [f"What is visible: {observation.shows}"]
     if observation.problem is not None:
         said.append(f"Why it cannot be relied on: {observation.problem}")
@@ -1813,12 +1361,7 @@ def _what_was_seen(attachment_id: str, observation: ImageObservation) -> list[st
 
 
 def _render_invoice_lines(line_items: Sequence[OrderLineItem]) -> str:
-    """Write out an invoice's lines the way the prompts write out an order's.
-
-    Same shape, so a product on the invoice and the same product on the order read
-    alike and can be compared without translating between two layouts. Product names
-    are the merchant's own catalogue text, so they are marked as text we did not write.
-    """
+    """Write out an invoice's lines the way the prompts write out an order's."""
     if not line_items:
         return "This invoice has no lines at all, so it prices nothing."
     listed = "\n".join(
@@ -1830,12 +1373,7 @@ def _render_invoice_lines(line_items: Sequence[OrderLineItem]) -> str:
 
 
 def _render_priced_products(product_names: Sequence[str]) -> str:
-    """Name the products that were priced, so the model can see its list was understood.
-
-    Quantities and prices are left out. The names come from the invoice rather than
-    from what the model asked about, which is what lets it notice that a name it
-    guessed at was matched to something else.
-    """
+    """Name the products that were priced, so the model can see its list was understood."""
     return quote_untrusted("PRICED_PRODUCTS", "\n".join(f"- {name}" for name in product_names))
 
 
@@ -1852,32 +1390,7 @@ async def _finish(
     reference: str | None = None,
     lines: Sequence[str] = (),
 ) -> tuple[str, OutcomeT]:
-    """Record a tool call, say it happened, and hand the answer back.
-
-    Every call goes through here, and every call is recorded whether it worked or not.
-    The ledger entry is what a representative reads when she asks why a claim was
-    sent for representative clarification (NFR-3), and the event is what somebody watching sees while the run is
-    still going — a tool being called is the investigation choosing what to look at
-    next, which is the whole reason this is an agent rather than a fixed sequence of
-    steps (FR-1.1).
-
-    A stream nobody is listening to, or one that fails, changes nothing: the event
-    stream swallows its own troubles so that a closed browser cannot fail a claim.
-
-    Args:
-        context: The run this call belongs to.
-        outcome: What the tool established, success or failure.
-        asked: What the tool was asked, in one plain sentence, for the record.
-        reference: The id of the thing the call was about, so a representative can look
-            at what the system looked at. `None` when it was about no one thing.
-        lines: What the model reads under the summary — ids, invoice lines, what was
-            seen in a photograph. Left out when the summary says everything.
-
-    Returns:
-        The text the model reads, and the outcome beside it. The tool library puts the
-        first in front of the model and keeps the second on the tool call, so the run
-        can act on the parts of an answer without reading them back out of prose.
-    """
+    """Record a tool call, say it happened, and hand the answer back."""
     context.ledger.record(
         kind=StepKind.TOOL_CALL,
         name=outcome.tool,
@@ -1908,18 +1421,7 @@ def _build(
     context: _ToolContext,
     work: Callable[..., Awaitable[tuple[str, ToolOutcome]]],
 ) -> BaseTool:
-    """Wrap one of the functions above as a tool the model can be offered.
-
-    The run's context is bound in here rather than passed by the model, so nothing the
-    model says can change which claim, which allowance or which record a call belongs
-    to.
-
-    Two settings are load-bearing. The answer is handed back as a sentence and an
-    object together: the model reads the sentence, and the run keeps the object, which
-    is how an unreadable image stays distinguishable from an unusable one without
-    anybody parsing prose. And a call whose arguments will not parse is answered rather
-    than raised, so that a model's mistake is something the run can recover from (NFR-4).
-    """
+    """Wrap one of the functions above as a tool the model can be offered."""
     return StructuredTool.from_function(
         coroutine=partial(work, context),
         name=name,
@@ -1931,11 +1433,7 @@ def _build(
 
 
 def _find(attachments: Sequence[Attachment], attachment_id: str) -> Attachment | None:
-    """Pick out the image with this id, or say there is none.
-
-    `None` means the model named an id this claim does not have, which is a mistake it
-    can recover from once it is told, and not a failure of ours.
-    """
+    """Pick out the image with this id, or say there is none."""
     return next(
         (attachment for attachment in attachments if attachment.attachment_id == attachment_id),
         None,
@@ -1943,46 +1441,22 @@ def _find(attachments: Sequence[Attachment], attachment_id: str) -> Attachment |
 
 
 def _as_asked(question: str | None) -> str:
-    """Reduce a question to the form two of them are compared in, for the memo's key.
-
-    Runs of spaces are typing rather than meaning, so "is the box crushed?" asked with
-    a stray newline in it is the same question and gets the same answer. Nothing else
-    is ignored: two questions that differ in a word can have different answers, and
-    they must never share a key. No question at all is its own key, distinct from any
-    question somebody asked.
-    """
+    """Reduce a question to the form two of them are compared in, for the memo's key."""
     if question is None:
         return ""
     return " ".join(question.split())
 
 
 def _as_data_url(image: FetchedImage) -> str:
-    """Write a downloaded image as an address that carries the picture inside it.
-
-    A model is shown a picture by address. The image is already in hand, so the address
-    holds the bytes themselves rather than pointing back at ShipBob's storage — which
-    also means the signed link, which acts as a password for the file, is never written
-    into a prompt.
-    """
+    """Write a downloaded image as an address that carries the picture inside it."""
     return f"data:{image.media_type};base64,{image.data_base64}"
 
 
 def _as_claimed_product(item: DamagedItem) -> ClaimedProduct:
-    """Turn what the model says was damaged into what the arithmetic reads.
-
-    The two shapes say the same thing in different words, deliberately: what a model is
-    allowed to assert is a narrower thing than what the rest of the system works with,
-    and keeping them apart is what stops a field appearing on one because it was
-    convenient on the other.
-    """
+    """Turn what the model says was damaged into what the arithmetic reads."""
     return ClaimedProduct(name=item.product_name, quantity=item.quantity, sku=item.sku)
 
 
 def _money(amount: Decimal) -> str:
-    """A price from ShipBob's records, written out for the model to read.
-
-    An amount going in, never one coming out. Nothing the model writes is ever turned
-    back into a figure by this system: that arithmetic reads ShipBob's records rather
-    than the model's words (FR-1.21).
-    """
+    """A price from ShipBob's records, written out for the model to read."""
     return f"{amount:.2f}"
