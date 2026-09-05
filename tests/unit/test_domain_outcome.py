@@ -682,3 +682,146 @@ def test_nfr_4_a_shortcoming_of_ours_never_sends_a_request_to_the_merchant() -> 
         if outcome is Recommendation.REQUEST_INFO
     }
     assert asks_the_merchant == {OverrideReason.EVIDENCE_INCOMPLETE}
+
+
+# ---------------------------------------------------------------------------
+# Telling a representative when the damaged goods are expensive (FR-C.7)
+# ---------------------------------------------------------------------------
+
+
+def expensive_goods(items_total: str, *, paid: str = "100.00") -> AmountDerivation:
+    """A payment for damaged items that cost `items_total` on the invoice.
+
+    `paid` defaults to the cap, because goods worth several hundred dollars are exactly
+    the case where the cap bites — and the point of these tests is that the label is
+    decided on what the goods cost rather than on what would be paid for them.
+    """
+    return AmountDerivation(
+        components=(
+            AmountComponent(
+                product_name=COLLAGEN,
+                quantity=1,
+                unit_price=Decimal(items_total),
+                sku="COLLAGEN1",
+            ),
+        ),
+        items_total_usd=Decimal(items_total),
+        proposed_usd=Decimal(items_total),
+        amount_usd=Decimal(paid),
+        cap_usd=Decimal("100.00"),
+        cap_applied=Decimal(items_total) > Decimal("100.00"),
+        priced_from="INV-342578703",
+    )
+
+
+def test_fr_c_7_an_approval_of_expensive_goods_asks_for_a_second_look() -> None:
+    """FR-C.7: a high-value claim is named as one, so nobody approves it without noticing."""
+    decision = decide(Recommendation.APPROVE, amount=expensive_goods("600.00"))
+
+    assert decision.recommendation is Recommendation.APPROVE_HIGH_VALUE
+    assert decision.recommended_by_agent is Recommendation.APPROVE
+    assert "$600.00" in decision.explanation
+    assert "$500.00" in decision.explanation
+    assert "second look" in decision.explanation
+
+
+def test_fr_c_7_the_label_withholds_nothing_and_reports_no_rule_as_having_stepped_in() -> None:
+    """FR-C.7: the same payment on the same evidence, said so a person cannot miss it."""
+    decision = decide(Recommendation.APPROVE, amount=expensive_goods("600.00"))
+
+    assert decision.recommendation.is_approval
+    assert decision.overrides == ()
+    assert not decision.was_overridden
+    assert decision.waived == ()
+
+
+def test_fr_c_7_goods_under_the_figure_are_approved_without_a_label() -> None:
+    """FR-C.7: an ordinary claim reads exactly as it always did."""
+    decision = decide(Recommendation.APPROVE, amount=expensive_goods("52.00", paid="52.00"))
+
+    assert decision.recommendation is Recommendation.APPROVE
+    assert "high value" not in decision.explanation
+
+
+def test_fr_c_7_what_the_goods_cost_is_compared_and_not_what_would_be_paid() -> None:
+    """FR-C.7 with FR-1.20: a payment can never reach $500, so comparing it flags nothing."""
+    decision = decide(Recommendation.APPROVE, amount=expensive_goods("600.00"))
+
+    assert decision.recommendation is Recommendation.APPROVE_HIGH_VALUE
+    # The cap still decides the money. The label changes what is said, never the figure.
+    assert expensive_goods("600.00").amount_usd == Decimal("100.00")
+
+
+def test_fr_c_7_the_figure_comes_from_the_claim_policy() -> None:
+    """FR-0.7, NFR-7: the threshold is a setting, not a number written into a branch."""
+    decision = decide(
+        Recommendation.APPROVE,
+        amount=expensive_goods("52.00", paid="52.00"),
+        policy=Policy(high_value_order_usd=Decimal("40.00")),
+    )
+
+    assert decision.recommendation is Recommendation.APPROVE_HIGH_VALUE
+    assert "$40.00" in decision.explanation
+
+
+def test_fr_c_7_goods_landing_exactly_on_the_figure_follow_the_same_setting_as_an_order() -> None:
+    """FR-0.5: one threshold and one rule about its edge, however it is being asked."""
+    at_the_figure = expensive_goods("500.00")
+
+    inclusive = decide(Recommendation.APPROVE, amount=at_the_figure, policy=Policy())
+    exclusive = decide(
+        Recommendation.APPROVE,
+        amount=at_the_figure,
+        policy=Policy(high_value_inclusive=False),
+    )
+
+    assert inclusive.recommendation is Recommendation.APPROVE_HIGH_VALUE
+    assert exclusive.recommendation is Recommendation.APPROVE
+
+
+def test_fr_c_7_a_claim_the_rules_withheld_is_never_labelled_instead() -> None:
+    """FR-1.6 outranks the label: an expensive claim short of evidence still asks for it."""
+    decision = decide(
+        Recommendation.APPROVE,
+        evidence=evidence_with(EvidenceKind.INVOICE, EvidenceState.MISSING),
+        amount=expensive_goods("600.00"),
+    )
+
+    assert decision.recommendation is Recommendation.REQUEST_INFO
+    assert OverrideReason.EVIDENCE_INCOMPLETE in decision.overrides
+
+
+def test_fr_c_7_a_payment_a_representative_directed_is_labelled_too() -> None:
+    """FR-C.7 with NFR-5: whoever reads the report next may not be who gave the instruction."""
+    decision = decide_outcome(
+        Recommendation.APPROVE,
+        evidence=evidence_with(EvidenceKind.INVOICE, EvidenceState.MISSING),
+        assessments=all_questions_answered(),
+        line=matched_line(),
+        amount=expensive_goods("600.00"),
+        policy=Policy(),
+        directed_by_representative=True,
+    )
+
+    assert decision.recommendation is Recommendation.APPROVE_HIGH_VALUE
+    assert decision.directed_by_representative
+    assert OverrideReason.EVIDENCE_INCOMPLETE in decision.waived
+
+
+def test_fr_c_7_only_an_approval_is_ever_labelled() -> None:
+    """FR-1.14: the label says a payment wants a second look, so there has to be a payment."""
+    for recommended in (Recommendation.REQUEST_INFO, Recommendation.REQUEST_REP_CLARIFICATION):
+        decision = decide(
+            recommended,
+            amount=expensive_goods("600.00"),
+            requested_details=("A photograph of the outer box.",),
+        )
+
+        assert decision.recommendation is recommended
+
+
+def test_fr_1_14_both_ways_of_recommending_a_payment_answer_to_the_same_question() -> None:
+    """Everything that treats an approval differently has to mean both of them."""
+    approvals = {outcome for outcome in Recommendation if outcome.is_approval}
+
+    assert approvals == {Recommendation.APPROVE, Recommendation.APPROVE_HIGH_VALUE}

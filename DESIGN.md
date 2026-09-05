@@ -31,8 +31,10 @@ This system does the slow part. For each damaged product it gathers the evidence
 against the rules, and returns two distinct outputs: a structured claim report and, only when
 the next action is merchant-facing, a draft email. Then it stops.
 
-There are three next actions. An approval report carries the approved amount, and its email
-communicates that amount. A request for merchant information names the exact
+There are four next actions. An approval report carries the approved amount, and its email
+communicates that amount. An approval whose damaged goods cost more than the high-value figure is
+the same approval, labelled so a representative takes a second look at an expensive claim. A
+request for merchant information names the exact
 details needed in both the report and email, including a merchant-resolvable ambiguity. Anything
 incorrect, ambiguous, internally failed, or too uncertain for the evidence to support asks the
 representative for clarification when the merchant cannot resolve it with a specific detail, and
@@ -92,8 +94,14 @@ email wording, or send it back with feedback in their own words — in which cas
 reworks the report and the email around what they said, tells them what it changed, and hands it
 back for another look. That can go round as many times as they like, and each round is shown the
 whole conversation so far. There is no timeout and no automatic approval; a person approving is
-the only way out. Once they do, we send the email and submit the payment, and we record exactly
-what was sent.
+the only way out. Once they do, the claim line is closed and the work is finished.
+
+**We do not send anything.** There is no stage after this one. The approved report and its draft
+email are what the system produces, and the representative sends that email and submits the
+payment through ShipBob's own tools. That was a deliberate cut in scope, and it costs two things
+worth knowing: a claim line counts as settled the moment a person approves it rather than when the
+merchant is actually told, and the system's record of a claim ends at what was approved rather
+than at what was sent.
 
 A rep's correction is also remembered against that merchant, so the next claim from them starts
 better informed.
@@ -112,8 +120,8 @@ decision, and — on a stopped claim — the write-up, the draft email where the
 representative clarification request where the parcel was insured. The email can be reworded on the spot. It is a
 demonstration: anyone who opens it can screen any claim, and it decides nothing itself. It has a
 send button and an request representative clarification button, and neither reaches anything — nothing leaves the browser,
-because the stages that would send an email or route a claim out do not exist, though the screen
-reports both as done.
+because nothing in this system sends an email or routes a claim out, though the screen reports
+both as done.
 Alongside it there is a stand-in for ShipBob, so the whole thing can be run on a laptop without
 being connected to anything.
 
@@ -534,8 +542,8 @@ of them states — see the questions at the end of this document.
    of it marked as needing a person's approval.
 
 **What it connects to** — It reads the verdict and check results from the pre-flight checks and
-produces the report a representative reviews. Nothing sends the email; sending is a later stage
-and only happens after approval.
+produces the report a representative reviews. Nothing sends the email — nothing in this system
+sends anything, and an approved draft is handed back to a representative to send themselves.
 
 **Choices we made**
 
@@ -1055,8 +1063,8 @@ arrived at, and the draft email. Nothing is sent and nothing is stored.
 
 **Choices we made**
 
-- **The AI recommends; it does not decide.** It proposes one of three next actions and explains
-  why. Where the rules say an
+- **The AI recommends; it does not decide.** It proposes one of the three next actions it may
+  choose and explains why. Where the rules say an
   approval is not available — a piece of evidence is missing, the evidence is uncertain, or it ran out
   of steps — the recommendation is moved to asking the merchant or requesting rep clarification, and what
   the AI originally said is recorded next to it. Nothing can move a recommendation *towards* paying.
@@ -1473,8 +1481,9 @@ below.
 
 It is worth being blunt about the limit. **The requirements forbid automatic approval outright.**
 FR-2.9 says a report leaves review in exactly one way — a person approves it — and that there is
-no automated score and no number of revisions that changes this. FR-3.1 calls the same thing a
-hard invariant. So this screen cannot switch anything on, and does not pretend to. It is the
+no automated score and no number of revisions that changes this. The requirements no longer
+contain a stage that acts on an approval at all, so there is nothing here that could run without a
+person even in principle. So this screen cannot switch anything on, and does not pretend to. It is the
 evidence somebody would need in order to argue that those requirements should change, and it
 says so where a reader will see it.
 
@@ -1507,8 +1516,8 @@ says so where a reader will see it.
 5. The screen draws the first three of those, and adds nothing.
 
 **Step 4 is worked out and not shown.** The table of candidate rules was on the screen and was
-taken off, along with a chart breaking disagreement down by which of the three actions was
-made. The scoring still runs and is still tested; what went is the drawing of it. That is the one
+taken off, along with a chart breaking disagreement down by which action was
+recommended. The scoring still runs and is still tested; what went is the drawing of it. That is the one
 thing on this screen that spoke directly to "could any of this be automated yet", so it is worth
 knowing it is a panel away rather than a piece of work away.
 
@@ -1676,7 +1685,7 @@ stage that sends an approved email does not exist yet, so an approval stops at b
   made, and the report says plainly that it went over. Refusing would throw away a decision a
   person made, which is worse than recording one somebody may query. **This is our reading**, not
   something anyone has ruled on — see the questions at the end.
-- **A stopped claim's report recommends nothing.** The three actions are about a damaged
+- **A stopped claim's report recommends nothing.** The next actions are about a damaged
   product, and a stopped claim has none. Its reasons are what it has to say, and turning them
   into a recommendation would be the system inventing an answer nobody gave.
 - **Still undecided:** whether sending a report back should be possible at all until the stage
@@ -2595,6 +2604,187 @@ the screen: `web/src/components/RevisionThread.tsx`.
 ---
 
 
+### Telling a representative when the damaged goods are expensive
+
+**What it does** — When the system recommends paying a claim, and the damaged goods themselves
+cost more than the figure that counts as high value, it says so in the recommendation itself. A
+representative sees a high-value approval rather than an ordinary one, with the two figures that
+decided it, so an expensive product gets a second pair of eyes before anybody sends anything.
+
+**Why we need it** — Whether an order is high value has been worked out since early in this
+project, shown on every report, and acted on by nothing (FR-0.5). REQUIREMENTS.md notices that and
+asks what "more care" is actually supposed to mean for such a claim, offering three readings and
+choosing none of them (FR-C.7). This is the answer we were given, and it is a fourth reading: the
+outcome does not change and the evidence bar does not move. The same approval is labelled, so that
+nobody approves an expensive claim without noticing that it was one.
+
+**How it works**
+
+1. The investigation reaches its conclusion in the ordinary way. It picks from the same three
+   actions it always could, and it is never asked whether this is an expensive claim. That keeps
+   the label off the AI's judgement and on a rule, so the same claim is labelled the same way
+   twice.
+2. Code prices the damaged items from the invoice and holds what would be paid to the maximum,
+   exactly as before.
+3. Every rule that can withhold a payment runs, exactly as before. A claim that does not survive
+   them is not an approval at all, and none of this applies to it.
+4. If an approval still stands, one comparison is made: did the damaged goods cost at least the
+   high-value figure? If they did, the recommendation becomes the high-value approval, and the
+   report gains a sentence naming both figures — what the goods cost, and the figure they reached.
+5. Nothing else changes. The amount is the same amount, the drafted email is the same email, and
+   the merchant is told none of this. It is a note between the system and the representative.
+
+**What it connects to** — It reads two things: what the damaged items cost on the invoice, which
+the amount working already holds, and the high-value figure in the rules file — the same figure
+that decides whether an order is called high value on the report. One number answering two
+questions, so changing it on the admin screen changes both. What it produces is the fourth
+recommendation, which the report, the list of reports and the screen all show like any other.
+
+**Choices we made**
+
+- **A fourth outcome, rather than a note beside the third.** A flag tucked next to an approval is
+  easy to read past; the recommendation is the one line nobody skips. The cost is real: a system
+  that deliberately had exactly three outcomes now has four, and everything that asks "is this an
+  approval?" has had to be taught the second way of saying yes.
+- **Code decides it, not the AI.** REQUIREMENTS.md is explicit that a high-value rule which
+  changes anything has to be a rule (FR-C.7). Asking a model to be more careful about expensive
+  claims is not a control, and would show up as the same claim being flagged one day and not the
+  next (NFR-1). The AI is told the outcome exists and that it is not its to choose; if it asks for
+  it anyway, that is read as an ordinary approval and the rule decides.
+- **What "expensive" is measured on.** The value of the damaged goods — not the amount to be paid,
+  and not the order. The amount can never exceed the $100 maximum, so measuring that against a
+  $500 figure would flag nothing, ever. The order's value was already on the report. What a
+  representative does not otherwise learn is that the broken thing itself was dear.
+- **One threshold doing two jobs.** We reused the high-value figure rather than adding a second
+  one, because two numbers both meaning "expensive" that can be set to different values is a
+  question somebody has to answer every time either of them changes. The cost is that the figure's
+  name — high-value *order* — now understates what it decides.
+- **The email is unchanged, and the merchant learns nothing.** An approval is still an approval:
+  the draft is written and the representative sends it once satisfied. Withholding it would leave
+  a representative with nothing to send on exactly the claims that matter most, and the merchant
+  has no business knowing how ShipBob sorts its own work.
+- **A payment a representative directed is labelled too.** When a representative tells the system
+  to approve, the rules it sets aside are recorded but this label still applies. It states a fact
+  about the claim rather than standing in anybody's way, and whoever reads the report next may not
+  be the person who gave the instruction.
+
+**When things go wrong**
+
+- **Goods that could not be priced are never flagged** — and are never approved either. A product
+  that matches no line on the order, or several, has no single price, so the claim goes to a
+  person for that reason instead.
+- **A figure nobody could work out is not treated as a small one.** An unknown value means "not
+  known to be expensive", never "known to be ordinary" — the same rule the order check has always
+  followed.
+- **Both figures are exact money**, read as text into exact decimals and never through a floating
+  point number, so a comparison at the threshold cannot turn on a rounding error.
+- **Landing exactly on the figure** counts or does not according to the same setting the order
+  check uses, so the two can never disagree about what the number means.
+
+**Not ready for production**
+
+- **The figure is invented.** $500 is our placeholder, as it always was, and nobody at ShipBob has
+  signed it off. It now decides something rather than merely appearing on a report, which raises
+  what a wrong number costs.
+- **No sample claim can trigger it.** The most expensive item in ShipBob's five sample cases is
+  $59.99, so nothing in the demo data comes near $500 and the label has never been seen on real
+  data — only on made-up cases in the tests. The figure is on the admin screen, so lowering it
+  there is how the label can be shown working; that is a demonstration, not evidence that the
+  chosen number is right.
+- **Being told is all that happens.** No extra check runs, no second approver is required, and
+  nothing stops a representative approving a high-value claim in one click. If ShipBob wants more
+  than a label, that is a different piece of work.
+- **REQUIREMENTS.md still says three next actions and nothing else** (FR-1.14), and still lists
+  FR-C.7 as an open question with three readings. This is a fourth, taken as a product decision.
+  The requirement has to be amended, or this has to be reversed; leaving them contradicting each
+  other is the thing that must not stand.
+
+**Where the code is** — `src/claim_agent/domain/high_value.py` holds the one comparison, and
+`src/claim_agent/preflight/context.py` and `src/claim_agent/domain/outcome.py` are the two places
+that ask it; `src/claim_agent/domain/outcome.py` is where the label is applied, after every rule
+that could withhold the payment; `src/claim_agent/policy.py` holds the figure;
+`src/claim_agent/report/render.py` writes it into what a representative reads, and
+`src/claim_agent/agent/prompts.py` tells the model the outcome is not its to pick. On the screen:
+`web/src/components/ReportCard.tsx` and `web/src/components/LineReport.tsx`.
+
+---
+
+### Reusing the reading the model has already done
+
+**What it does** — Cuts what the system pays, in time and money, to ask the AI a question,
+without changing a word of what it is asked to decide. Two things do it: the standing
+instructions were shortened, and the parts of a question that repeat are now sent in a way that
+lets the AI provider read them once and reuse them.
+
+**Why we need it** — Investigating one product is not one question, it is many. The AI is asked
+what it wants to look at, it looks, it is asked again, and so on until it stops — and then it is
+asked once more for its conclusion. Every one of those carries the same two things in front of
+it: the standing rules the system is bound by, and the whole of the claim being investigated.
+On a claim that takes six turns, that is six copies of the same several thousand words. The
+requirements ask for cost discipline (NFR-8), and this is the cheapest kind there is: the same
+work, read fewer times.
+
+**How it works**
+
+Two separate changes, and they are worth telling apart because only one of them touched what the
+AI is told.
+
+*The wording was shortened.* Every prompt was read through and the parts that said the same
+thing twice were cut. Nothing that instructs the AI was removed — what went was explanation of
+instructions that were already given elsewhere. The rule that a representative's word settles a
+question, for example, used to be spelled out in the standing rules and again in three of the
+four prompts that might carry a representative's note; it is now in the standing rules, and the
+prompt that handles a note says only what is particular to it. Across all seven prompts this
+took out roughly one word in seven.
+
+*The repeated parts are marked to be kept.* When the system sends a question, it now marks where
+the unchanging part of it ends. The provider stores everything up to that mark for a few
+minutes, and any later question that begins the same way is answered against what was stored
+rather than being read from the beginning again. Two marks are used: one at the end of the
+standing rules, which every question in the whole system shares, and one at the end of the
+claim's own facts, which every turn of a single investigation shares. Looking at a picture is
+the exception — the wording in front of the picture is marked and the picture itself is not,
+because a claim's six photographs are six different pictures being asked the same question.
+
+**What it connects to** — Nothing decides anything differently. The AI is asked the same
+questions, answers into the same forms, and is bound by the same rules. What changes is how many
+words travel and how many are read afresh.
+
+**Choices we made**
+
+- **Trimming is not the same as loosening.** The test that keeps every prompt from turning into
+  a numbered recipe still passes, and so does every test that checks a particular sentence is
+  still said. Where a shortened sentence broke one of those tests, the sentence was put back
+  rather than the test being weakened — the requirement it traces to is the point of it.
+- **A few tests were quoting where a line happened to wrap.** Several assertions matched a
+  sentence including the line break in the middle of it, which fails the next time somebody edits
+  a word earlier in the paragraph. Those now read the wording with its wrapping taken out. That
+  is a test about what is said rather than about how it was typed.
+- **Everything shares one set of standing rules, including the question about a picture.** Asking
+  what a photograph is does not need the rules about money or about past claims, and giving that
+  question its own shorter rules was considered. It was not done: one shared set is a single
+  stored copy that every question in the system reuses, and a second set would be a second copy
+  that only the picture questions benefit from. Sharing costs a little on each picture and saves
+  more everywhere else.
+- **The mark is a hint and never a promise.** If the provider has nothing stored — the first
+  question of the day, or one asked more than a few minutes after the last — the question is read
+  from the beginning exactly as before. Nothing waits on it and nothing fails without it.
+
+**When things go wrong** — There is no failure path to speak of, which is the point of choosing
+it. A stored copy that has expired costs a normal read. A provider that ignored the mark
+entirely would leave the system working exactly as it did before this change.
+
+**Not ready for production** — Nothing measures the saving. The provider reports, on every
+answer, how much of the question it read from store and how much it read afresh, and the system
+does not record either, so there is no way to tell from the outside whether this is working
+beyond reasoning that it must be. That is the first thing to add.
+
+**Where the code is** — `src/claim_agent/agent/prompts.py` holds every prompt and the marking,
+and `tests/unit/test_agent_prompts.py` checks both the wording and where the marks fall.
+
+---
+
+
 ## Future production
 
 This project is an interview exercise. It is not complete and it is not production-hardened,
@@ -2694,9 +2884,16 @@ finds in production.
   requirement that a representative's corrections improve the next claim from that merchant is
   still entirely unmet, even though the screen now has the edit that would feed it.
 
-- **The sending that follows an approval.** Splitting a claim into products, investigating each
-  one, the report a person decides from, and reworking that report around what a representative
-  said all exist now. Sending an approved email or paying anything does not.
+- **The sending that follows an approval — and it is no longer a requirement, it is a decision.**
+  Splitting a claim into products, investigating each one, the report a person decides from, and
+  reworking that report around what a representative said all exist now. Sending an approved email
+  or paying anything does not, and the requirements were changed to stop asking for it: what was
+  an execution layer of eight requirements is gone, and an approved report is now the finished
+  product. Only the requirement to remember a representative's corrections against the merchant
+  survived that cut. If ShipBob wants the system to send, this is a scope decision to reverse
+  rather than a gap to fill, and whoever reverses it owes the things the old requirements asked
+  for: refusing to send twice, checking what is sent against what was approved, keeping a record
+  of it, and leaving a half-finished claim line visibly recoverable.
 - **Propagating a correction across a claim's other products.** Three of the four pieces of
   evidence describe the parcel rather than any one product, so correcting one of them ought to
   correct every product on the claim. The agent says when a note is of that kind and the reworked
@@ -2795,6 +2992,13 @@ finds in production.
 - **How long a review takes is recorded but never measured.** The figure comes from the invented
   data. Nothing in the system times a representative, and there is nowhere for a real duration to
   come from until the review stage exists.
+
+- **A high-value claim is labelled, and nothing else happens to it.** An approval whose damaged
+  goods cost more than the high-value figure says so in the recommendation, so a representative
+  cannot approve one without seeing it. That is the whole of the extra care: no second check runs,
+  no second approver is needed, and the claim can still be approved in one click. If ShipBob wants
+  a high-value claim actually handled differently, this is where that starts rather than where it
+  finishes.
 
 ### Could break
 
@@ -3033,6 +3237,11 @@ finds in production.
 
 ### Would improve
 
+- **Record how much of each question the AI provider read from store rather than afresh.** It
+  reports both figures on every answer and nothing keeps either, so the saving from reusing the
+  standing rules and a claim's facts cannot be seen from the outside — only reasoned about.
+  Logging the two numbers beside the case id would make it a measurement instead of an argument,
+  and would show immediately if a change to the wording had quietly stopped the reuse working.
 - **Stream a rework the way an investigation is streamed.** The service already narrates itself
   while it works, and a rework emits those messages into a stream nobody is reading. Sending them
   to the screen would replace a silent spinner with the agent saying which photograph it is
@@ -3103,10 +3312,19 @@ finds in production.
   reading**, and the opposite reading is just as available. If it should be refused, the rule
   belongs beside the limit in the rules file rather than in the code that reviews a report.
 
-- **What should a stopped claim's report recommend?** Nothing, today. The three actions are
+- **What should a stopped claim's report recommend?** Nothing, today. The next actions are
   about a damaged product and a stopped claim has none, so its reasons are what it has to say. A
   representative approving one is agreeing to close the claim, and the report does not put that in
   so many words because nobody has said it should.
+
+- **Is a labelled approval the right answer for a high-value claim?** REQUIREMENTS.md asks what
+  "more care" means and offers three readings: tell the representative and leave it there, never
+  recommend approval above the figure, or demand more evidence. We were asked for a fourth — the
+  same approval, named so nobody misses it — and built that. Two things follow that only whoever
+  owns the requirements can settle. The requirement that says there are three next actions and
+  nothing else now has four to account for, and the figure that decides which claims are labelled
+  is still a number we invented. Until the requirement is amended, the code and the document
+  disagree, and the code is the one that is running.
 
 - **Should a report be able to be sent back before there is anything that reworks it?** It can be
   today, and nothing picks it up.

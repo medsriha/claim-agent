@@ -166,6 +166,8 @@ function nextStepFor(recommendation: Report["recommendation"]): string {
   switch (recommendation) {
     case "approve":
       return "Review the recommendation and amount, then send the approval email if they are correct.";
+    case "approve_high_value":
+      return "Take a second look at what the damaged goods cost, then send the approval email if the recommendation and amount are correct.";
     case "request_info":
       return "Send the drafted email, then resume the review when the merchant provides the missing or corrected information.";
     case "request_rep_clarification":

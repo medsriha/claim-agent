@@ -342,7 +342,11 @@ def _the_email_that_stands(
             update={"subject": edited_email.subject, "body": edited_email.body}
         )
     )
-    if settled.outcome is Recommendation.APPROVE and settled.amount_usd is not None:
+    if (
+        settled.outcome is not None
+        and settled.outcome.is_approval
+        and settled.amount_usd is not None
+    ):
         return email.with_approved_amount(
             settled.amount_usd,
             previous_amount_usd=report.amount_usd,

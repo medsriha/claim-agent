@@ -75,11 +75,12 @@ class Policy(BaseSettings):
     )
     high_value_order_usd: Decimal = Field(
         default=Decimal("500.00"),
-        description="Order value at which a shipment is flagged high-value (FR-0.5). PROVISIONAL.",
+        description="Value at which a shipment is flagged high-value, and at which an approval "
+        "of goods worth this much is flagged for a second look (FR-0.5, FR-C.7). PROVISIONAL.",
     )
     high_value_inclusive: bool = Field(
         default=True,
-        description="Whether an order landing exactly on the threshold counts as high value "
+        description="Whether a value landing exactly on the threshold counts as high value "
         "(FR-0.5). PROVISIONAL.",
     )
     damaged_in_transit_sub_category: str = Field(

@@ -185,6 +185,31 @@ def rendered(**overrides: Any) -> str:
     return render_investigated_product(line=a_line(**overrides), context=a_context(), case=CASE)
 
 
+def test_fr_c_7_a_high_value_approval_says_so_and_still_shows_its_amount() -> None:
+    """FR-C.7 with FR-2.4: a representative reads the label and the figure together.
+
+    The label is only worth having if it reaches what a person actually reads, and it must
+    not cost them the amount, the working, or the merchant's email — the payment is
+    unchanged and the report has to go on saying so.
+    """
+    document = rendered(
+        outcome=OutcomeDecision(
+            recommendation=Recommendation.APPROVE_HIGH_VALUE,
+            recommended_by_agent=Recommendation.APPROVE,
+            explanation=(
+                "The investigation recommends paying this line, and none of the rules "
+                "changed that. The damaged goods cost $600.00 against the $500.00 at "
+                "which a claim counts as high value."
+            ),
+        )
+    )
+
+    assert "second look" in document
+    assert "high value" in document
+    assert "**Amount recommended: $52.00.**" in document
+    assert "## The merchant's email" in document
+
+
 # --- Every section a representative needs is there (FR-2.1 to FR-2.7) --------
 
 

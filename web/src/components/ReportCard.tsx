@@ -254,9 +254,11 @@ function ReportHeading({ report }: { report: Report }): React.JSX.Element {
             {humanise(report.recommendation)}
           </span>
         )}
-        {report.amount_usd !== null && report.recommendation === "approve" && (
-          <span className="report-amount">{formatMoney(report.amount_usd)}</span>
-        )}
+        {report.amount_usd !== null &&
+          (report.recommendation === "approve" ||
+            report.recommendation === "approve_high_value") && (
+            <span className="report-amount">{formatMoney(report.amount_usd)}</span>
+          )}
         <span className={`report-state is-${report.state}`}>{humanise(report.state)}</span>
       </p>
       {report.decided !== null && report.decided.amount_usd !== report.amount_usd && (

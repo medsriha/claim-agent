@@ -213,7 +213,10 @@ class Report(BaseModel):
         recommendation = value.get("recommendation")
         amount = value.get("amount_usd")
         email_value = value.get("drafted_email")
-        if recommendation not in (Recommendation.APPROVE, Recommendation.APPROVE.value):
+        if recommendation not in (
+            Recommendation.APPROVE,
+            Recommendation.APPROVE_HIGH_VALUE,
+        ):
             return value
         if amount is None or email_value is None:
             return value
@@ -255,7 +258,7 @@ class Report(BaseModel):
                 raise ValueError("The report and its content must carry the same recommendation.")
             expected_amount = (
                 self.content.amount.amount_usd
-                if self.recommendation is Recommendation.APPROVE
+                if self.recommendation is not None and self.recommendation.is_approval
                 else None
             )
             if self.amount_usd != expected_amount:
@@ -282,7 +285,12 @@ class Report(BaseModel):
             if self.drafted_email is not None:
                 raise ValueError("A representative clarification request must not carry an email.")
         elif (
-            self.recommendation in (Recommendation.APPROVE, Recommendation.REQUEST_INFO)
+            self.recommendation
+            in (
+                Recommendation.APPROVE,
+                Recommendation.APPROVE_HIGH_VALUE,
+                Recommendation.REQUEST_INFO,
+            )
             and self.drafted_email is None
         ):
             raise ValueError("An approval or merchant information request needs an email draft.")

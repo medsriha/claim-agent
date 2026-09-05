@@ -190,8 +190,12 @@ export interface PreflightResult {
 /** How the damaged product related to the order it came from. */
 export type MatchOutcome = "matched" | "not_on_order" | "ambiguous";
 
-/** What a claim line closed on. */
-export type Recommendation = "approve" | "request_info" | "request_rep_clarification";
+/** What a claim line closed on. The high-value approval is a label the service adds. */
+export type Recommendation =
+  | "approve"
+  | "approve_high_value"
+  | "request_info"
+  | "request_rep_clarification";
 
 /**
  * One damaged product whose claim was closed.

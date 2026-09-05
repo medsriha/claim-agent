@@ -218,6 +218,18 @@ def a_conclusion(**overrides: object) -> InvestigationConclusion:
     return InvestigationConclusion.model_validate(fields)
 
 
+def test_fr_c_7_a_model_that_asks_for_the_high_value_label_is_read_as_approving() -> None:
+    """FR-C.7: the label is code's, so a model that claims it is asking to approve.
+
+    Read this way rather than refused. The rest of the answer is perfectly good, and every
+    rule that holds an approval back has to run over it — which they only do for an
+    approval the code recognises as one.
+    """
+    conclusion = a_conclusion(recommendation=Recommendation.APPROVE_HIGH_VALUE)
+
+    assert conclusion.recommendation is Recommendation.APPROVE
+
+
 def an_email_with_no_figure(**overrides: object) -> dict[str, object]:
     """Email wording that mentions no amount at all, for a conclusion nobody will pay out.
 

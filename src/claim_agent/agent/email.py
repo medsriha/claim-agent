@@ -171,7 +171,7 @@ def finish_email(
     _refuse_money_the_model_wrote(conclusion)
     _refuse_wording_that_calls_itself_a_draft(conclusion)
 
-    if recommendation is Recommendation.APPROVE:
+    if recommendation.is_approval:
         # Adding the amount last is deliberate: the figure is money-shaped, so the
         # checks above have to see the model's own words and nothing else.
         figure = _as_money(_payable(amount))

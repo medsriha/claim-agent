@@ -1,13 +1,15 @@
-"""The three next actions that can be proposed for a claim line, and who gets to choose.
+"""The next actions that can be proposed for a claim line, and who gets to choose.
 
-Every claim line ends in one of three actions and nothing else (FR-1.14): approve it,
-ask the merchant for a specific detail, or ask the representative for clarification. Each is
-a **proposal to a rep**. None of them takes effect on its own, and no amount of
-confidence changes that (FR-1.17, FR-3.1).
+Every claim line ends in one of four actions and nothing else (FR-1.14, FR-C.7): approve
+it, approve it and say the damaged goods were expensive, ask the merchant for a specific
+detail, or ask the representative for clarification. Each is a **proposal to a rep**. None
+of them takes effect on its own, and no amount of confidence changes that (FR-1.17,
+FR-3.1).
 
-The choice is the agent's. It weighs the evidence, the assessments, and its confidence,
-then proposes the appropriate next action. Refusal and escalation are not alternate
-outcomes hidden behind this contract.
+Three of the four are the agent's to choose. It weighs the evidence, the assessments, and
+its confidence, then proposes the appropriate next action. Refusal and escalation are not
+alternate outcomes hidden behind this contract. The fourth is code's alone: whether the
+damaged goods were expensive is arithmetic, and FR-C.7 requires it to stay that way.
 
 There is one narrow exception, and its direction is the whole point: **code can
 withhold a recommendation of payment that the requirements forbid, and can never
@@ -21,6 +23,11 @@ answer afterwards.
 When that happens, what the agent originally recommended is kept beside the result.
 A rep should be able to see that the rules disagreed with the investigation, rather
 than seeing only the outcome and wondering how it was reached (NFR-3).
+
+The high-value label is not an exception to any of that, because it withholds nothing.
+An approval that survives every rule above is still that approval, for the same money on
+the same evidence; the label only says that the damaged goods were expensive, so the
+person deciding sees it before they act rather than afterwards (FR-C.7).
 
 Nothing here reaches out to anything and nothing here reads a clock.
 """
@@ -48,27 +55,48 @@ from claim_agent.domain.evidence import (
     gaps_the_merchant_can_fill,
     gaps_we_caused,
 )
+from claim_agent.domain.high_value import is_high_value
 from claim_agent.domain.reimbursement import AmountDerivation
 from claim_agent.policy import Policy
 
 
 class Recommendation(StrEnum):
-    """The next action the system proposes for one claim line (FR-1.14).
+    """The next action the system proposes for one claim line (FR-1.14, FR-C.7).
 
-    `APPROVE` proposes paying the merchant, and is the only one that carries an
-    amount. `REQUEST_INFO` proposes going back to them for something specific — the
-    outcome whenever a piece of evidence is missing or unusable (FR-1.6).
+    `APPROVE` proposes paying the merchant. `APPROVE_HIGH_VALUE` proposes exactly the
+    same payment, on the same evidence, and says as well that the damaged goods cost more
+    than the high-value figure in the claim policy, so a representative should take a
+    second look before sending anything (FR-0.5, FR-C.7). Both carry an amount; nothing
+    else does. `REQUEST_INFO` proposes going back to the merchant for something
+    specific — the outcome whenever a piece of evidence is missing or unusable (FR-1.6).
     `REQUEST_REP_CLARIFICATION` asks the representative to resolve something incorrect,
     ambiguous, or insufficiently reliable. It is where uncertainty and internal failures
     end up (FR-1.15, FR-1.16, NFR-4), and it never produces a merchant email.
+
+    **The high-value approval is code's to choose and never the agent's.** FR-C.7 is
+    explicit that a rule about expensive claims has to be a rule: a model asked to be
+    more careful about them would flag the same claim one day and not the next (NFR-1).
+    So the agent picks from the other three and a deterministic comparison adds this one.
 
     There is deliberately no denial or escalation value. A run that cannot safely approve
     or ask the merchant for a specific detail asks the representative for clarification.
     """
 
     APPROVE = "approve"
+    APPROVE_HIGH_VALUE = "approve_high_value"
     REQUEST_INFO = "request_info"
     REQUEST_REP_CLARIFICATION = "request_rep_clarification"
+
+    @property
+    def is_approval(self) -> bool:
+        """True for both ways of recommending a payment.
+
+        Everything that treats an approval differently — carrying an amount, drafting the
+        merchant's email, counting towards the claim-wide cap — has to mean both of them.
+        Comparing against `APPROVE` alone would let a high-value approval slip past the
+        cap and reach a merchant with no figure in its email.
+        """
+        return self in (Recommendation.APPROVE, Recommendation.APPROVE_HIGH_VALUE)
 
 
 class OverrideReason(StrEnum):
@@ -130,6 +158,11 @@ class OutcomeDecision(BaseModel):
     that apart from "the rules had nothing to say" — hence keeping both rather than
     only recording a difference.
 
+    There is one way the two differ with `overrides` empty: an approval the rules left
+    alone, on damaged goods dear enough to be worth a second look, is recommended as a
+    high-value approval (FR-C.7). Nothing was withheld, so nothing is listed as having
+    stepped in; the explanation names the two figures that decided it.
+
     `directed_by_representative` means a representative told the agent what to do and it
     did it. The rules that would have withheld the payment are then in `waived` rather
     than in `overrides`: they were evaluated, they applied, and a person set them aside.
@@ -177,7 +210,7 @@ _WITHHELD_RECOMMENDATION: dict[OverrideReason, Recommendation] = {
 }
 """What each rule leaves in place of the payment it withheld.
 
-Only two of the three actions can be reached this way. A rule can send the
+Only two of the four actions can be reached this way. A rule can send the
 claim back to the merchant for something specific, or ask the representative; no rule
 can pay, and no rule refuses a claim outright, because refusing is a judgement
 about the merits and these are not judgements (FR-1.14).
@@ -185,6 +218,7 @@ about the merits and these are not judgements (FR-1.14).
 
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
     Recommendation.APPROVE: "paying this line",
+    Recommendation.APPROVE_HIGH_VALUE: "paying this line, with a second look at its value",
     Recommendation.REQUEST_INFO: "going back to the merchant",
     Recommendation.REQUEST_REP_CLARIFICATION: "asking the representative for clarification",
 }
@@ -224,6 +258,11 @@ def decide_outcome(
     (FR-1.6), a question answered no (FR-1.12), a question never answered at all,
     confidence under the threshold in the claim policy (FR-1.15), and a product that
     cannot be tied to one price (FR-1.13, FR-1a.2).
+
+    An approval that survives all of them is looked at once more, and labelled a
+    high-value approval when the damaged goods cost more than the high-value figure
+    (FR-C.7). That takes nothing away and adds no condition: it is the same payment, said
+    in a way a representative cannot approve without noticing.
 
     Those middle two look alike and are not. A question answered no means something
     appears incorrect in the claim. A question left unanswered is a finding about *us* —
@@ -318,7 +357,7 @@ def decide_outcome(
             )
         )
 
-    if recommended_by_agent is Recommendation.APPROVE:
+    if recommended_by_agent.is_approval:
         against_approval = _reasons_to_withhold_approval(
             evidence=evidence,
             assessments=assessments,
@@ -332,18 +371,26 @@ def decide_outcome(
             # approve. Every rule that would have withheld it is set aside and written
             # down instead, so the record shows exactly what a person overruled rather
             # than an approval that looks like one the evidence earned.
-            return _a_representative_directed_it(against_approval, withheld=withheld)
+            return _say_if_the_goods_were_expensive(
+                _a_representative_directed_it(against_approval, withheld=withheld),
+                amount=amount,
+                policy=policy,
+            )
         withheld.extend(against_approval)
 
     if not withheld:
-        return OutcomeDecision(
-            recommendation=recommended_by_agent,
-            recommended_by_agent=recommended_by_agent,
-            explanation=(
-                "The investigation recommends "
-                f"{_RECOMMENDATION_IN_WORDS[recommended_by_agent]}, and none of the "
-                "rules changed that."
+        return _say_if_the_goods_were_expensive(
+            OutcomeDecision(
+                recommendation=recommended_by_agent,
+                recommended_by_agent=recommended_by_agent,
+                explanation=(
+                    "The investigation recommends "
+                    f"{_RECOMMENDATION_IN_WORDS[recommended_by_agent]}, and none of the "
+                    "rules changed that."
+                ),
             ),
+            amount=amount,
+            policy=policy,
         )
 
     # A dictionary rather than a set, for the reasons and nothing else: two rules can
@@ -358,6 +405,42 @@ def decide_outcome(
         recommended_by_agent=recommended_by_agent,
         overrides=overrides,
         explanation=_explanation(recommended_by_agent, recommendation, because),
+    )
+
+
+def _say_if_the_goods_were_expensive(
+    decision: OutcomeDecision, *, amount: AmountDerivation | None, policy: Policy
+) -> OutcomeDecision:
+    """Label an approval whose damaged goods cost more than the high-value figure (FR-C.7).
+
+    Only ever called on a decision no rule withheld, so a claim that could not be approved
+    is never labelled instead of being sent where it belongs. The label withholds nothing
+    itself: the same money is recommended on the same evidence, and what changes is that a
+    representative is told the goods were dear before they act on it. That is why the
+    reason does not appear in `overrides`, which is a list of payments the rules refused.
+
+    What is compared is what the damaged items cost on the invoice, not what would be
+    paid for them. A payment can never exceed the reimbursement cap, so comparing it with
+    a threshold several times that size would label nothing, ever (FR-1.20).
+
+    A payment a representative directed is labelled like any other. It states a fact about
+    the claim rather than standing in anybody's way, and whoever reads the report next may
+    not be the person who gave the instruction.
+    """
+    if not decision.recommendation.is_approval:
+        return decision
+    if amount is None or not is_high_value(amount.items_total_usd, policy):
+        return decision
+    return decision.model_copy(
+        update={
+            "recommendation": Recommendation.APPROVE_HIGH_VALUE,
+            "explanation": (
+                f"{decision.explanation} The damaged goods cost "
+                f"${amount.items_total_usd:.2f} against the "
+                f"${policy.high_value_order_usd:.2f} at which a claim counts as high "
+                "value, so this approval wants a second look before anything is sent."
+            ),
+        }
     )
 
 

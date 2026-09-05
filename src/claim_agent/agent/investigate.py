@@ -56,6 +56,7 @@ CLOSING_REQUEST = (
 # Each recommendation as a representative would say it, for the message on a screen.
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
     Recommendation.APPROVE: "pay this product",
+    Recommendation.APPROVE_HIGH_VALUE: "pay this product, and look again at what it cost",
     Recommendation.REQUEST_INFO: "go back to the merchant",
     Recommendation.REQUEST_REP_CLARIFICATION: "ask the representative for clarification",
 }

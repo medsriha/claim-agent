@@ -1,6 +1,6 @@
 # Requirement tracker
 
-Every requirement in [REQUIREMENTS.md](REQUIREMENTS.md) — all 105 — by id only.
+Every requirement in [REQUIREMENTS.md](REQUIREMENTS.md) — all 97 — by id only.
 
 There are no descriptions here on purpose: REQUIREMENTS.md already holds them, and a second
 copy would drift out of step with the first. Look the id up there.
@@ -291,6 +291,11 @@ still unticked below.
   - **Conclusion:** `approve`, `request_info`, or `request_rep_clarification`. Escalation and
     denial are not outcomes. The rules can withhold a payment the requirements forbid, and what
     the agent proposed is kept beside the result so a rep can see where the two differed.
+  - **Departure, taken knowingly:** there is now a fourth, `approve_high_value` — the same
+    approval, labelled when the damaged goods cost more than the high-value figure (FR-C.7). The
+    agent still chooses from three and code adds the fourth. The routing contract this
+    requirement is about is unchanged, but the words "nothing else" are not true any more, so
+    either REQUIREMENTS.md is amended or this is reversed.
 
 - [x] FR-1.15 — Never recommend approval under uncertainty.
   - **Conclusion:** weak or conflicting evidence blocks approval. A concrete merchant-fillable
@@ -528,27 +533,6 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
     requirement stays unticked because FR-C.2's other writer, from an approval that differed, is
     still missing.
 
-## Layer 3 — Execution after approval
-
-- [ ] FR-3.1
-- [ ] FR-3.1a
-- [ ] FR-3.2
-- [ ] FR-3.3
-- [ ] FR-3.4
-- [ ] FR-3.5
-- [ ] FR-3.6
-- [ ] FR-3.7
-- [ ] FR-3.8 — **most of it, but not all.** The reading half has always worked, and the writing
-  half now has one caller: sending a report back writes the representative's note against the
-  merchant (FR-R.14). What is still missing is FR-C.2's other writer — a correction derived from
-  an approval that *differed* from the recommendation — so a representative who silently approves
-  at a different figure still teaches the system nothing.
-  - **Be aware:** the store can now be emptied from the admin panel, for demonstrations
-    (`POST /admin/corrections/forget`). It destroys real history with no undo and no sign-in in
-    front of it, which is written up in DESIGN.md. Nothing forgets a *single* correction, and
-    nothing should: choosing which of a representative's corrections to lose is a judgement
-    nobody has specified.
-
 ## Claim precedent — finding similar past claims
 
 - [x] FR-S.1 — A record written only when a claim line is closed, named after that line so
@@ -669,6 +653,11 @@ would close the loop: a correction derived from an approval that *differed* from
 recommendation (FR-C.2), and the closing of a claim line that would make it precedent (FR-C.3).
 So FR-3.8 is most of the way there and FR-S.1's writer has no caller at all.
 
+**The eight execution requirements this section used to wait on are gone.** REQUIREMENTS.md no
+longer has a Layer 3: nothing sends the merchant email or submits the reimbursement, and an
+approved report is the finished product. Only FR-3.8 survived that cut, keeping its number, and
+it is tracked here now rather than in a layer of its own.
+
 What already exists, so it is not rebuilt:
 
 - **Merchant memory, read side.** `corrections_for(user_id)` → `preflight/service.py` →
@@ -682,17 +671,18 @@ What already exists, so it is not rebuilt:
 - **Precedent, write side.** `capture_closed_line` in `domain/precedent.py` and
   `PrecedentStore.record` both work and are tested. Their only callers are the tests, because
   nothing closes a claim line.
-- **Execution.** `execution/` holds a docstring and nothing else. Layer 3 is unbuilt, so an
-  approval has nowhere to take effect.
+- **Nothing downstream.** There is no execution layer to build against any more, so an
+  approval closes a claim line there and then. That is what FR-C.3 now turns on.
 
 So the work is a capture point and two writes, not two stores. Suggested order: FR-C.1 first,
 because FR-C.2 and FR-C.3 read it and neither can be built without it; then FR-C.4 alongside them,
 since retry-safety is cheaper to build in than to add; then FR-C.5–FR-C.6; FR-C.8 last, since a
-demonstration needs the rest to exist. FR-C.7 is a question for whoever owns the requirements and
-should be asked, not answered here.
+demonstration needs the rest to exist. FR-C.7 was a question for whoever owns the requirements;
+it has been answered, though not with one of the readings the requirement offered — see its entry
+below.
 
-- [x] FR-C.1 — the decision record. Sits between FR-2.8 (what a rep may do) and FR-3.1 (what an
-  approval releases), and belongs to neither: recording a decision sends nothing. Two things to
+- [x] FR-C.1 — the decision record. Sits behind FR-2.8 (what a rep may do) and belongs to no
+  layer: recording a decision sends nothing, and there is nothing here that could. Two things to
   design around: `decided_by` cannot be filled in, because there is no sign-in anywhere in this
   service, and a claim stopped in Layer 0 has no claim lines to key a decision to — it is never
   split. A record that insists on a line cannot hold the one decision that costs nothing to reach.
@@ -719,20 +709,41 @@ should be asked, not answered here.
   - **Be aware: nothing measures how long a review took.** It is accepted from whoever calls and
     is nothing by default, so every saving worked out from it is an upper bound. Out of scope
     here, and written up in DESIGN.md.
+- [ ] FR-3.8 — **most of it, but not all.** The reading half has always worked, and the writing
+  half now has one caller: sending a report back writes the representative's note against the
+  merchant (FR-R.14). What is still missing is FR-C.2's other writer — a correction derived from
+  an approval that *differed* from the recommendation — so a representative who silently approves
+  at a different figure still teaches the system nothing.
+  - **Be aware:** the store can now be emptied from the admin panel, for demonstrations
+    (`POST /admin/corrections/forget`). It destroys real history with no undo and no sign-in in
+    front of it, which is written up in DESIGN.md. Nothing forgets a *single* correction, and
+    nothing should: choosing which of a representative's corrections to lose is a judgement
+    nobody has specified.
 - [ ] FR-C.2 — the merchant correction, written only where the decision differs from the
   recommendation. Store already exists; the difference test and the wording do not.
 - [ ] FR-C.3 — the close event that writes precedent. FR-S.1 says when a record is written;
-  this says what closes a line, and it is not the same thing as an approval being recorded — a
-  failed send leaves the line open (FR-3.6).
+  this says what closes a line, and with execution gone the answer is now simply an approval.
+  REQUIREMENTS.md states the cost of that in the requirement itself: the system cannot see
+  whether the merchant was ever told, so it closes on the last event it can see.
 - [ ] FR-C.4 — one correction and one precedent record however many times a decision is repeated,
   and a failed write that never fails the decision.
 - [ ] FR-C.5 — a report naming the correction that influenced it, and a correction naming the
   decision it came from. The backwards half is what makes FR-C.6 safe to use.
 - [ ] FR-C.6 — withdrawing a correction, as FR-S.14 already allows for a precedent record.
-- [ ] FR-C.7 — **a question, not an implementation.** High value is computed, shown, and acted on
-  by nothing. Ask which of the three readings in REQUIREMENTS.md is intended before building any
-  of them; option 1 is what exists today, so "no change" is a legitimate answer that only needs
-  writing down.
+- [ ] FR-C.7 — **answered and built, but not with one of the three readings offered.** An
+  approval whose damaged goods cost more than the high-value figure is recommended as
+  `approve_high_value`, so a representative is told before they act. Deterministic, as the
+  requirement demands: code compares what the damaged items cost on the invoice — not what would
+  be paid, which the $100 cap keeps far below $500 — against the same threshold and inclusive
+  setting the order check uses.
+  - **Why the box is unticked.** What FR-C.7 actually asks for is that *the requirement* say
+    which reading is intended. REQUIREMENTS.md still lists three readings and chooses none, and
+    still says elsewhere that there are three next actions and nothing else (FR-1.14). Until it
+    is amended, the code and the document disagree.
+  - **Be aware:** the threshold is a number we invented and now decides something rather than
+    merely appearing on a report; being told is the whole of the extra care, since no second
+    check or second approver follows; and the value's name — high-value *order* — understates
+    what it now decides.
 - [ ] FR-C.8 — the constructed data that makes any of this demonstrable. Five sample cases, five
   merchants, no two alike, so nothing carries forward on the real set. Follow the rules
   `tools/seed_merchant_memory.py` already sets: outside `src/`, invented in its own words,

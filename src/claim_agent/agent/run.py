@@ -1,30 +1,4 @@
-"""Investigating a whole claim: split it, look into each product, then check the total.
-
-A merchant opens one claim, and it can cover several damaged products. This file is
-what turns that into work: it asks the triage pass which products are being claimed
-for, then investigates each of them, then does the one thing that cannot be done a
-product at a time.
-
-**Each product is investigated on its own, and they run at the same time.** A claim
-with four products is four separate investigations, each with its own step
-allowance, so a complicated product cannot starve a simple one and a weak product
-cannot drag down a well-evidenced one (FR-1b.3, FR-1.3). They run concurrently
-because they do not need anything from each other — which is the same fact that
-makes them independent in the first place.
-
-**The one thing that has to look at the claim as a whole is the cap.** Three
-products at fifty dollars each are individually under a hundred and together are
-not, so a cap that only ever saw one product at a time could be got round by
-splitting a claim into more products — exactly what FR-1.20 warns about. So after
-every product has been judged on its own evidence, the payments being recommended
-are added up and checked once. Nothing is trimmed to fit: if they come to more than
-the cap, every product recommended for payment goes to a person instead, and the
-claim says why. Whether the cap is meant per product or per claim is an open
-question in the requirements, so which of the two happens is a setting.
-
-Nothing here reads a clock, and nothing here decides anything about a product that
-the product's own investigation did not already decide — apart from that cap.
-"""
+"""Investigating a whole claim: split it, look into each product, then check the total."""
 
 from __future__ import annotations
 
@@ -58,22 +32,7 @@ logger = get_logger(__name__)
 
 
 class ClaimInvestigation(BaseModel):
-    """Everything an investigation established about one claim, product by product.
-
-    `triage` is how the claim was split and what was settled about the evidence
-    covering the whole shipment. `lines` is one finished investigation per damaged
-    product, each with its own recommendation, amount, reasoning and drafted email.
-
-    `lines` is empty when the split could not be established: nothing may be
-    investigated until somebody has said which products are being claimed for.
-    `triage.ambiguity` says what was unclear, and its split says whether the merchant
-    can provide concrete details or a representative must resolve it (FR-1a.4).
-
-    `claim_concerns` are things about the claim as a whole rather than any one
-    product — today that means the cap being reached across several products.
-    `recommended_total_usd` is what the products recommended for payment come to
-    between them, worked out by arithmetic like every other figure here (FR-1.21).
-    """
+    """Everything an investigation established about one claim, product by product."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -98,43 +57,7 @@ async def investigate_claim(
     cache: ObservationCache | None = None,
     precedent_store: PrecedentStore | None = None,
 ) -> ClaimInvestigation:
-    """Investigate every damaged product on one claim (FR-1a.*, FR-1b.*).
-
-    Only ever called for a claim the deterministic screen let through. A claim it
-    stopped costs three cheap reads and no AI at all, and this is never reached
-    (NFR-8).
-
-    Args:
-        record: The case, its shipment and its order, already read by the screen.
-        context: The facts the screen worked out — what the order was worth, whether
-            it counts as high value, and what a representative has corrected for
-            this merchant before (FR-0.5).
-        evidence: The reader for the case's images and for a priced invoice.
-        fetcher: How an image is downloaded so a model can look at it.
-        chat: The model the investigation asks, with tools bound to it per run.
-        structured: The same model, wrapped so an answer either fits its form or
-            fails (NFR-2).
-        events: Where the whole claim narrates itself while it works. One stream
-            for the claim, shared by every product, so a screen watching several at
-            once can put every message in one order.
-        policy: The thresholds every judgement is made against (FR-0.7).
-        cache: The claim's memo of expensive answers, so an image is looked at once
-            for the whole claim rather than once per product (NFR-8). One is made
-            if none is given; pass one in only to inspect it afterwards.
-        precedent_store: The closed claims this service has already handled (FR-S.1).
-            Each product is looked up in it before being investigated, so a claim is
-            judged the way comparable claims actually were rather than from its own
-            evidence alone — which is the whole of what makes two alike claims get
-            alike answers (FR-S.5, FR-S.6). `None` skips the lookup entirely, and the
-            runs are then told that nobody looked rather than that there was nothing
-            to find (FR-S.13).
-
-    Returns:
-        The split, and one finished investigation per damaged product. Never raises
-        for anything that can happen to a claim: a triage that could not settle the
-        split, a product whose run gave up, and a model that could not be reached
-        all come back as something a representative can act on (NFR-4).
-    """
+    """Investigate every damaged product on one claim (FR-1a.*, FR-1b.*)."""
     shared_cache = cache if cache is not None else ObservationCache()
 
     triage = await triage_claim(
@@ -160,11 +83,9 @@ async def investigate_claim(
 
     invoice = await invoice_for_claim(record=record, evidence=evidence, cache=shared_cache)
 
-    # Looked up before the products fan out, and one product at a time. The store is a
-    # file on disk and reading it blocks, so doing it here keeps that off the runs that
-    # are about to happen at once. It also means every run starts with its precedent
-    # already in hand, which is what FR-S.6 asks for: precedent arrives with the claim
-    # and is never something a model decides to go looking for.
+    # Looked up before the products fan out: the store is a file on disk and reading it
+    # blocks. It also means every run starts with its precedent already in hand, which is
+    # what FR-S.6 asks for — precedent arrives with the claim, never fetched on a whim.
     precedent = _precedent_for_each(
         store=precedent_store, case=record.case, lines=triage.claim_lines, policy=policy
     )
@@ -212,26 +133,7 @@ def _precedent_for_each(
     lines: Sequence[ClaimLine],
     policy: Policy,
 ) -> dict[str, PrecedentSet]:
-    """Look up the closed claims most like each product, before any of them is investigated.
-
-    One lookup per product, because from here on each product is its own claim
-    (FR-1b.1, FR-S.5). Done in one pass rather than inside the runs: the store is a file
-    on disk and reading it blocks, and a blocking read inside runs that are meant to
-    happen at once would hold the others up.
-
-    Args:
-        store: Where closed claims are kept. `None` when no store was given, which
-            returns nothing at all — the runs are then told nobody looked, rather than
-            being told there was nothing to find (FR-S.13).
-        case: The claim in hand, read for the merchant's account of what happened.
-        lines: The products about to be investigated.
-        policy: How many records each product sees, and how alike is alike enough.
-
-    Returns:
-        A set per claim line, by claim line id. A store that could not be read gives a
-        set that says so rather than raising: precedent failing must never fail a claim
-        (FR-S.13, NFR-4).
-    """
+    """Look up the closed claims most like each product, before any of them is investigated."""
     if store is None:
         return {}
     return {
@@ -252,21 +154,7 @@ async def _say_what_precedent_was_found(
     lines: Sequence[ClaimLine],
     events: EventStream,
 ) -> None:
-    """Tell whoever is watching what comparable past claims were found, product by product.
-
-    Said before any product is investigated, because that is when it is known and
-    because it is context a representative reads rather than a result they wait for: it
-    says how claims like this one were actually decided (FR-S.5, FR-S.6).
-
-    **Three answers, never two.** Records were found; the store was read and held nothing
-    alike; or the store could not be read. The last two must not be run together — a
-    representative told "no comparable history" when in truth nobody managed to look has
-    been given a fact that was never established (FR-S.13). A product with no entry at
-    all is a fourth thing again, and says plainly that no lookup was made.
-
-    Emitted in the order the products will be investigated, so two runs of one claim
-    narrate themselves identically (NFR-1).
-    """
+    """Tell whoever is watching what comparable past claims were found, product by product."""
     for line in lines:
         found = precedent.get(line.claim_line_id)
 
@@ -303,13 +191,7 @@ async def _say_what_precedent_was_found(
 
 
 class ClaimCapVerdict(BaseModel):
-    """What the cap makes of a whole claim, once each product has been judged alone.
-
-    `lines` are the products as they now stand: unchanged when the total is within the
-    cap, and with every recommended payment turned into an representative clarification request when it is not.
-    `total_usd` is what those payments came to between them, and `complaint` is the one
-    plain sentence explaining a breach — `None` when there was none.
-    """
+    """What the cap makes of a whole claim, once each product has been judged alone."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -320,18 +202,9 @@ class ClaimCapVerdict(BaseModel):
 
 
 def apply_claim_cap(lines: Sequence[LineInvestigation], *, policy: Policy) -> ClaimCapVerdict:
-    """Add up what is being recommended and apply the cap across the whole claim (FR-1.20).
-
-    Pure, and deliberately separate from the narration around it: this is the one rule
-    in the system that no single product can apply for itself, which makes it the one
-    most worth being able to test on its own.
-    """
+    """Add up what is being recommended and apply the cap across the whole claim (FR-1.20)."""
     total = sum(
-        (
-            line.amount.amount_usd
-            for line in lines
-            if line.outcome.recommendation is Recommendation.APPROVE
-        ),
+        (line.amount.amount_usd for line in lines if line.outcome.recommendation.is_approval),
         start=Decimal("0.00"),
     )
 
@@ -360,22 +233,7 @@ async def _check_the_claim_total(
     events: EventStream,
     policy: Policy,
 ) -> ClaimInvestigation:
-    """Add up what is being recommended and apply the cap across the whole claim (FR-1.20).
-
-    This is the one judgement in the system that a single product cannot make for
-    itself, and the only place a product's outcome depends on what else was claimed
-    beside it. Everything else about a product is decided from its own evidence, which
-    is what makes a product reach the same answer whether it was claimed alone or with
-    five others (FR-1b.4).
-
-    Where the total is over the cap, nothing is trimmed and nothing is chosen between:
-    every product that was recommended for payment goes to a representative instead,
-    carrying its findings and a sentence saying why. Trimming would put a figure in
-    front of a merchant that no rule produced.
-
-    Whether the cap is meant to limit each product or the whole claim is open question
-    2 in the requirements, so it is a setting rather than a decision made here.
-    """
+    """Add up what is being recommended and apply the cap across the whole claim (FR-1.20)."""
     verdict = apply_claim_cap(lines, policy=policy)
 
     if not verdict.applied:
@@ -412,17 +270,10 @@ async def _check_the_claim_total(
 
 
 def _held_back_by_the_claim_cap(line: LineInvestigation, complaint: str) -> LineInvestigation:
-    """Turn one product's recommended payment into an representative clarification request, keeping everything else.
-
-    Only a product recommended for payment changes. A product already going back to
-    the merchant or already going to a person is untouched: the cap is a reason not to
-    pay, never a reason to pay, and never a reason to stop asking for a photograph.
-
-    What the investigation originally recommended is kept beside the new answer, as it
-    is for every other rule that withholds a payment, so a representative can see that
-    the product itself was sound and the claim's total was not.
+    """Turn one product's recommended payment into an representative clarification request, keeping
+    everything else.
     """
-    if line.outcome.recommendation is not Recommendation.APPROVE:
+    if not line.outcome.recommendation.is_approval:
         return line
 
     return line.model_copy(
@@ -444,18 +295,7 @@ def _held_back_by_the_claim_cap(line: LineInvestigation, complaint: str) -> Line
 async def invoice_for_claim(
     *, record: CaseRecord, evidence: EvidenceClient, cache: ObservationCache
 ) -> Invoice | None:
-    """Fetch the priced invoice once for the whole claim, or come back with nothing.
-
-    Every product is priced from the same invoice, so it is fetched once here rather
-    than once per product (NFR-8). `None` means it could not be had — ShipBob would not
-    price this shipment, or the case names no shipment or no merchant — and the products
-    that needed a price then request representative clarification with that as the stated reason rather than being
-    priced from somewhere else (FR-1.18).
-
-    **Reworking one product after a representative sent it back uses this too** (FR-R.7).
-    A reconsidered figure is priced against the same record the first one was, and a
-    second way of getting hold of it would be a second thing that could disagree.
-    """
+    """Fetch the priced invoice once for the whole claim, or come back with nothing."""
     shipment_id = record.case.shipment_id
     user_id = record.case.user_id
     if shipment_id is None or user_id is None:
@@ -477,11 +317,7 @@ async def invoice_for_claim(
 
 
 def _a_budget_for_the_split(policy: Policy) -> RunBudget:
-    """A fresh allowance for the triage pass.
-
-    Its own, not shared with any product's run: a claim with four products has five
-    allowances in total, not one divided five ways (FR-1.3).
-    """
+    """A fresh allowance for the triage pass."""
     return RunBudget(policy)
 
 

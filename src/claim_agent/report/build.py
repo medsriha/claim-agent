@@ -60,7 +60,7 @@ def build_screening_report(screening: PreflightResult, *, at: UtcDatetime) -> Re
     and a stopped claim never gets there — so this report is about the whole claim, and names no
     product.
 
-    It also recommends nothing. The three actions are about a damaged product and there is
+    It also recommends nothing. The next actions are about a damaged product and there is
     none; its reasons are what it has to say instead, and turning them into a recommendation would
     be the system inventing an answer nobody gave.
 
@@ -249,11 +249,7 @@ def report_for_one_product(
         stage=DecisionStage.INVESTIGATION,
         state=ReportState.AWAITING_REVIEW,
         recommendation=line.outcome.recommendation,
-        amount_usd=(
-            line.amount.amount_usd
-            if line.outcome.recommendation is Recommendation.APPROVE
-            else None
-        ),
+        amount_usd=(line.amount.amount_usd if line.outcome.recommendation.is_approval else None),
         confidence=line.confidence,
         carrier=carrier,
         defect_type=described.defect_type,
@@ -358,9 +354,7 @@ def build_revised_report(
             **carried_forward,
             "recommendation": reworked.outcome.recommendation,
             "amount_usd": (
-                reworked.amount.amount_usd
-                if reworked.outcome.recommendation is Recommendation.APPROVE
-                else None
+                reworked.amount.amount_usd if reworked.outcome.recommendation.is_approval else None
             ),
             "confidence": reworked.confidence,
             "drafted_email": reworked.drafted_email,

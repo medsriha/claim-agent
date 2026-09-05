@@ -1859,6 +1859,11 @@ p {
   color: var(--sb-pass);
 }
 
+.report-recommendation.is-approve_high_value {
+  background: var(--sb-flag-tint);
+  color: var(--sb-flag);
+}
+
 .report-recommendation.is-request_rep_clarification {
   background: var(--sb-stop-tint);
   color: var(--sb-stop);

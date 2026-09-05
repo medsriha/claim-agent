@@ -107,6 +107,27 @@ def a_screening_report(**overrides: Any) -> Report:
     return a_report(**fields)
 
 
+def test_fr_c_7_a_high_value_approval_is_a_report_that_carries_an_amount_and_an_email() -> None:
+    """FR-C.7 with FR-1.14: labelled or not, an approval is an approval.
+
+    The rules a report is held to know both ways of recommending a payment. If they knew
+    only the plain one, a labelled approval would be a report the checks read as carrying
+    money it should not have and an email it should not need — and it would be refused for
+    being exactly what it is.
+    """
+    report = a_report(recommendation=Recommendation.APPROVE_HIGH_VALUE)
+
+    assert report.recommendation is Recommendation.APPROVE_HIGH_VALUE
+    assert report.amount_usd == Decimal("52.00")
+    assert report.drafted_email is not None
+
+
+def test_fr_c_7_a_high_value_approval_without_its_email_is_refused() -> None:
+    """FR-1.14: a merchant-facing action with nothing to send is a report nobody can act on."""
+    with pytest.raises(ValidationError):
+        a_report(recommendation=Recommendation.APPROVE_HIGH_VALUE, drafted_email=None)
+
+
 # --- A stopped claim names a whole claim, not a product (FR-C.1) --------------
 
 

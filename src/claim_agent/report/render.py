@@ -39,6 +39,9 @@ from claim_agent.report.models import EmailWording
 
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
     Recommendation.APPROVE: "Approve — pay this product",
+    Recommendation.APPROVE_HIGH_VALUE: (
+        "Approve, and take a second look — pay this product, but the damaged goods are high value"
+    ),
     Recommendation.REQUEST_INFO: "Request information — go back to the merchant",
     Recommendation.REQUEST_REP_CLARIFICATION: (
         "Representative clarification needed — resolve what is incorrect or ambiguous"
@@ -223,7 +226,7 @@ def _what_is_recommended(line: LineInvestigation) -> str:
     recommended = _RECOMMENDATION_IN_WORDS[line.outcome.recommendation]
     lines = ["## Recommendation", "", f"**{recommended}.**"]
 
-    if line.outcome.recommendation is Recommendation.APPROVE:
+    if line.outcome.recommendation.is_approval:
         lines += ["", f"**Amount recommended: {_money(line.amount.amount_usd)}.**"]
 
     lines += ["", line.outcome.explanation]
@@ -374,7 +377,7 @@ def _how_the_amount_was_reached(amount: AmountDerivation, recommended: Recommend
     """
     lines = ["## How the amount was reached", ""]
 
-    if recommended is Recommendation.APPROVE:
+    if recommended.is_approval:
         lines.append(f"**{_money(amount.amount_usd)}.**")
     else:
         lines.append(

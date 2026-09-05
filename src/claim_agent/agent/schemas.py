@@ -1,57 +1,19 @@
-"""The forms the AI fills in. It never replies with prose to be interpreted.
-
-Every answer the model gives has a fixed shape with named fields, and a reply that
-does not fit is rejected rather than patched up (NFR-2). This file is the whole
-list of those shapes, kept in one place so that what the model is allowed to say
-can be reviewed at a glance.
-
-**There is exactly one money field, and it is deliberate.** The agent decides what the
-damage is worth — `recommended_amount_usd` on the investigation's conclusion — because how
-badly a thing is broken is a judgement and no rule could express it (FR-1.21). Everything
-else about money stays out: no totals, no subtotals, no per-item prices, no shares.
-
-That one field is **written as text**, not as a number, and that is not a stylistic
-choice. A JSON number becomes a floating point value on the way in, where `0.10` cannot be
-held exactly and cents drift. Text goes into an exact decimal untouched. Anything that is
-not money — a symbol, a third decimal place, a word — is refused rather than interpreted,
-and the claim goes to a person instead.
-
-**No figure the model writes ever reaches a merchant.** The model drafts approval wording
-without an amount. Code adds the amount *after* the cap has been applied, so what is sent is
-the figure that survived the cap and not the one that was proposed. Any money-shaped text in
-the model's wording is rejected. This is the guarantee that did not change when FR-1.21 was
-reversed, and it is the one worth defending.
-
-These shapes are deliberately separate from the ones in `claim_agent.domain`, even
-where they look similar. What the model is permitted to assert is a narrower thing
-than what a finished report holds: a report carries amounts, identifiers we
-assigned, and the results of rules the model does not get a say in.
-"""
+"""The forms the AI fills in. It never replies with prose to be interpreted."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from claim_agent.domain.assessment import AssessmentName
 from claim_agent.domain.evidence import EvidenceKind, EvidenceState
 from claim_agent.domain.outcome import Recommendation
 
+# The marker used by approval drafts produced under the previous prompt.
 AMOUNT_PLACEHOLDER = "{{amount}}"
-"""The marker used by approval drafts produced under the previous prompt.
-
-New prompts tell the model to omit the amount; code appends the capped figure after
-the answer. Keeping this marker lets those older drafts be finished without exposing
-it to a representative (FR-1.21).
-"""
 
 
 class _WithoutSubjectiveConfidence(BaseModel):
-    """Accept old stored/test values without advertising confidence to the model.
-
-    Confidence used to be a required part of each structured answer. Removing it
-    from the fields removes it from the JSON schema supplied to the model. Silently
-    discarding the old key keeps replayed answers and rolling deployments readable.
-    """
+    """Accept old stored/test values without advertising confidence to the model."""
 
     @model_validator(mode="before")
     @classmethod
@@ -64,21 +26,7 @@ class _WithoutSubjectiveConfidence(BaseModel):
 
 
 class ImageObservation(_WithoutSubjectiveConfidence):
-    """What one image turned out to be, and whether it is any use (FR-1.4, FR-1.5).
-
-    Filenames and file types are not offered to the model when it answers this,
-    because they carry no signal: every sample attachment is a PNG or a JPEG
-    whatever it shows, and two files in one sample case have nearly identical names
-    and hold different kinds of evidence. Only what is visible in the image counts.
-
-    `kind` is `None` when the image is none of the four kinds of evidence a claim
-    needs — a photograph of a shipping label, say. That is a real answer, not a
-    failure.
-
-    `is_legible` false means the image cannot support a conclusion: too dark, too
-    blurry, too cropped. `problem` then says which, in words a merchant could act
-    on, because that sentence is what they will be asked to fix (FR-1.7).
-    """
+    """What one image turned out to be, and whether it is any use (FR-1.4, FR-1.5)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -101,15 +49,7 @@ class ImageObservation(_WithoutSubjectiveConfidence):
 
 
 class ClaimedProductProposal(_WithoutSubjectiveConfidence):
-    """One product the investigation believes was damaged (FR-1a.1).
-
-    `name` should be copied from the order's line items wherever the evidence
-    supports it, because that is what ties the claim to a real product and to a
-    price (FR-1a.2). A name that matches nothing on the order is still worth
-    reporting — it is a finding, not an error.
-
-    There is no price field here, and there is not going to be one.
-    """
+    """One product the investigation believes was damaged (FR-1a.1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -126,19 +66,7 @@ class ClaimedProductProposal(_WithoutSubjectiveConfidence):
 
 
 class ClaimSplit(_WithoutSubjectiveConfidence):
-    """Which products a claim is for — the conclusion of the triage pass (FR-1a.1).
-
-    `is_ambiguous` is the important field. Set it when it cannot be established
-    which products are meant, and say what is unclear in `ambiguity`. Never resolve
-    an ambiguity by choosing the likelier candidate.
-
-    When the merchant can settle the ambiguity, `requested_details` names exactly
-    what they must provide and the two email fields contain the wording to send them.
-    An ambiguity only a representative can resolve leaves all three empty (FR-1a.4).
-
-    An ambiguous split may still list the products it was choosing between. It must
-    not present them as settled.
-    """
+    """Which products a claim is for — the conclusion of the triage pass (FR-1a.1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -182,17 +110,7 @@ class ClaimSplit(_WithoutSubjectiveConfidence):
 
 
 class EvidenceJudgement(BaseModel):
-    """The model's read on one of the four pieces of evidence (FR-1.5, FR-2.2).
-
-    `attachment_id` has to name a real attachment on the case whenever the evidence
-    is present, so that every finding is traceable to the exact image that produced
-    it and a rep can look at the same photograph the system did.
-
-    Note which states are available. `UNREADABLE` is not one the model may choose:
-    it means *we* could not fetch or analyse an image, which is a fact about our own
-    run rather than a judgement about the evidence, and it is set by the code that
-    hit the failure.
-    """
+    """The model's read on one of the four pieces of evidence (FR-1.5, FR-2.2)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -212,12 +130,7 @@ class EvidenceJudgement(BaseModel):
 
 
 class AssessmentJudgement(_WithoutSubjectiveConfidence):
-    """One of the four judgements, with the reasoning that makes it reviewable (FR-2.3).
-
-    The reasoning is not decoration. A rep has to be able to disagree with this one
-    judgement without discarding the other three, and they can only do that if they
-    can see what it rested on.
-    """
+    """One of the four judgements, with the reasoning that makes it reviewable (FR-2.3)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -230,16 +143,7 @@ class AssessmentJudgement(_WithoutSubjectiveConfidence):
 
 
 class DamagedItem(BaseModel):
-    """A product this claim line should be reimbursed for, and how many of it.
-
-    This is the field the money is worked out from, and it is the reason the model
-    is asked for it: it says *what*, and a deterministic function turns that into
-    *how much* (FR-1.21). Copy the name from the order's line items — ShipBob's
-    payment endpoint identifies a product by its name as free text, so the exact
-    wording matters (FR-3.3).
-
-    There is no price field and no total field. There is nowhere here to put money.
-    """
+    """A product this claim line should be reimbursed for, and how many of it."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -249,42 +153,7 @@ class DamagedItem(BaseModel):
 
 
 class InvestigationConclusion(_WithoutSubjectiveConfidence):
-    """The conclusion of one claim line's investigation — the model's whole answer.
-
-    Everything a rep is shown about a claim line traces back to a field here, apart
-    from the amount and the results of the rules, which code supplies.
-
-    `recommendation` is the model's own choice of one of the three next actions
-    (FR-1.14). Code may afterwards withhold a
-    recommendation of payment that the requirements forbid, and can never move one
-    towards paying; what was recommended here is kept either way, so a rep can see
-    where the rules disagreed.
-
-    `recommended_amount_usd` is the figure that goes with an `approve`, and
-    `amount_reasoning` is why it is that figure. Both belong to the model now: the damage
-    is what decides what putting it right is worth, and a fixed share of the price could
-    not tell a scuffed box from a smashed bottle (FR-1.21). The cap is applied afterwards
-    and is the only limit — a figure above it becomes the cap, and the report says so.
-
-    `concerns` is where anything that does not fit goes: an ambiguity, a weak piece
-    of evidence, a judgement that was close. Silence here is treated as a defect
-    rather than a clean result, because a rep who cannot tell why the system is
-    unsure will either rubber-stamp it or redo the work (FR-2.5).
-
-    `requested_details` lists exactly what the merchant can supply for `request_info`.
-    `email_subject` and `email_body` are the exact wording that would be sent to the
-    merchant if a rep approved an approval or information request (FR-2.7), and the
-    email must ask for each listed detail. Both email fields are null when representative
-    clarification is needed. Approval wording carries no amount — the capped figure is
-    added afterwards — and any money-shaped text the model writes is rejected.
-    The words "draft", "unsent" and the like must not appear: that the email is a draft
-    is recorded beside it, not inside it, so no such marker can ever reach a merchant
-    (FR-1.17).
-
-    `corrections_considered` names the earlier cases whose rep corrections actually
-    influenced this conclusion, so a report can say which past correction changed
-    what (FR-2.6). Leave it empty when none did.
-    """
+    """The conclusion of one claim line's investigation — the model's whole answer."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -314,6 +183,23 @@ class InvestigationConclusion(_WithoutSubjectiveConfidence):
         ),
     )
     recommendation: Recommendation = Field(description="What you recommend doing about this line.")
+
+    @field_validator("recommendation")
+    @classmethod
+    def _the_high_value_label_is_not_the_models_to_claim(
+        cls, chosen: Recommendation
+    ) -> Recommendation:
+        """Read a model-chosen high-value approval as the plain approval it is (FR-C.7).
+
+        Whether the damaged goods were expensive is arithmetic, and code does it after the
+        rules have run. A model that asks for the label is asking to approve, so that is
+        what it gets — read this way rather than refused, since the answer is otherwise
+        perfectly good and the rules that hold an approval back must still run over it.
+        """
+        if chosen is Recommendation.APPROVE_HIGH_VALUE:
+            return Recommendation.APPROVE
+        return chosen
+
     reasoning: str = Field(
         description=(
             "One or two short sentences giving the decision basis without retelling every finding "
@@ -376,17 +262,7 @@ class InvestigationConclusion(_WithoutSubjectiveConfidence):
 
 
 class _RepliesToTheRepresentative(BaseModel):
-    """The four things every reworked answer says back, whatever kind of report it was.
-
-    A representative sends a report back in their own words, and what comes back has to let
-    them confirm they were understood without re-reading the whole thing (FR-R.10). These
-    four fields are that, and they are shared rather than restated so a product report and a
-    claim-level one answer a representative in the same shape.
-
-    `reply_to_representative` is the answer to what they actually said — including a refusal,
-    where they asked for something the rules forbid (FR-R.8), and including a question, where
-    the rework cannot be settled without something only they can supply.
-    """
+    """The four things every reworked answer says back, whatever kind of report it was."""
 
     changed: tuple[str, ...] = Field(
         default=(),
@@ -420,34 +296,7 @@ class _RepliesToTheRepresentative(BaseModel):
 
 
 class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
-    """A reworked conclusion, after a representative said what was wrong (FR-R.9, FR-R.10).
-
-    **This is the investigation's own form with the shared reply added, and that is the point.**
-    FR-R.9 asks for a full report in the same structure as the first one — same schema, same
-    requirements — rather than a patch, so this inherits every field instead of restating them.
-    A rule that binds a first answer therefore binds a reworked one, and the two cannot drift.
-
-    Everything inherited means exactly what it meant the first time: report on all four pieces
-    of evidence, answer the four questions when the evidence is there, name what should be paid
-    for, choose one of the three next actions, and write the merchant's email — carrying the
-    parts the representative did not dispute forward unchanged (FR-R.5). Code fills any part
-    left out from the earlier report, so leaving one out cannot quietly turn an established
-    finding into a missing one.
-
-    What it says back to the representative comes from the shared reply above, so a product
-    report and a claim-level one answer them in the same shape.
-
-    `representative_directed_outcome` says the representative told you what to do and you are
-    carrying that out rather than recommending something of your own. It is what lets a person
-    correct the agent: the rules that withhold a payment encode the agent's own uncertainty,
-    and a representative who can see what the agent cannot may set them aside. Code then
-    approves the line and records every rule that was waived (FR-2.8, FR-C.1).
-
-    `concerns_shared_evidence` says the feedback was about the invoice, the customer
-    confirmation or the photograph of the outer box — the three that describe the parcel and
-    are settled once for the whole claim (FR-1a.3). Correcting one of those ought to correct
-    every product on the claim; this system flags that and does not do it (FR-R.1a).
-    """
+    """A reworked conclusion, after a representative said what was wrong (FR-R.9, FR-R.10)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -471,17 +320,7 @@ class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
 
 
 class SettledProduct(BaseModel):
-    """One product a representative has told the agent this claim is for (FR-1a.4).
-
-    The whole point of a report that names no product is that nobody could work out which
-    products were damaged. A representative saying so settles it — they can see the claim and
-    they may be holding something this system cannot read — and this is how that answer gets
-    from their words into a claim line that can be investigated and priced.
-
-    Copy the name from the order's line items exactly. That is what ties the claim to a real
-    product and to a price, and ShipBob's payment endpoint identifies a product by its name as
-    free text (FR-1a.2, FR-3.3).
-    """
+    """One product a representative has told the agent this claim is for (FR-1a.4)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -493,37 +332,7 @@ class SettledProduct(BaseModel):
 
 
 class RevisedClaimReport(_RepliesToTheRepresentative):
-    """A reworked report about a whole claim rather than one product (FR-R.9, FR-R.10).
-
-    Two kinds of report name no product. One is a claim whose split could never be settled —
-    nobody could tell which products were being claimed for, so nothing was investigated
-    (FR-1a.4). The other is a claim the deterministic checks turned away before anything
-    expensive ran (FR-0.4). A representative can send either back, and this is what comes
-    back when they do.
-
-    **What may actually change differs between the two, and code decides that, not this
-    form.** A claim whose split is unsettled may have its ambiguity, its merchant requests
-    and its email all reworked, because a representative answering the question is the whole
-    point of asking it. A claim the checks stopped may have only its email reworded: the
-    verdict came from fixed rules, and feedback cannot overturn one (FR-0.6, FR-R.8). Every
-    other field is ignored for it, so the guarantee is structural rather than a request.
-
-    There is no amount here and nowhere to put one. Nothing on a report that names no product
-    has been priced, so an approval cannot be written from it — if a representative asks for
-    one, the honest answers are to ask for a fresh investigation or to say what is still
-    needed.
-
-    `settled_products` is the important one. When the representative names which products were
-    damaged, put them here: code turns each into a claim line, looks into that one product, and
-    produces a report for it that they can approve. That is how a claim nobody could split
-    becomes a claim with a figure on it, and it costs one pass per product rather than redoing
-    the whole claim.
-
-    `needs_fresh_investigation` is the heavier escape hatch, for when they ask outright for the
-    claim to be investigated again. It re-reads everything, re-splits the claim and re-judges
-    every product, so it takes far longer — never reach for it merely because they named a
-    product, and never as a way of avoiding an answer.
-    """
+    """A reworked report about a whole claim rather than one product (FR-R.9, FR-R.10)."""
 
     model_config = ConfigDict(extra="forbid")
 

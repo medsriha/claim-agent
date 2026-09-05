@@ -446,6 +446,30 @@ def test_fr_1_20_the_cap_limits_the_whole_claim_and_not_only_each_product() -> N
         assert line.drafted_email is None
 
 
+def test_fr_1_20_a_high_value_approval_counts_towards_the_claim_cap_like_any_other() -> None:
+    """FR-1.20 with FR-C.7: the label says take a second look, never skip the arithmetic.
+
+    A high-value approval is an approval. If the cap only added up the plain ones, a claim
+    could be paid over the cap by having one of its products labelled — which is the hole
+    the requirement warns about, reopened by a label.
+    """
+    verdict = apply_claim_cap(
+        [
+            a_priced_line(
+                COLLAGEN, COLLAGEN_SKU, "52.00", recommendation=Recommendation.APPROVE_HIGH_VALUE
+            ),
+            a_priced_line(AMPOULE, AMPOULE_SKU, "38.00", recommendation=Recommendation.APPROVE),
+        ],
+        policy=Policy(reimbursement_cap_usd=Decimal("80.00")),
+    )
+
+    assert verdict.total_usd == Decimal("90.00")
+    assert verdict.applied is True
+    for line in verdict.lines:
+        assert line.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+        assert line.drafted_email is None
+
+
 def test_fr_1_20_the_claim_cap_can_only_withhold_a_payment_never_cause_one() -> None:
     """FR-1.20: the cap is a reason not to pay, and never a reason to pay.
 

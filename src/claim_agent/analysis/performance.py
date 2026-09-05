@@ -412,9 +412,9 @@ def _confidence_bands(decisions: Sequence[DecisionRecord]) -> tuple[ConfidenceBa
 
 
 def _outcomes(decisions: Sequence[DecisionRecord]) -> tuple[OutcomeStats, ...]:
-    """Count disagreement against each of the three proposed actions.
+    """Count disagreement against each of the next actions that can be proposed.
 
-    All four are always reported, including any nobody recommended, so a reader sees what did not
+    Every one is always reported, including any nobody recommended, so a reader sees what did not
     happen rather than inferring it from a missing row.
     """
     stats: list[OutcomeStats] = []

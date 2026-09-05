@@ -82,7 +82,7 @@ class Proposal(BaseModel):
     somebody wrote a paragraph about it.
 
     `outcome` is `None` on a screening decision, where there is no claim line and therefore
-    nothing for the three actions to apply to.
+    nothing for the next actions to apply to.
 
     `amount_usd` is `None` whenever no money is involved, which includes every screening
     decision and every investigated line that was refused or sent back for more information.
