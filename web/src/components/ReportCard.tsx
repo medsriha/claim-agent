@@ -1,7 +1,7 @@
 /** One structured report a representative reads and decides on. */
 import { useState } from "react";
 
-import { approveReport, sendReportBack } from "../api/reportsClient";
+import { approveReport, readClaim, sendReportBack } from "../api/reportsClient";
 import { ApiFailure } from "../api/failure";
 import type { DraftedEmail, Report, ReportReview } from "../api/types";
 import { formatMoney, humanise } from "../display";
@@ -24,6 +24,10 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState<Busy>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  // Reports the claim gained while this card was open. A message can settle what an unsettled
+  // claim is for, which has the whole claim investigated again and produces a report per
+  // damaged product — reports this screen has never seen, under ids it does not know.
+  const [produced, setProduced] = useState<readonly Report[]>([]);
 
   const settled = current.state === "approved";
   const email = current.drafted_email;
@@ -38,6 +42,10 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
       setSubject(answered.drafted_email?.subject ?? "");
       setBody(answered.drafted_email?.body ?? "");
       setFeedback("");
+      if (answered.revisions.at(-1)?.reinvestigated === true) {
+        const claim = await readClaim(answered.case_id);
+        setProduced(claim.reports.filter((report) => report.report_id !== answered.report_id));
+      }
     } catch (error: unknown) {
       setProblem(
         error instanceof ApiFailure
@@ -56,9 +64,9 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
         <StructuredReport report={current} />
       </div>
 
-      <ReviewHistory reviews={current.reviews} />
-
       <RevisionThread revisions={current.revisions} />
+
+      <ReviewHistory reviews={current.reviews} />
 
       {email === null ? (
         <p className="report-note">No merchant email was produced for this report.</p>
@@ -81,7 +89,7 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
       ) : (
         <div className="report-actions">
           <label className="report-field">
-            <span>What is wrong with this report</span>
+            <span>Write back to the agent</span>
             <textarea
               className="report-body"
               rows={3}
@@ -127,6 +135,10 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
       )}
 
       {problem !== null && <p className="report-problem">{problem}</p>}
+
+      {produced.map((report) => (
+        <ReportCard key={report.report_id} report={report} unavailableReason={null} />
+      ))}
     </article>
   );
 }
@@ -196,15 +208,24 @@ function ReadOnlyEmail({ email }: { email: DraftedEmail }): React.JSX.Element {
   );
 }
 
+/**
+ * What a representative decided about this report, other than writing back.
+ *
+ * Sending one back is left out here on purpose: it is drawn as the conversation instead, and
+ * printing the same sentence twice on one card is noise rather than a record. The service
+ * still returns every action; nothing is filtered out of what it sends, only out of what this
+ * one section draws.
+ */
 function ReviewHistory({ reviews }: { reviews: readonly ReportReview[] }): React.JSX.Element | null {
-  if (reviews.length === 0) {
+  const decisions = reviews.filter((review) => review.action !== "sent_back");
+  if (decisions.length === 0) {
     return null;
   }
   return (
     <section className="report-reviews">
-      <h4>Review history</h4>
+      <h4>What was decided</h4>
       <ol>
-        {reviews.map((review) => (
+        {decisions.map((review) => (
           <li key={review.review_number}>
             <strong>{humanise(review.action)}</strong>
             {review.rep_words !== null && ` — ${review.rep_words}`}

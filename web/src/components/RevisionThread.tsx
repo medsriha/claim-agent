@@ -1,19 +1,21 @@
 /**
- * The conversation a representative and the agent have had about one report (FR-R.13).
+ * The conversation between a representative and the agent about one report (FR-R.13).
  *
- * Each round is what the representative said and what the agent said back, oldest first,
- * with what it changed and what it deliberately left alone (FR-R.10). Every sentence here
- * comes from the service — the screen adds the labels and nothing else.
+ * Drawn as a chat, because that is what it is: the representative types something, the agent
+ * answers, and it goes round as many times as they like. Their messages sit on the right,
+ * the agent's on the left, oldest first.
  *
- * A round marked as not reworked is one the agent could not answer. Its reply says why, and
- * the findings above it are the ones that were already there. That is shown plainly rather
- * than hidden, because a representative reading an unchanged report needs to know whether it
- * was unchanged on purpose.
+ * Every sentence in it comes from the service. The screen adds who said what and nothing
+ * else — it never summarises a round, reorders one, or offers an opinion on whether the
+ * answer was any good.
+ *
+ * What the agent changed and what it left alone hang under its message as a short aside,
+ * because they are supporting detail for a reply rather than the reply itself.
  */
 import type { RevisionTurn } from "../api/types";
 import { PAGE_WORDS } from "../chat/pageWords";
 
-/** Every round so far, or nothing at all for a report that has never been sent back. */
+/** Every round so far, or nothing at all for a report nobody has written back about. */
 export function RevisionThread({
   revisions,
 }: {
@@ -23,50 +25,32 @@ export function RevisionThread({
     return null;
   }
   return (
-    <section className="revision-thread">
-      <h4>The conversation about this report</h4>
-      <ol>
-        {revisions.map((turn) => (
-          <li key={turn.turn} className="revision-turn">
-            <Said who="You" words={turn.feedback} />
-            <Said who="The agent" words={turn.reply} reworked={turn.reworked} />
+    <section className="revision-thread" aria-label="Conversation about this report">
+      {revisions.map((turn) => (
+        <div key={turn.turn} className="revision-round">
+          <p className="revision-bubble is-rep">{turn.feedback}</p>
+          <div
+            className={
+              turn.reworked
+                ? "revision-bubble is-agent"
+                : "revision-bubble is-agent is-unchanged"
+            }
+          >
+            <p className="revision-reply">{turn.reply}</p>
             <Listed heading="Changed" items={turn.changed} />
             <Listed heading="Left alone" items={turn.left_unchanged} />
-            {turn.needs_reply && (
-              <p className="revision-waiting">{PAGE_WORDS.waitingOnYou}</p>
+            {turn.reinvestigated && (
+              <p className="revision-aside">{PAGE_WORDS.investigatedAgain}</p>
             )}
-          </li>
-        ))}
-      </ol>
+            {turn.needs_reply && <p className="revision-aside">{PAGE_WORDS.waitingOnYou}</p>}
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
 
-/**
- * One thing somebody said, labelled with who said it.
- *
- * `reworked` false marks the agent saying it could not rework the report. It is marked
- * rather than hidden, because an unchanged report that failed and an unchanged report that
- * was reviewed and left alone look identical otherwise.
- */
-function Said({
-  who,
-  words,
-  reworked = true,
-}: {
-  who: string;
-  words: string;
-  reworked?: boolean;
-}): React.JSX.Element {
-  return (
-    <p className={reworked ? "revision-said" : "revision-said is-not-reworked"}>
-      <span className="revision-who">{who}</span>
-      {words}
-    </p>
-  );
-}
-
-/** A short list under a heading, drawn only when the service sent one. */
+/** A short list under the agent's message, drawn only when the service sent one. */
 function Listed({
   heading,
   items,

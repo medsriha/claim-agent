@@ -13,17 +13,36 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from langchain_core.messages import AIMessage
 from tests.fakes.model import scripted
-from tests.fixtures.attachments import INVOICE_342578703
-from tests.fixtures.shipbob import CASE_1001, ORDER_1001, SHIPMENT_1001, mock_shipbob
+from tests.fixtures.attachments import ATTACHMENTS_1002, INVOICE_342578703
+from tests.fixtures.shipbob import (
+    CASE_1001,
+    CASE_1002,
+    CASE_1004,
+    ORDER_1001,
+    ORDER_1002,
+    ORDER_1004,
+    SHIPMENT_1001,
+    SHIPMENT_1002,
+    SHIPMENT_1004,
+    mock_shipbob,
+)
 from tests.unit.test_report_models import a_report, a_screening_report
+from tests.unit.test_report_render import a_context
 
 from claim_agent.agent.llm import StructuredModel
-from claim_agent.agent.schemas import EvidenceJudgement, RevisionConclusion
+from claim_agent.agent.schemas import (
+    ClaimedProductProposal,
+    ClaimSplit,
+    EvidenceJudgement,
+    InvestigationConclusion,
+    RevisedClaimReport,
+    RevisionConclusion,
+)
 from claim_agent.api.deps import get_models
 from claim_agent.app import create_app
 from claim_agent.domain.evidence import EvidenceKind, EvidenceState
 from claim_agent.domain.outcome import Recommendation
-from claim_agent.report.models import Report, ReportState
+from claim_agent.report.models import ClarificationReportContent, Report, ReportState
 from claim_agent.settings import Settings
 from claim_agent.storage.decision_store import DecisionStore
 from claim_agent.storage.merchant_memory import MerchantMemory
@@ -379,11 +398,28 @@ async def test_fr_r_14_what_a_representative_said_is_remembered_against_the_merc
     assert remembered[0].case_id == "CASE-1001"
 
 
-async def test_a_claim_the_quick_checks_stopped_records_the_note_and_reworks_nothing(
-    client: AsyncClient, store: ReportStore, decisions: DecisionStore
+async def test_fr_r_8_a_stopped_claim_gets_an_answer_and_keeps_its_verdict(
+    client: AsyncClient,
+    store: ReportStore,
+    decisions: DecisionStore,
+    a_scripted_reply: list[Any],
 ) -> None:
-    """FR-R.8: feedback cannot overturn a verdict that came from fixed rules."""
+    """FR-R.8: feedback cannot overturn a verdict from fixed rules — and is still answered.
+
+    The representative is arguing with the age limit. They get a reply, because being told
+    nothing is the failure this whole feature exists to prevent, and the report keeps every
+    reason it was stopped for.
+    """
     store.record(a_screening_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative=(
+                "This was filed 73 days after delivery and the limit is 60, which is a fixed "
+                "rule I cannot set aside."
+            ),
+            left_unchanged=("The verdict and the four checks behind it.",),
+        )
+    )
 
     body = (
         await client.post(
@@ -392,8 +428,32 @@ async def test_a_claim_the_quick_checks_stopped_records_the_note_and_reworks_not
     ).json()
 
     assert decisions.count() == 1
-    assert body["revisions"][-1]["reworked"] is False
-    assert "eligibility checks" in body["revisions"][-1]["reply"]
+    assert "73 days after delivery" in body["revisions"][-1]["reply"]
+    assert body["recommendation"] is None
+    assert body["content"] == a_screening_report().content.model_dump(mode="json")
+
+
+async def test_a_stopped_claims_merchant_email_can_still_be_reworded(
+    client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
+) -> None:
+    """FR-0.4, FR-R.8: the wording is the one thing about a stopped claim that is open."""
+    store.record(a_screening_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative="Softened it, and kept the reason the same.",
+            changed=("Reworded the merchant email.",),
+            email_subject="About your claim",
+            email_body="We are sorry we cannot take this one on. Here is why.",
+        )
+    )
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1004/send-back", json={"feedback": "That email reads harshly."}
+        )
+    ).json()
+
+    assert body["drafted_email"]["body"].startswith("We are sorry")
     assert body["content"] == a_screening_report().content.model_dump(mode="json")
 
 
@@ -490,20 +550,23 @@ def a_reworked_answer(**overrides: Any) -> RevisionConclusion:
 
 
 @pytest.fixture
-def a_scripted_rework(app: FastAPI, shipbob: respx.Router) -> Iterator[list[RevisionConclusion]]:
-    """Answer the rework from a script, and serve CASE-1001 from a stand-in ShipBob.
+def a_scripted_reply(app: FastAPI, shipbob: respx.Router) -> Iterator[list[Any]]:
+    """Answer the agent from a script, and serve the sample claims from a stand-in ShipBob.
 
-    The list handed back is the queue: append an answer for each rework a test will drive,
-    in the order it will drive them.
+    The list handed back is the queue: append an answer for each message a test will send, in
+    the order it will send them. A product report's message is answered with a
+    `RevisionConclusion`; a claim-level or stopped claim's with a `RevisedClaimReport`.
     """
     mock_shipbob(shipbob, case=CASE_1001, shipment=SHIPMENT_1001, order=ORDER_1001)
-    # The rework prices the shipment before it starts, the same way an investigation does, so
-    # the stand-in has to answer that too or the request escapes to a name nothing serves.
+    mock_shipbob(shipbob, case=CASE_1004, shipment=SHIPMENT_1004, order=ORDER_1004)
+    # A product rework prices the shipment before it starts, the same way an investigation
+    # does, so the stand-in has to answer that too or the request escapes to a name nothing
+    # serves.
     shipbob.post("/invoices/generate").respond(200, json=INVOICE_342578703)
-    answers: list[RevisionConclusion] = []
+    answers: list[Any] = []
 
     def models() -> tuple[object, StructuredModel]:
-        """Both models, from the script, built only once a rework actually needs them."""
+        """Both models, from the script, built only once something actually needs them."""
         return (
             scripted(*[AIMessage(content="I have read the note.") for _ in answers]),
             StructuredModel(scripted(*answers), max_attempts=1),
@@ -515,11 +578,11 @@ def a_scripted_rework(app: FastAPI, shipbob: respx.Router) -> Iterator[list[Revi
 
 
 async def test_fr_r_1_a_note_gets_the_report_reworked_and_handed_back(
-    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+    client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
     """FR-R.1, FR-R.9: the rep says what is wrong, and the agent reworks the whole report."""
     store.record(a_report())
-    a_scripted_rework.append(a_reworked_answer())
+    a_scripted_reply.append(a_reworked_answer())
 
     body = (
         await client.post(
@@ -535,11 +598,11 @@ async def test_fr_r_1_a_note_gets_the_report_reworked_and_handed_back(
 
 
 async def test_fr_r_10_the_reworked_report_says_what_changed_and_what_did_not(
-    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+    client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
     """FR-R.10: a rep confirms their feedback was understood without re-reading everything."""
     store.record(a_report())
-    a_scripted_rework.append(a_reworked_answer())
+    a_scripted_reply.append(a_reworked_answer())
 
     body = (
         await client.post(
@@ -557,11 +620,11 @@ async def test_fr_r_10_the_reworked_report_says_what_changed_and_what_did_not(
 
 
 async def test_fr_r_11_the_merchant_email_is_rewritten_to_match(
-    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+    client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
     """FR-R.11: a revised recommendation with a stale email is an inconsistent state."""
     store.record(a_report())
-    a_scripted_rework.append(a_reworked_answer())
+    a_scripted_reply.append(a_reworked_answer())
 
     body = (
         await client.post(
@@ -575,11 +638,11 @@ async def test_fr_r_11_the_merchant_email_is_rewritten_to_match(
 
 
 async def test_fr_r_13_the_version_the_representative_decided_on_can_still_be_read_back(
-    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+    client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
     """FR-R.13: every version is kept, because it is the record of how a decision was reached."""
     store.record(a_report())
-    a_scripted_rework.append(a_reworked_answer())
+    a_scripted_reply.append(a_reworked_answer())
 
     await client.post(
         "/reports/RPT-CASE-1001-L01/send-back", json={"feedback": "Look at the box again."}
@@ -591,12 +654,12 @@ async def test_fr_r_13_the_version_the_representative_decided_on_can_still_be_re
 
 
 async def test_fr_r_12_a_second_note_carries_the_first_one_into_the_rework(
-    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+    client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
     """FR-R.12: each cycle carries the full feedback history, so a correction is not undone."""
     store.record(a_report())
-    a_scripted_rework.append(a_reworked_answer())
-    a_scripted_rework.append(
+    a_scripted_reply.append(a_reworked_answer())
+    a_scripted_reply.append(
         a_reworked_answer(
             changed=("Also asked for a clearer invoice.",),
             reply_to_representative="Added the invoice to what the merchant is asked for.",
@@ -622,11 +685,11 @@ async def test_fr_r_12_a_second_note_carries_the_first_one_into_the_rework(
 
 
 async def test_a_reworked_report_can_then_be_approved(
-    client: AsyncClient, store: ReportStore, a_scripted_rework: list[RevisionConclusion]
+    client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
     """FR-2.9: a case may cycle any number of times and still needs a person to release it."""
     store.record(a_report())
-    a_scripted_rework.append(a_reworked_answer())
+    a_scripted_reply.append(a_reworked_answer())
 
     await client.post(
         "/reports/RPT-CASE-1001-L01/send-back", json={"feedback": "Look at the box again."}
@@ -636,3 +699,284 @@ async def test_a_reworked_report_can_then_be_approved(
     assert response.status_code == 200
     assert response.json()["state"] == "approved"
     assert response.json()["version"] == 2
+
+
+# --- A claim nobody could split into products (FR-1a.4, FR-R.1) --------------
+
+
+def a_clarification_report(**overrides: Any) -> Report:
+    """A claim whose split was never settled, so it names no product at all."""
+    fields: dict[str, Any] = {
+        "report_id": "RPT-CASE-1002",
+        "case_id": "CASE-1002",
+        "claim_line_id": None,
+        "product_name": None,
+        "recommendation": "request_info",
+        "amount_usd": None,
+        "confidence": None,
+        "content": ClarificationReportContent(
+            context=a_context(),
+            ambiguity="The bottle's label is turned away, so it cannot be told apart from the "
+            "order's two 24oz lines.",
+            concerns=("Two similar products, and nothing distinguishes them.",),
+            requested_details=(
+                "The exact name and product code of each damaged item",
+                "The quantity damaged of each item",
+            ),
+        ),
+    }
+    fields.update(overrides)
+    return a_report(**fields)
+
+
+@pytest.fixture
+def case_1002(shipbob: respx.Router) -> None:
+    """Serve CASE-1002 and its images from the stand-in, for a claim that has to be re-read."""
+    mock_shipbob(shipbob, case=CASE_1002, shipment=SHIPMENT_1002, order=ORDER_1002)
+    shipbob.get("/cases/CASE-1002/attachments").respond(200, json=ATTACHMENTS_1002)
+
+
+async def test_fr_r_1_a_claim_that_names_no_product_still_answers_the_representative(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+) -> None:
+    """FR-R.1: no report kind swallows a message. The rep asked; the agent answers.
+
+    This is the case the feature was got wrong on first: a report whose whole purpose is to
+    ask the representative a question used to refuse the answer to it.
+    """
+    store.record(a_clarification_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative=(
+                "Both 24oz bottles, then. I still need a straight-on photograph of each before "
+                "this can be settled."
+            ),
+            changed=("Dropped the request to name the products, which you have answered.",),
+            ambiguity="The products are settled; the damage photographs are not readable.",
+            requested_details=("A photograph of each damaged bottle taken straight on",),
+            email_subject="About your damaged shipment",
+            email_body="Please send a photograph of each damaged bottle taken straight on.",
+        )
+    )
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1002/send-back",
+            json={"feedback": "Both 24oz bottles were damaged."},
+        )
+    ).json()
+
+    assert body["version"] == 2
+    assert "Both 24oz bottles, then" in body["revisions"][-1]["reply"]
+    assert body["content"]["requested_details"] == [
+        "A photograph of each damaged bottle taken straight on"
+    ]
+    assert "straight on" in body["drafted_email"]["body"]
+
+
+async def test_a_claim_that_names_no_product_can_never_be_given_an_amount(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+) -> None:
+    """FR-1.21: nothing on a report that names no product was ever priced, so no figure exists.
+
+    The representative asks outright for a refund. There is no field the answer could put one
+    in, so the report comes back with no amount however the model replies.
+    """
+    store.record(a_clarification_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative="I cannot price this until the claim is investigated.",
+            needs_more_from_representative=True,
+        )
+    )
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1002/send-back",
+            json={"feedback": "approve the refund for the two bottles and generate an email"},
+        )
+    ).json()
+
+    assert body["amount_usd"] is None
+    assert body["recommendation"] != "approve"
+    assert body["revisions"][-1]["needs_reply"] is True
+
+
+async def test_an_answer_that_changes_nothing_leaves_the_report_exactly_as_it_was(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+) -> None:
+    """A question answered is not a report reworked, and the two must not be confused.
+
+    A form full of blanks would otherwise read as "nothing is unclear, nothing is needed from
+    the merchant, send them nothing" — none of which the agent said.
+    """
+    before = a_clarification_report()
+    store.record(before)
+    a_scripted_reply.append(
+        RevisedClaimReport(reply_to_representative="Yes, both photographs are of the same box.")
+    )
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1002/send-back",
+            json={"feedback": "Are the two photos the same box?"},
+        )
+    ).json()
+
+    assert body["content"] == before.content.model_dump(mode="json")
+    assert body["drafted_email"] == (
+        before.drafted_email.model_dump(mode="json") if before.drafted_email else None
+    )
+    assert body["revisions"][-1]["reworked"] is False
+
+
+# --- Investigating the claim again, because the rep settled it (FR-1a.4) -----
+
+BOTANICAL = "CleanBoss Botanical Disinfectant & Cleaner 24oz 2 Pack"
+MULTI_SURFACE = "CleanBoss Multi Surface Cleaner 24oz"
+
+
+def a_settled_split() -> ClaimSplit:
+    """The split the fresh investigation reaches, now that the rep has named the products."""
+    return ClaimSplit(
+        claimed_products=(
+            ClaimedProductProposal(
+                name=MULTI_SURFACE,
+                quantity=2,
+                sku="A00300",
+                reasoning="The representative confirmed both 24oz multi-surface bottles.",
+            ),
+        ),
+        reasoning="The representative settled which products were damaged.",
+    )
+
+
+def an_investigated_line() -> InvestigationConclusion:
+    """One product's findings, asking the merchant for the photograph that is still missing."""
+    return InvestigationConclusion(
+        evidence=(
+            EvidenceJudgement(
+                kind=EvidenceKind.DAMAGED_PRODUCT_PHOTO,
+                state=EvidenceState.UNUSABLE,
+                observed="The label is turned away from the camera.",
+                attachment_id="ATT-CASE-1002-01",
+                problem="The bottle is photographed from behind.",
+            ),
+        ),
+        recommendation=Recommendation.REQUEST_INFO,
+        reasoning="The products are settled, but the damage photograph cannot be relied on.",
+        requested_details=("A photograph of each damaged bottle taken straight on",),
+        email_subject="About your damaged shipment",
+        email_body="Please send a photograph of each damaged bottle taken straight on.",
+    )
+
+
+async def test_a_representative_settling_the_split_gets_the_claim_investigated_again(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+) -> None:
+    """FR-1a.4: the one honest route from "we cannot tell which product" to a report to approve.
+
+    The agent cannot price a claim nobody could split, so when the representative settles it,
+    the claim is investigated properly rather than a figure being invented for it.
+    """
+    store.record(a_clarification_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative=(
+                "Both 24oz multi-surface bottles — I am investigating the claim again on that."
+            ),
+            needs_fresh_investigation=True,
+        )
+    )
+    a_scripted_reply.append(a_settled_split())
+    a_scripted_reply.append(an_investigated_line())
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1002/send-back",
+            json={"feedback": "Both 24oz multi-surface bottles were damaged."},
+        )
+    ).json()
+
+    assert body["revisions"][-1]["reinvestigated"] is True
+    produced = (await client.get("/cases/CASE-1002/reports")).json()["reports"]
+    named = [report["product_name"] for report in produced if report["product_name"]]
+    assert named == [MULTI_SURFACE]
+
+
+async def test_a_fresh_investigation_never_overwrites_the_version_the_rep_was_looking_at(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+) -> None:
+    """FR-R.13: the record of how a decision was reached survives the claim being redone.
+
+    A fresh investigation writes its reports as version 1, and the claim-level report shares a
+    name with the one it would produce for a split it still could not settle. Writing that
+    naively would erase the conversation.
+    """
+    store.record(a_clarification_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative="Investigating it again.", needs_fresh_investigation=True
+        )
+    )
+    a_scripted_reply.append(a_settled_split())
+    a_scripted_reply.append(an_investigated_line())
+
+    await client.post(
+        "/reports/RPT-CASE-1002/send-back", json={"feedback": "Both multi-surface bottles."}
+    )
+
+    first = (await client.get("/reports/RPT-CASE-1002?version=1")).json()["report"]
+    assert first["revisions"] == []
+    assert first["content"]["kind"] == "clarification"
+    latest = (await client.get("/reports/RPT-CASE-1002")).json()["report"]
+    assert latest["version"] == 2
+    assert len(latest["revisions"]) == 1
+
+
+async def test_what_the_representative_said_reaches_the_fresh_investigation(
+    client: AsyncClient,
+    store: ReportStore,
+    settings: Settings,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+) -> None:
+    """FR-R.14, FR-0.5: their answer travels by the channel that already existed.
+
+    A message is written against the merchant the moment it is sent, and a claim being
+    investigated reads those corrections as starting context — so nothing new had to be
+    invented to get the representative's answer in front of the split.
+    """
+    store.record(a_clarification_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative="Investigating it again.", needs_fresh_investigation=True
+        )
+    )
+    a_scripted_reply.append(a_settled_split())
+    a_scripted_reply.append(an_investigated_line())
+
+    await client.post(
+        "/reports/RPT-CASE-1002/send-back",
+        json={"feedback": "Both 24oz multi-surface bottles were damaged."},
+    )
+
+    remembered = MerchantMemory(settings.database_path).corrections_for("334430")
+    assert [correction.summary for correction in remembered] == [
+        "Both 24oz multi-surface bottles were damaged."
+    ]

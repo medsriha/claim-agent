@@ -454,8 +454,12 @@ export interface ReportReview {
  * One round of the conversation about a report (FR-R.13).
  *
  * A representative said something was wrong; the agent reworked the report and answered.
- * `reworked` false means it could not be reworked at all, and the findings above the
- * conversation are the ones that were already there — `reply` says why.
+ * `reworked` false means nothing about the report changed — the agent could not rework it,
+ * or the message was a question and the answer was an answer. The findings above the
+ * conversation are then the ones that were already there.
+ *
+ * `reinvestigated` means the whole claim was investigated again off the back of this round,
+ * so the claim now has a report per damaged product that it did not have before.
  *
  * `needs_reply` means the agent asked a question and is waiting on a person. It changes
  * nothing about what is recommended.
@@ -469,6 +473,7 @@ export interface RevisionTurn {
   readonly left_unchanged: readonly string[];
   readonly needs_reply: boolean;
   readonly reworked: boolean;
+  readonly reinvestigated: boolean;
 }
 
 /**
@@ -513,4 +518,10 @@ export interface Approval {
   /** Subject and wording only. The recipient comes from the claim and is not sendable. */
   readonly email?: { readonly subject: string; readonly body: string };
   readonly rep_words?: string;
+}
+
+/** Every report on one claim, as the service returns them (FR-2.9b). */
+export interface ClaimView {
+  readonly case_id: string;
+  readonly reports: readonly Report[];
 }

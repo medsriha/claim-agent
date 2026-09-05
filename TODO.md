@@ -442,11 +442,20 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
 - [x] FR-R.1 — a rework runs when a representative sends a report back, and on nothing else.
   - **Conclusion:** there is one caller, `POST /reports/{id}/send-back`, and it records the note
     as a decision before it starts. Nothing schedules, retries or triggers a rework by itself.
+  - **Be aware: every message reaches the agent, whatever the report is.** The first cut of this
+    refused anything that was not an investigated product's report and answered with a canned
+    sentence — which broke the one case that mattered most, a report whose whole purpose is to
+    ask the representative a question refusing the answer to it. What a message may *change* is
+    still decided by report kind, in `report/conversation.py`; whether it gets an answer is not.
 - [ ] FR-R.1a — **half.** A rework touches one product's report and leaves its siblings alone,
   which is the first half. The second half — feedback about evidence the whole claim shares
   propagating to every line that relied on it — is **not built**. The agent flags such a note and
   the reworked report carries a concern naming the other products, so a representative knows to
   send each of them back by hand. Do not tick this until the propagation exists.
+  - **Be aware:** there is now one case where a message *does* reach every product on a claim —
+    a representative settling what an unsettled claim is for has the whole claim investigated
+    again (FR-1a.4). That is a different mechanism and it does not satisfy this requirement:
+    it redoes the claim from its evidence rather than propagating one corrected finding.
 - [x] FR-R.2 — the rework starts from the report in full, not from zero.
   - **What was built:** the run is handed the report's findings, judgements, figure and working,
     concerns and email, the whole conversation so far, and the case re-read from ShipBob. It does
@@ -474,9 +483,14 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
   - **Be aware:** the per-claim cap is *not* reapplied across siblings on a rework. That check
     needs every product's figure at once, and a rework answers for one product.
 - [x] FR-R.8 — the rules do not give way, and the agent says so rather than complying quietly.
-  - **Be aware:** a claim the quick checks stopped cannot be reworked at all. The note is still
-    recorded, and the reply says the verdict came from fixed rules. Our reading of "feedback
-    cannot make an ineligible claim eligible".
+  - **Conclusion:** for a claim the quick checks stopped, the *agent* says so, with the actual
+    reason in front of it — "filed 73 days after delivery and the limit is 60" rather than a
+    canned refusal. That is what the requirement asks for. The only thing it may change about
+    such a claim is the merchant email's wording, and that is enforced by which fields the code
+    reads rather than by the prompt.
+  - **Be aware:** a claim that names no product can never be given an amount either, because
+    nothing on it was ever priced. A representative asking for one gets a fresh investigation or
+    an explanation, never a figure.
 - [x] FR-R.9 — a complete revised report, in the same structure. The answer form is the
   investigation's form **subclassed**, with three fields added, so "same schema" is true in code
   rather than by intention.

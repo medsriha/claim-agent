@@ -657,15 +657,30 @@ Sending a report back used to be a note that went nowhere. It now reaches an age
 the report and answers, so the card grows a thread: what the representative said, what the agent
 said back, what it changed, and what it deliberately left alone.
 
-- [x] UI-38 — The conversation, drawn as a thread.
-  - **What was built:** `components/RevisionThread.tsx`, and `revisions` on the report type. Each
-    round is two things somebody said, oldest first, with two short lists under them.
-  - **Conclusion:** every sentence in it comes from the service. The screen adds "You", "The
-    agent", "Changed" and "Left alone" and nothing else — it does not summarise a round, does not
-    reorder them, and does not say whether a rework was any good.
-  - **Be aware:** a round the agent could not answer is **marked**, in the stop colour, rather
-    than hidden. An unchanged report that failed and an unchanged report that was reviewed and
-    left alone look identical otherwise, and only one of them is worth sending back again.
+- [x] UI-38 — The conversation, drawn as a chat.
+  - **What was built:** `components/RevisionThread.tsx`, and `revisions` on the report type. The
+    representative's messages sit right and the agent's left, oldest first, with what it changed
+    and what it left alone hanging under its reply.
+  - **Conclusion:** every sentence in it comes from the service. The screen adds which side a
+    message sits on, "Changed" and "Left alone", and nothing else — it does not summarise a
+    round, reorder one, or say whether an answer was any good.
+  - **Be aware:** a round where nothing changed is **marked**, with a rule down its edge, rather
+    than hidden. A report left alone because a run failed and one left alone because it was
+    already right look identical otherwise, and only one is worth writing back about.
+  - **Be aware:** the review history beside it no longer prints sent-back actions, because they
+    are the conversation. Nothing is filtered out of what the service sends — only out of what
+    that one section draws.
+
+- [x] UI-40 — Reports a message caused to exist.
+  - **What was built:** `api/reportsClient.ts` gained a claim reader, and the card fetches the
+    claim when a round says the whole claim was investigated again — then draws the new product
+    reports nested inside itself.
+  - **Conclusion:** without it, a representative who settles what an unsettled claim is for gets
+    an answer and no sign of the reports their answer produced, because those reports have ids
+    the screen has never seen.
+  - **Be aware:** a card drawing cards is unusual, and it is deliberate — the nesting is what
+    says *these came from that conversation*. It is one level deep and cannot recurse further,
+    because only a claim-level report can produce reports this way.
 
 - [x] UI-39 — The note box, and waiting while the agent works.
   - **What was built:** the box on `ReportCard.tsx` is now a message box. It disables itself while
@@ -681,7 +696,7 @@ said back, what it changed, and what it deliberately left alone.
     conversation is waiting on the representative, because the service sends that as a flag and
     a flag cannot be read.
 
-- [ ] UI-40 — Tried in a browser.
+- [ ] UI-41 — Tried in a browser.
   - **Not done.** The thread was driven through the real endpoints from the test suite, and the
     project builds, typechecks and lints clean. Nobody has watched a rework happen on screen. The
     thing most likely to look wrong is a long conversation pushing the note box off the bottom of

@@ -375,38 +375,18 @@ class InvestigationConclusion(_WithoutSubjectiveConfidence):
     )
 
 
-class RevisionConclusion(InvestigationConclusion):
-    """A reworked conclusion, after a representative said what was wrong (FR-R.9, FR-R.10).
+class _RepliesToTheRepresentative(BaseModel):
+    """The four things every reworked answer says back, whatever kind of report it was.
 
-    **This is the investigation's own form with three fields added, and that is the point.**
-    FR-R.9 asks for a full report in the same structure as the first one — same schema, same
-    requirements — rather than a patch, so this inherits every field instead of restating them.
-    A rule that binds a first answer therefore binds a reworked one, and the two cannot drift.
+    A representative sends a report back in their own words, and what comes back has to let
+    them confirm they were understood without re-reading the whole thing (FR-R.10). These
+    four fields are that, and they are shared rather than restated so a product report and a
+    claim-level one answer a representative in the same shape.
 
-    Everything inherited means exactly what it meant the first time: report on all four pieces
-    of evidence, answer the four questions when the evidence is there, name what should be paid
-    for, choose one of the three next actions, and write the merchant's email — carrying the
-    parts the representative did not dispute forward unchanged (FR-R.5). Code fills any part
-    left out from the earlier report, so leaving one out cannot quietly turn an established
-    finding into a missing one.
-
-    `changed` and `left_unchanged` are what let a representative confirm they were understood
-    without re-reading the whole report (FR-R.10). `reply_to_representative` is the answer to
-    what they actually said — including a refusal, where they asked for something the rules
-    forbid (FR-R.8), and including a question, where the rework cannot be settled without
-    something only they can supply.
-
-    `needs_more_from_representative` says that the reply contains such a question. It changes
-    nothing about the recommendation; it tells a screen that the conversation is waiting on a
-    person rather than finished.
-
-    `concerns_shared_evidence` says the feedback was about the invoice, the customer
-    confirmation or the photograph of the outer box — the three that describe the parcel and
-    are settled once for the whole claim (FR-1a.3). Correcting one of those ought to correct
-    every product on the claim; this system flags that and does not do it (FR-R.1a).
+    `reply_to_representative` is the answer to what they actually said — including a refusal,
+    where they asked for something the rules forbid (FR-R.8), and including a question, where
+    the rework cannot be settled without something only they can supply.
     """
-
-    model_config = ConfigDict(extra="forbid")
 
     changed: tuple[str, ...] = Field(
         default=(),
@@ -437,10 +417,107 @@ class RevisionConclusion(InvestigationConclusion):
             "this can be settled."
         ),
     )
+
+
+class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
+    """A reworked conclusion, after a representative said what was wrong (FR-R.9, FR-R.10).
+
+    **This is the investigation's own form with the shared reply added, and that is the point.**
+    FR-R.9 asks for a full report in the same structure as the first one — same schema, same
+    requirements — rather than a patch, so this inherits every field instead of restating them.
+    A rule that binds a first answer therefore binds a reworked one, and the two cannot drift.
+
+    Everything inherited means exactly what it meant the first time: report on all four pieces
+    of evidence, answer the four questions when the evidence is there, name what should be paid
+    for, choose one of the three next actions, and write the merchant's email — carrying the
+    parts the representative did not dispute forward unchanged (FR-R.5). Code fills any part
+    left out from the earlier report, so leaving one out cannot quietly turn an established
+    finding into a missing one.
+
+    What it says back to the representative comes from the shared reply above, so a product
+    report and a claim-level one answer them in the same shape.
+
+    `concerns_shared_evidence` says the feedback was about the invoice, the customer
+    confirmation or the photograph of the outer box — the three that describe the parcel and
+    are settled once for the whole claim (FR-1a.3). Correcting one of those ought to correct
+    every product on the claim; this system flags that and does not do it (FR-R.1a).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     concerns_shared_evidence: bool = Field(
         default=False,
         description=(
             "True when the feedback is about the invoice, the customer confirmation or the "
             "photograph of the outer box, which every product on this claim shares."
+        ),
+    )
+
+
+class RevisedClaimReport(_RepliesToTheRepresentative):
+    """A reworked report about a whole claim rather than one product (FR-R.9, FR-R.10).
+
+    Two kinds of report name no product. One is a claim whose split could never be settled —
+    nobody could tell which products were being claimed for, so nothing was investigated
+    (FR-1a.4). The other is a claim the deterministic checks turned away before anything
+    expensive ran (FR-0.4). A representative can send either back, and this is what comes
+    back when they do.
+
+    **What may actually change differs between the two, and code decides that, not this
+    form.** A claim whose split is unsettled may have its ambiguity, its merchant requests
+    and its email all reworked, because a representative answering the question is the whole
+    point of asking it. A claim the checks stopped may have only its email reworded: the
+    verdict came from fixed rules, and feedback cannot overturn one (FR-0.6, FR-R.8). Every
+    other field is ignored for it, so the guarantee is structural rather than a request.
+
+    There is no amount here and nowhere to put one. Nothing on a report that names no product
+    has been priced, so an approval cannot be written from it — if a representative asks for
+    one, the honest answers are to ask for a fresh investigation or to say what is still
+    needed.
+
+    `needs_fresh_investigation` is the escape hatch. Set it when what the representative said
+    settles enough that the claim should be looked into properly again rather than merely
+    reworded — most often because they have told you which products were damaged. Code runs
+    the investigation; you do not.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ambiguity: str | None = Field(
+        default=None,
+        description=(
+            "What is still unclear about this claim after what the representative said, in "
+            "one or two short sentences. Null when nothing is unclear any more."
+        ),
+    )
+    requested_details: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Every specific detail the merchant must still provide. Leave out anything the "
+            "representative has just answered. Empty when nothing is needed from them."
+        ),
+    )
+    email_subject: str | None = Field(
+        default=None,
+        description=(
+            "Subject of the merchant email as it should now read. Null to leave the wording "
+            "as it is, and null when nothing should be sent to the merchant at all."
+        ),
+    )
+    email_body: str | None = Field(
+        default=None,
+        description=(
+            "The merchant email as it should now read, requesting every remaining detail and "
+            "nothing the representative has already answered. Never write an amount. Null to "
+            "leave the wording as it is, and null when nothing should be sent."
+        ),
+    )
+    needs_fresh_investigation: bool = Field(
+        default=False,
+        description=(
+            "True when what the representative said settles enough that this claim should be "
+            "investigated again from its evidence rather than only reworded — for example "
+            "when they have told you which products were damaged, or asked for the claim to "
+            "be investigated."
         ),
     )

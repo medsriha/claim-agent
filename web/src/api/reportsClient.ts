@@ -11,7 +11,7 @@
  * first would have already lost the cents (FR-1.21).
  */
 import { requestJson } from "./request";
-import type { Approval, Report } from "./types";
+import type { Approval, ClaimView, Report } from "./types";
 
 /** Approve a report, as it stands or after changing it (FR-2.8, FR-2.9). */
 export async function approveReport(reportId: string, approval: Approval): Promise<Report> {
@@ -29,4 +29,15 @@ export async function sendReportBack(reportId: string, feedback: string): Promis
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ feedback }),
   });
+}
+
+/**
+ * Every report on one claim, each at the version in force (FR-2.9b).
+ *
+ * Asked for after a message causes the whole claim to be investigated again, because that
+ * produces reports the screen has never seen — new products, with their own ids. The claim is
+ * the only place they exist.
+ */
+export async function readClaim(caseId: string): Promise<ClaimView> {
+  return requestJson<ClaimView>(`/cases/${encodeURIComponent(caseId)}/reports`);
 }

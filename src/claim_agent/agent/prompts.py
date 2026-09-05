@@ -471,12 +471,98 @@ others too.
 """
 
 
+# --- Reworking a report that names no product (FR-R.1, FR-R.8, FR-1a.4) ------
+
+CLAIM_REVISION_PROMPT: Final = """\
+You could not establish which products this claim is for, so you reported that rather than
+guessing, and a representative has now written back. Answer them.
+
+THIS IS A CONVERSATION, AND YOU ARE ONE SIDE OF IT
+Write to them, not about them. Read what they said, work out what it settles, and say what
+you have done about it. If they have answered the question you asked, say so and stop asking
+it. If they have answered part of it, ask only for the rest. Never repeat a request they have
+just satisfied — that is the single most annoying thing you can do here.
+
+WHAT THEY SAY ABOUT THE PRODUCTS IS AUTHORITATIVE
+They can see this claim, this merchant and this order, and they know things the records do
+not hold. If they tell you which products were damaged, that settles it. Do not argue, do not
+ask them to prove it, and do not go back to saying you cannot tell.
+
+WHAT YOU CANNOT DO FROM HERE
+Nothing on this claim has been investigated. No photograph has been judged, no product has
+been priced, and no evidence has been settled. So you cannot approve anything and you cannot
+name an amount, however clearly a representative asks you to — there is no figure to give
+them that would mean anything.
+
+You have one honest way to get there, and it is the fresh investigation. When what they said
+settles which products were damaged, or when they simply ask for the claim to be investigated,
+set needs_fresh_investigation. Code then investigates the claim properly, from the evidence,
+and produces a report per product that they can approve. Say in your reply that this is what
+is happening, so they know their answer went somewhere.
+
+Do not set it when nothing has moved. If they asked a question, disagreed with your reasoning,
+or told you to reword something, answer them instead. A fresh investigation costs real time
+and is not a way of avoiding a reply.
+
+WHAT YOU CAN DO FROM HERE
+Rework what is unclear, what the merchant is still being asked for, and the email that asks
+them. Drop anything the representative has answered. Keep what still stands. Where nothing is
+unclear any more, say so rather than inventing something to be unsure about.
+
+If nothing should go to the merchant at all, leave both email fields null. Otherwise write the
+email as it should now read, asking for every remaining detail and nothing else. Never write a
+figure in it.
+
+SAY WHAT YOU CHANGED
+List what you changed and what you left alone. Then write your reply — one or two sentences,
+to them, in plain words. That is where you refuse something the rules forbid, and where you
+ask them a question if you need one answered.
+"""
+
+
+# --- Reworking a report for a claim the checks turned away (FR-0.4, FR-R.8) ---
+
+SCREENING_REVISION_PROMPT: Final = """\
+This claim was turned away before anything was investigated. Fixed rules decided that — how
+old the claim is, what kind of claim it is, whether the basic information is there, whether
+the parcel was insured — and a representative has now written back about it. Answer them.
+
+THIS IS A CONVERSATION, AND YOU ARE ONE SIDE OF IT
+Write to them, not about them. One or two sentences, in plain words.
+
+THE VERDICT IS NOT YOURS TO CHANGE, AND NOT THEIRS EITHER
+The checks are arithmetic and their answer does not depend on anybody's judgement, yours
+included. You cannot make this claim eligible, you cannot set aside a rule, and you cannot
+recommend paying anything. Where the representative asks for one of those, say so plainly and
+say why in a sentence they can act on — they are free to take the claim up outside this
+system, and knowing that is more use to them than an apology.
+
+What decided it is in front of you. Read it, and answer from it rather than in general terms:
+"this was filed 73 days after delivery and the limit is 60" tells them something, and "the
+eligibility rules stopped it" does not.
+
+WHAT YOU CAN DO
+Only one thing: reword the email that goes to the merchant. If the representative wants it
+softer, shorter, differently pitched, or clearer about what happens next, write it that way.
+Everything the email says must still follow from the reasons this claim was stopped — do not
+promise a review, do not hint the decision might change, and never write a figure.
+
+Leave both email fields null to leave the wording exactly as it is. That is the right answer
+whenever they were not asking about the wording.
+
+Every other field you can fill in is ignored for a claim in this state. Nothing you write can
+reopen it.
+"""
+
+
 ALL_PROMPTS: Final = (
     SYSTEM_PROMPT,
     IMAGE_CLASSIFICATION_PROMPT,
     TRIAGE_PROMPT,
     INVESTIGATION_PROMPT,
     REVISION_PROMPT,
+    CLAIM_REVISION_PROMPT,
+    SCREENING_REVISION_PROMPT,
 )
 """Every fixed piece of wording in this file, so it can be checked in one pass.
 
@@ -753,6 +839,108 @@ def build_revision_messages(
     ]
     sections.extend(_render_precedent(precedent))
     sections.extend(_render_corrections(context.merchant_corrections))
+    sections.extend(_render_conversation(conversation))
+    sections.append(_render_feedback(feedback))
+    return _messages("\n\n".join(sections))
+
+
+def build_claim_revision_messages(
+    *,
+    case: Case,
+    order: Order | None,
+    attachments: Sequence[Attachment],
+    context: ClaimContext,
+    ambiguity: str,
+    candidate_lines: Sequence[ClaimLine],
+    requested_details: Sequence[str],
+    concerns: Sequence[str],
+    drafted_email: DraftedEmail | None,
+    feedback: str,
+    conversation: Sequence[EarlierExchange] = (),
+) -> list[BaseMessage]:
+    """Answer a representative who wrote back about a claim whose split was never settled.
+
+    The claim could not be divided into products, so there is nothing to investigate and
+    nothing priced (FR-1a.4). What the representative said may settle it — most often by
+    naming the damaged products — in which case the answer asks for a fresh investigation
+    rather than pretending to have done one.
+
+    Args:
+        case: The claim the merchant opened, re-read from ShipBob.
+        order: The order behind it, whose line items are the products a split may name.
+        attachments: Every image on the claim.
+        context: The facts the deterministic screen worked out beforehand.
+        ambiguity: What the report currently says could not be established.
+        candidate_lines: The products the report was choosing between, where it named any.
+            Shown as candidates and never as settled, which is the whole point of the report.
+        requested_details: What the merchant is currently being asked for.
+        concerns: What the report currently says is worrying.
+        drafted_email: The wording currently going to the merchant, or `None` when the report
+            asks a representative instead.
+        feedback: What the representative said, in their own words. Shown last.
+        conversation: Every earlier round, oldest first (FR-R.12).
+
+    Returns:
+        The shared rules, then the question with the claim's facts, the report as it stands,
+        the conversation so far, and the new message under it.
+    """
+    sections = [
+        CLAIM_REVISION_PROMPT,
+        _render_case(case, context),
+        _render_order(order),
+        _render_attachments(attachments),
+        _render_candidates(candidate_lines),
+        _render_claim_report_as_it_stands(
+            ambiguity=ambiguity,
+            requested_details=requested_details,
+            concerns=concerns,
+            drafted_email=drafted_email,
+        ),
+    ]
+    sections.extend(_render_corrections(context.merchant_corrections))
+    sections.extend(_render_conversation(conversation))
+    sections.append(_render_feedback(feedback))
+    return _messages("\n\n".join(sections))
+
+
+def build_screening_revision_messages(
+    *,
+    case: Case,
+    context: ClaimContext,
+    findings: Sequence[str],
+    drafted_email: DraftedEmail | None,
+    feedback: str,
+    conversation: Sequence[EarlierExchange] = (),
+) -> list[BaseMessage]:
+    """Answer a representative who wrote back about a claim the quick checks turned away.
+
+    Nothing about the verdict is open. The checks are arithmetic, their answer does not depend
+    on judgement, and feedback cannot overturn one (FR-0.6, FR-R.8) — so the only thing this
+    run may change is the wording of the merchant's email, and the only other thing it does is
+    explain the decision in words the representative can act on.
+
+    The order and the images are deliberately absent. Nothing was investigated and nothing is
+    going to be, so putting evidence in front of the run would invite it to reason about a
+    claim it cannot reopen.
+
+    Args:
+        case: The claim the merchant opened.
+        context: The facts the deterministic screen worked out.
+        findings: The screen's own sentences saying why the claim was stopped.
+        drafted_email: The wording currently going to the merchant, or `None` when the claim
+            was routed to a representative instead and nothing is being sent.
+        feedback: What the representative said, in their own words.
+        conversation: Every earlier round, oldest first.
+
+    Returns:
+        The shared rules, then the question with why the claim was stopped, the email as it
+        stands, the conversation so far, and the new message under it.
+    """
+    sections = [
+        SCREENING_REVISION_PROMPT,
+        _render_case(case, context),
+        _render_why_it_was_stopped(findings, drafted_email),
+    ]
     sections.extend(_render_conversation(conversation))
     sections.append(_render_feedback(feedback))
     return _messages("\n\n".join(sections))
@@ -1097,6 +1285,84 @@ def _render_feedback(feedback: str) -> str:
         ]
     )
     return _section("WHAT THE REPRESENTATIVE HAS JUST SAID", body)
+
+
+def _render_candidates(lines: Sequence[ClaimLine]) -> str:
+    """The products a split was choosing between, shown as candidates and never as settled.
+
+    A report that could not establish which products a claim is for may still have listed the
+    ones it was weighing (FR-1a.4). Showing them helps a representative's answer land — "both
+    bottles" means something once the bottles are named — and the heading is what keeps them
+    from being read as a decision that was already made.
+    """
+    if not lines:
+        return _section(
+            "PRODUCTS THIS CLAIM MIGHT BE FOR",
+            "None were identified. Nothing was narrowed down at all.",
+        )
+    named = "\n".join(f"- {line.product_name} (claim line {line.claim_line_id})" for line in lines)
+    return _section(
+        "PRODUCTS THIS CLAIM MIGHT BE FOR",
+        "These were the candidates, and none of them was settled on:\n" + named,
+    )
+
+
+def _render_claim_report_as_it_stands(
+    *,
+    ambiguity: str,
+    requested_details: Sequence[str],
+    concerns: Sequence[str],
+    drafted_email: DraftedEmail | None,
+) -> str:
+    """The claim-level report a representative wrote back about.
+
+    Written in the passive, like the product-level one, so the run reads it as something
+    somebody recorded rather than as a position of its own to defend (FR-R.3).
+    """
+    lines = [f"What could not be established: {ambiguity}"]
+
+    if requested_details:
+        lines.append("")
+        lines.append("What the merchant is currently being asked for:")
+        lines.extend(f"- {detail}" for detail in requested_details)
+
+    if concerns:
+        lines.append("")
+        lines.append("What was recorded as worrying:")
+        lines.extend(f"- {concern}" for concern in concerns)
+
+    lines.append("")
+    if drafted_email is None:
+        lines.append("No merchant email was written; the report asks a representative instead.")
+    else:
+        lines.append("The merchant email that was written:")
+        lines.append(f"Subject: {drafted_email.subject}")
+        lines.append(drafted_email.body)
+
+    return _section("THE REPORT AS IT STANDS", "\n".join(lines))
+
+
+def _render_why_it_was_stopped(findings: Sequence[str], drafted_email: DraftedEmail | None) -> str:
+    """Why the quick checks turned this claim away, and what the merchant is being told.
+
+    The findings are the screen's own sentences, each naming what it looked at, so the run can
+    answer with the actual number rather than in general terms. They are facts about the claim
+    and not opinions to weigh: no wording here can reopen it (FR-0.6, FR-R.8).
+    """
+    reasons = "\n".join(f"- {finding}" for finding in findings) or "- No reason was recorded."
+    lines = ["Why this claim was stopped:", reasons, ""]
+
+    if drafted_email is None:
+        lines.append(
+            "No merchant email was written. This claim goes to a representative rather than "
+            "to the merchant, so there is no wording to change."
+        )
+    else:
+        lines.append("The merchant email that was written:")
+        lines.append(f"Subject: {drafted_email.subject}")
+        lines.append(drafted_email.body)
+
+    return _section("WHAT THE QUICK CHECKS DECIDED", "\n".join(lines))
 
 
 def _render_precedent(precedent: PrecedentSet | None) -> list[str]:

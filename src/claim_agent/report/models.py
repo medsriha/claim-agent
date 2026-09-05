@@ -136,8 +136,12 @@ class RevisionTurn(BaseModel):
         needs_reply: Whether the agent's reply asks the representative a question. It changes
             nothing about what is recommended; it says the conversation is waiting on a
             person rather than finished.
-        reworked: Whether the report was actually reworked. False means the run could not be
-            completed and the findings above are the previous ones.
+        reworked: Whether anything about the report actually changed. False covers a run that
+            could not be completed and an answer that was only an answer — a representative
+            asking a question and being told something does not make the report different.
+        reinvestigated: Whether this round caused the whole claim to be investigated again.
+            That happens when a representative settles what an unsettled claim is for, and it
+            produces a report per damaged product beside this one (FR-1a.4).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -150,6 +154,7 @@ class RevisionTurn(BaseModel):
     left_unchanged: tuple[str, ...] = ()
     needs_reply: bool = False
     reworked: bool = True
+    reinvestigated: bool = False
 
 
 class SiblingLine(BaseModel):

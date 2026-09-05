@@ -1964,60 +1964,61 @@ p {
 }
 
 /* The conversation between a representative and the agent about one report (FR-R.13).
-   Laid out as a thread rather than a table: each round is two things somebody said, and
-   reading it top to bottom is how a representative checks they were understood. */
+
+   Drawn as a chat rather than a table, because that is what it is. The representative's
+   messages sit right and the agent's left, so which of them said a thing is read from where
+   it is rather than from a label in front of it. */
 
 .revision-thread {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.9rem;
 }
 
-.revision-thread h4 {
-  margin: 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--sb-ink-soft);
-}
-
-.revision-thread ol {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.revision-turn {
+.revision-round {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  padding: 0.6rem 0.7rem;
-  background: var(--sb-canvas);
+}
+
+.revision-bubble {
+  max-width: 80%;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
   border-radius: var(--sb-radius-small);
 }
 
-.revision-said {
-  margin: 0;
-  font-size: 0.85rem;
+.revision-bubble.is-rep {
+  align-self: flex-end;
+  color: var(--sb-on-brand);
+  background: var(--sb-brand);
+  border-bottom-right-radius: 2px;
+  white-space: pre-wrap;
+}
+
+.revision-bubble.is-agent {
+  align-self: flex-start;
   color: var(--sb-ink);
+  background: var(--sb-canvas);
+  border: 1px solid var(--sb-line);
+  border-bottom-left-radius: 2px;
 }
 
-/* A round the agent could not answer. Marked rather than hidden: a report that is
-   unchanged because a run failed must not read like one that was reviewed and left. */
-.revision-said.is-not-reworked {
-  color: var(--sb-stop);
+/* A round where nothing about the report changed. Marked rather than hidden: a report left
+   alone because a run failed and one left alone because it was already right look identical
+   otherwise, and only one of them is worth writing back about. */
+.revision-bubble.is-agent.is-unchanged {
+  border-left: 3px solid var(--sb-flag);
 }
 
-.revision-who {
-  display: inline-block;
-  min-width: 5.5rem;
-  font-weight: 600;
-  color: var(--sb-ink-soft);
+.revision-reply {
+  margin: 0;
 }
 
 .revision-list {
+  margin-top: 0.45rem;
   font-size: 0.8rem;
   color: var(--sb-ink-soft);
 }
@@ -2031,9 +2032,18 @@ p {
   padding-left: 1.1rem;
 }
 
-.revision-waiting {
-  margin: 0;
+.revision-aside {
+  margin: 0.45rem 0 0;
   font-size: 0.8rem;
   color: var(--sb-ink-soft);
   font-style: italic;
+}
+
+/* A report produced by investigating the claim again, nested inside the conversation that
+   caused it. Set in from the card it came from so the causal order reads: you wrote back, the
+   agent had the claim looked at again, and these are what it found. */
+.report-card .report-card {
+  margin-top: 0.9rem;
+  margin-left: 0.9rem;
+  border-left: 3px solid var(--sb-brand-tint);
 }

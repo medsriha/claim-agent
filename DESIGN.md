@@ -2383,11 +2383,11 @@ answers rather than failures. Nothing here raises.
 ---
 ### Sending a report back, and the conversation that follows
 
-**What it does** — Lets a representative reply to a report in their own words — "the packaging
-photo is the box, not the product", "why so little?", "check the invoice again" — and have the
-system rework the report and the merchant's email around what they said, then hand it back. The
-representative can reply again, as many times as they like, and the system remembers the whole
-exchange.
+**What it does** — Lets a representative talk to the agent about a report. They type whatever
+they like — "the packaging photo is the box, not the product", "why so little?", "both bottles
+were damaged", "that email reads harshly" — and the agent answers them and reworks whatever their
+message bears on. They can write back as many times as they like, and the whole exchange is kept
+and shown to the agent each round.
 
 **Why we need it** — Sending a report back already recorded a note and then did nothing with it;
 this is the half that was missing. It is how a representative uses their judgement without doing
@@ -2402,9 +2402,9 @@ to be made again on their next claim (FR-R.14).
    decision, exactly as before, and the report is parked.
 2. Their note is also written down against the merchant, so the next claim from that merchant
    starts knowing about it.
-3. The same agent that investigated the product is asked again. It is given the report as it
-   stands — every finding, every judgement, the amount and its working, the concerns, and the
-   email — plus the whole conversation so far, and then the new note.
+3. The agent is given the message. **Every message reaches it**, whatever the report is — there
+   is no kind of report that swallows one. It is handed the report as it stands, the whole
+   conversation so far, and then the new message.
 4. It is told plainly that the earlier findings are **a record of what was seen**, not its own
    conclusions to defend, and that the representative is right about what is wrong. Its job is to
    work out what follows from that.
@@ -2453,10 +2453,32 @@ correction. Nothing it can reach is able to send an email or move money.
   commentary. The investigation streams what it is doing; this does not, because it was not worth
   a second streaming endpoint for a step that takes a fraction of the time. It is written up under
   [Would improve](#would-improve).
-- **A claim the quick checks stopped cannot be reworked**, and neither can a claim whose split was
-  never settled. There is no investigation to redo in either case, and in the first the verdict
-  came from fixed rules that feedback is not allowed to overturn. Both still accept a note — it is
-  recorded, and the reply says why nothing was reworked.
+- **Every message is answered; what it may change is what differs.** The first version of this
+  refused a message outright unless it was about an investigated product, and answered with a
+  sentence of the system's own. That was wrong in the one case it most mattered: a report whose
+  entire purpose is to ask the representative a question would not accept the answer to it. Now
+  three things can happen, and which one is decided by what the report is rather than by what the
+  agent wrote:
+  - **A report about one damaged product** is reworked in full — findings, judgements, figure and
+    email.
+  - **A report about a claim nobody could split into products** may have what is still unclear,
+    what the merchant is asked for, and its email reworked. It can never be given an amount:
+    nothing on it was ever priced, so there is no figure that would mean anything.
+  - **A report for a claim the quick checks turned away** may have only its merchant email
+    reworded. Its verdict is arithmetic and no message can overturn one — but the agent says so
+    itself, with the actual reason, which is what the requirement asks for rather than a canned
+    refusal.
+- **Settling an unsettled claim has the claim investigated again.** When the representative's
+  message says which products were damaged — or simply asks for the claim to be investigated —
+  the agent says so, and the claim goes through a real investigation: the evidence is read again,
+  the claim is split again, and each product is judged from its photographs. That is the only
+  honest route from "we cannot tell which product" to "here is what to pay", because a figure can
+  only come from evidence somebody actually looked at.
+- **Their answer reaches that investigation through a channel that already existed.** A message is
+  written against the merchant the moment it is sent, and an investigation reads a merchant's
+  corrections as starting context. So nothing new had to be invented to get the representative's
+  answer in front of the split — the same mechanism that improves the merchant's *next* claim
+  improves this one.
 - **The note is shown to the agent inside a marked block**, like anything else the system did not
   write itself. The wording around it says what makes this block different: it is authoritative
   about what is wrong with the report, and still cannot change the rules.
@@ -2478,28 +2500,39 @@ correction. Nothing it can reach is able to send an email or move money.
 - **The reworked email is refused** by the checks that keep money out of model wording. The report
   goes to the representative with no email and the reason among its concerns, exactly as it would
   during a first pass.
+- **The agent answers without changing anything.** That is an ordinary outcome, not a failure — a
+  question asked and answered leaves the report right as it was — and it is told apart from a
+  failure on screen so the representative knows which happened.
 - **The merchant correction cannot be written.** The reworking still happens. Losing a note
   against a merchant is worth less than losing the reworking the representative is waiting for,
   and it is logged.
 - **The report was already approved.** The note is refused. An approval is final.
 
-**Not ready for production** — The reworking runs inside the web request, so a slow model holds a
-connection open and a dropped connection loses the answer (the note and its record survive). There
-is still no sign-in, so the conversation cannot say which representative said what. Shared-evidence
-feedback is flagged and not propagated. All of these are in
-[Future production](#future-production).
+**Not ready for production** — Answering runs inside the web request, so a slow model holds a
+connection open and a dropped connection loses the answer (the message and its record survive). A
+message that causes a fresh investigation makes that far worse, because an investigation is the
+longest thing this system does. There is still no sign-in, so the conversation cannot say which
+representative said what. Shared-evidence feedback is flagged and not propagated. All of these are
+in [Future production](#future-production).
 
-**On screen** — The report card grows a conversation under it: what the representative said, what
-the agent said back, what it changed and what it left alone, oldest first. The message box at the
-bottom is how the next note is sent. While the agent works, the box is disabled and a spinner runs
-— the screen says nothing about what it is doing, because the service is not telling it.
+**On screen** — The report card grows a chat under it: the representative's messages on the right,
+the agent's on the left, oldest first, with what it changed and what it left alone hanging under
+its reply. The box at the bottom is how the next message is sent. While the agent works, the box
+is disabled and a spinner runs — the screen says nothing about what it is doing, because the
+service is not telling it.
 
-**Where the code is** — `src/claim_agent/agent/revise.py` is the layer;
-`src/claim_agent/agent/prompts.py` holds every word it says to the model and
-`src/claim_agent/agent/schemas.py` the form it answers on; `src/claim_agent/report/build.py` turns
-that into the next version of the report and `src/claim_agent/report/models.py` defines what a
-turn of the conversation holds; `src/claim_agent/api/routes/reports.py` is the way in. On the
-screen: `web/src/components/RevisionThread.tsx`.
+A round where nothing about the report changed is marked, rather than looking like one where the
+agent reviewed it and left it alone. A round that had the claim investigated again says so, and
+the card then fetches the claim and draws the new product reports underneath itself, so the
+representative sees what their answer produced without going looking for it.
+
+**Where the code is** — `src/claim_agent/report/conversation.py` decides which of the three paths
+a message takes and is where a fresh investigation is run from; `src/claim_agent/agent/revise.py`
+is the layer itself; `src/claim_agent/agent/prompts.py` holds every word it says to the model and
+`src/claim_agent/agent/schemas.py` the two forms it answers on; `src/claim_agent/report/build.py`
+turns an answer into the next version of the report and `src/claim_agent/report/models.py` defines
+what a round of the conversation holds; `src/claim_agent/api/routes/reports.py` is the way in. On
+the screen: `web/src/components/RevisionThread.tsx`.
 
 ---
 
@@ -2707,13 +2740,21 @@ finds in production.
 
 ### Could break
 
-- **Reworking a report happens inside the web request that asked for it.** A representative sends
-  a note and waits with a spinner while a model call or several run. Three things follow. A slow
-  model holds a connection open, so enough people sending reports back at once would exhaust the
-  connections before it exhausted anything else. A dropped connection loses the reworked report —
-  the note and its record survive, because they are written first, so sending it back again is
-  safe, but the work is paid for twice. And nothing bounds how long the request may take beyond
-  the run's own step allowance.
+- **Answering a representative happens inside the web request that asked for it.** They send a
+  message and wait with a spinner while a model call or several run. Three things follow. A slow
+  model holds a connection open, so enough people writing back at once would exhaust the
+  connections before it exhausted anything else. A dropped connection loses the answer — the
+  message and its record survive, because they are written first, so sending it again is safe,
+  but the work is paid for twice. And nothing bounds how long the request may take beyond the
+  run's own step allowance.
+- **A message that causes a fresh investigation makes all of that far worse.** An investigation
+  is the longest and most expensive thing this system does, and it now runs inside a request a
+  representative is waiting on. Nothing warns them it is about to happen, nothing shows progress
+  while it does, and a dropped connection loses every product report it produced — though the
+  claim can simply be investigated again.
+- **The agent decides when a claim is investigated again.** It sets a flag and code acts on it.
+  Nothing limits how often that can happen, so a conversation that keeps circling could keep
+  paying for whole investigations, and nothing measures it.
 - **An agent shown its earlier answer may argue for it.** Reworking a report puts the report's own
   findings in front of the same agent that produced them, which is exactly the setup that makes a
   model defend what it already said. Two things push back — the findings are worded as

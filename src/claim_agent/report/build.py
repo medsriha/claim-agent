@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from claim_agent.agent.email import finish_email
 from claim_agent.agent.investigate import LineInvestigation
-from claim_agent.agent.revise import LineRevision
+from claim_agent.agent.revise import ClaimRevision, LineRevision
 from claim_agent.agent.run import ClaimInvestigation
 from claim_agent.domain.case_facts import read_case_facts
 from claim_agent.domain.decision import DecisionStage
@@ -279,10 +279,11 @@ def _one_product(
 
 def build_revised_report(
     report: Report,
-    revision: LineRevision,
+    revision: LineRevision | ClaimRevision,
     *,
     feedback: str,
     at: UtcDatetime,
+    reinvestigated: bool = False,
 ) -> Report:
     """Write the next version of a report after a representative sent it back (FR-R.9, FR-R.13).
 
@@ -304,6 +305,9 @@ def build_revised_report(
         feedback: What the representative said, in their own words, kept exactly as written.
         at: When this version is being written. Handed in rather than read from a clock, so the
             same rework writes the same version twice (NFR-1).
+        reinvestigated: Whether this round also caused the whole claim to be investigated
+            again, which produces a report per damaged product beside this one. Recorded on
+            the round so a screen can go and show them (FR-1a.4).
 
     Returns:
         The next version. **When the rework did not happen the findings are the previous ones,
@@ -320,6 +324,7 @@ def build_revised_report(
         left_unchanged=revision.left_unchanged,
         needs_reply=revision.needs_reply,
         reworked=revision.reworked,
+        reinvestigated=reinvestigated,
     )
     carried_forward = {
         "version": report.version + 1,
@@ -328,15 +333,19 @@ def build_revised_report(
         "created_at": at,
     }
 
+    if isinstance(revision, ClaimRevision):
+        return _a_claim_level_version(report, revision, carried_forward=carried_forward)
+
     reworked = revision.investigation
     if reworked is None:
         return report.model_copy(update=carried_forward)
 
     content = report.content
     if not isinstance(content, InvestigationReportContent):
-        # Only an investigated product can be reworked, and the route refuses anything else
-        # before a run is ever started. Reaching here would mean that check was removed, so
-        # the findings are left alone rather than rebuilt from a shape they do not fit.
+        # A product rework only ever runs on a product's report, and the route sends anything
+        # else down the claim-level path above. Reaching here would mean that split was
+        # removed, so the findings are left alone rather than rebuilt from a shape they do not
+        # fit.
         logger.warning("revised_report_has_no_investigation", report_id=report.report_id)
         return report.model_copy(update=carried_forward)
 
@@ -366,6 +375,50 @@ def build_revised_report(
                         if reworked.conclusion is not None
                         else ()
                     ),
+                }
+            ),
+        }
+    )
+
+
+def _a_claim_level_version(
+    report: Report, revision: ClaimRevision, *, carried_forward: dict[str, object]
+) -> Report:
+    """Write the next version of a report that names no product (FR-1a.4, FR-0.4).
+
+    Two kinds of report reach here, and what each may change is decided here rather than by
+    what the agent wrote:
+
+    - **A claim whose split was never settled** may have its ambiguity, its merchant requests,
+      its recommendation and its email all reworked. A representative answering the question
+      the report asked is the whole reason it was asked.
+    - **A claim the quick checks turned away** may have only its merchant email reworded. Its
+      verdict came from fixed rules, and feedback cannot overturn one (FR-0.6, FR-R.8), so
+      every other field on the revision is ignored for it.
+
+    A revision that changed nothing — an answer to a question, or a request for the claim to be
+    investigated again — carries the report through untouched, with the round of conversation
+    on it and nothing else.
+    """
+    content = report.content
+
+    if isinstance(content, ScreeningReportContent):
+        if revision.email is None or report.drafted_email is None:
+            return report.model_copy(update=carried_forward)
+        return report.model_copy(update={**carried_forward, "drafted_email": revision.email})
+
+    if not isinstance(content, ClarificationReportContent) or not revision.reworked:
+        return report.model_copy(update=carried_forward)
+
+    return report.model_copy(
+        update={
+            **carried_forward,
+            "recommendation": revision.recommendation,
+            "drafted_email": revision.email,
+            "content": content.model_copy(
+                update={
+                    "ambiguity": revision.ambiguity or content.ambiguity,
+                    "requested_details": revision.requested_details,
                 }
             ),
         }
