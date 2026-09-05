@@ -1,11 +1,3 @@
-"""Screening a claim through the HTTP surface (FR-0.1 to FR-0.6).
-
-Every request in this file is answered by a stand-in ShipBob running in the same
-process, so nothing reaches the network. What these tests care about is what a
-caller actually receives: the status code, the shape of the body, and the exact
-text of the values in it.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

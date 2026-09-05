@@ -1,12 +1,3 @@
-"""The record of what a run did, and whether it can answer for itself (NFR-3, NFR-5).
-
-The ledger holds no I/O and reads no clock, so these tests write entries directly
-and read them back. Nothing reaches the network and no model is involved.
-
-The moments used here are ours, fixed, and passed in — which is the point of two
-of these tests: nothing in the ledger looks a time up for itself.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

@@ -1,17 +1,3 @@
-"""Building the model and asking it for a form — and what happens when that goes wrong.
-
-**Nothing here reaches Anthropic and nothing here needs a key.** Every question is
-answered by a stand-in chat model in this same process, which hands back whatever
-the test queued for it: a filled-in form, or the failure the test wants to see
-handled. The two tests that do supply a key supply an obviously fake one and never
-ask it anything, because building a model opens no connection.
-
-The form used throughout is a small one of our own rather than one of the real
-shapes from `claim_agent.agent.schemas`. What is being tested is the plumbing —
-which failures are tried again, which are not, and what a caller is handed — and
-that is the same whatever form is being asked for.
-"""
-
 from __future__ import annotations
 
 from typing import Any

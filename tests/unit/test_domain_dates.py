@@ -1,10 +1,3 @@
-"""Reading a date somebody wrote on a document, including one that could be two dates.
-
-No requirement covers reading a written date. These tests name the nearest ones: the age
-limit the reading feeds (FR-0.2), never narrowing two possibilities to one (FR-1.13), and
-answering rather than raising for ordinary input (NFR-4).
-"""
-
 from __future__ import annotations
 
 from datetime import date

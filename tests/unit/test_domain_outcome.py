@@ -1,18 +1,3 @@
-"""What is recommended for one claim line once the rules have had their say.
-
-The rule these tests exist to pin down runs in one direction only: code may
-withhold a payment the requirements forbid, and may never move a recommendation
-towards paying. So most of these tests start from an investigation that wanted to
-pay and check that something stopped it — and a handful check the opposite, that a
-refusal or a hand-off to a person is left exactly as the investigation left it
-(FR-1.14).
-
-Every input is built by hand here. The function reads nothing but its arguments:
-no clock, no network, no model, and nothing at all about the other claim lines in
-the claim, which is what makes a line decide the same way whether it was claimed
-alone or alongside five others (FR-1b.4, NFR-1).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
