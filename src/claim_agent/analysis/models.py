@@ -1,25 +1,3 @@
-"""What the analysis screen is sent.
-
-The shape of everything here follows one rule: **the service sends the number that becomes a
-position on the screen and the words a person reads, side by side.** A point on a chart carries
-both. So does a tile, and so does a row of a table.
-
-That is not decoration. This project forbids the browser working anything out (FR-1.21, NFR-2),
-and a chart is where that rule is easiest to break by accident — a percentage here, a total
-there, a scale worked out from the largest value. Sending both halves means the browser turns a
-number into a length and does nothing else. It never divides, never adds up, never rounds, never
-decides where an axis should stop.
-
-**A missing number is `None`, and it is not zero.** A week nobody decided anything in has no
-rate. The screen draws a gap for it. Sending zero would draw a line to the floor, which reads as
-a collapse in quality rather than as a quiet week.
-
-**Finding nothing and being unable to look are still different answers.** A period with no
-decisions in it comes back as a success, with a sentence saying so. A store that cannot be read
-is not a success and does not arrive here at all — it fails the whole request, so the screen
-shows one honest failure rather than eight panels each claiming to be empty.
-"""
-
 from __future__ import annotations
 
 from typing import Generic, TypeVar

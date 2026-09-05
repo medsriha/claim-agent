@@ -1,24 +1,3 @@
-"""Counting what representatives decided, and working out what it adds up to.
-
-This is the arithmetic behind the analysis screen and it is the only place any of it happens.
-Nothing here reads a database, calls anything, or asks a model: it takes decisions that were
-already made and returns figures. That is what makes every number on the screen checkable by a
-test with no network, no database and no AI in it.
-
-**Two populations, never added together.** A claim the quick checks stopped and a claim that was
-investigated are counted apart everywhere, because they are different arguments about
-automation. A stopped claim costs nothing to decide and people almost always agree with it;
-folding it into one figure would make the advice look better than it is.
-
-**"Agreement" is not "accuracy".** Nothing here knows what the right answer was. It knows what a
-person chose. Calling that accuracy would be asserting the person is always right, which nobody
-has established, so the word is not used.
-
-**A rate over nothing is `None`, never zero.** A week in which nobody decided anything has no
-direct-approval rate. Reporting it as 0% would draw a line to the floor and read as a collapse in
-quality, when the truth is that there is nothing to report.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence

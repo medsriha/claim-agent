@@ -1,5 +1,3 @@
-"""Working out which products a claim is for, and settling the shared evidence once."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

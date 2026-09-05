@@ -1,21 +1,3 @@
-"""The numbers the reporting rests on that nobody has confirmed.
-
-A saving in dollars is not a measurement. It is a measurement multiplied by an hourly rate
-somebody chose, and a reader who cannot see that rate has no way to argue with the total. So
-every such number lives here, in one place, each with the sentence that will be shown beside it
-on screen — the same arrangement the rules screen uses, where a threshold carries its own
-explanation and its own note that it is provisional.
-
-**None of these came from ShipBob.** They are ours, chosen to be plausible, and every one of
-them is marked provisional in its own description. Correcting one is a change here and nowhere
-else.
-
-**These are not claim policy.** `claim_agent.policy` holds the thresholds a claim is judged by,
-and everything in it can be changed from the admin panel while the service runs. An hourly rate
-judges no claim and changes no outcome; it changes only what a report about the past says. Mixing
-the two would put a reporting assumption on a screen that decides claims.
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal
