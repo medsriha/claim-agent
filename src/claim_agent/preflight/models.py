@@ -1,16 +1,3 @@
-"""What the pre-flight screen produces: what it read, what it checked, and what it decided.
-
-The pre-flight screen is the cheap look a claim gets before any AI is involved.
-It answers one question — can this claim be processed at all? — using rules only
-(FR-0.6). These shapes are what it hands on: to the investigation when a claim
-may go ahead, and to a support rep when it may not (FR-0.3, FR-0.4).
-
-Everything here is built to be read by the person who has to act on it. Each
-check records the values it looked at and a sentence saying what it found, so
-"why was this claim closed?" can be answered from the result alone, without
-re-running anything or reading logs (NFR-3).
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal

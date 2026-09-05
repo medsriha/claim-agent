@@ -1,18 +1,3 @@
-"""What the admin panel is sent, and what it sends back.
-
-The panel draws a form, so what it needs for each threshold is more than the
-value: a label, the sentence explaining what the value is for, and what sort of
-control to draw. All of that is taken out of the policy file itself rather than
-written down a second time here, so the two cannot drift apart.
-
-**Every value travels as text, numbers included.** An amount of money must never
-become a browser number — a $100.00 cap that comes back as 100.00000000000001 is
-exactly the failure this project forbids — and sending whole numbers and
-fractions the same way means the screen has one rule to follow rather than two.
-The one exception is a yes-or-no, which travels as a yes-or-no. The service is the
-only thing that ever reads a number out of what was typed.
-"""
-
 from __future__ import annotations
 
 from enum import StrEnum

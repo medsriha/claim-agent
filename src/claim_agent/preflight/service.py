@@ -1,16 +1,3 @@
-"""Running the pre-flight screen from end to end (FR-0.3).
-
-This is the one place that puts the cheap screen together: read the claim, settle on a
-delivery date, run the four eligibility checks, work out the facts the investigation
-should not have to work out for itself, and answer either "carry on" or "stop, and here
-is the explanation the merchant is owed".
-
-Nothing is decided here. Every rule lives in a file of its own and is a plain rule over
-data that has already been read, so this file is a running order and not a judgement.
-There is no AI anywhere in this layer, and no clock is consulted, which together are why
-screening the same claim twice gives the same answer both times (FR-0.6).
-"""
-
 from __future__ import annotations
 
 from datetime import datetime

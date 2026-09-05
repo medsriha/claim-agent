@@ -1,22 +1,3 @@
-"""Describing the claim policy for the panel, and checking what the panel sends back.
-
-Two jobs, both about the same set of thresholds (FR-0.7, NFR-7):
-
-- **Describing.** Read the values out of the policy file, along with the sentence
-  that explains each one, and say what sort of control edits it. The panel draws a
-  form from that, so a value added to the policy file later shows up on screen
-  without anyone touching the screen — unless that file marks it as one the panel
-  does not offer, which is how a value stays configurable from the environment
-  without being changeable from a browser.
-- **Revising.** Lay what somebody submitted over the values in force and check the
-  whole thing. Either a complete, valid policy comes out, or nothing changes and
-  the caller is told which values were refused and why.
-
-Neither job decides what a threshold ought to be. That is a question for whoever
-owns the requirements, and several of the answers are still open — see the policy
-file itself, which says which values are provisional.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
