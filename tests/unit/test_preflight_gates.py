@@ -1,15 +1,3 @@
-"""The four checks that decide whether a claim can be looked into at all (FR-0.2).
-
-Every check here is a plain rule over records that have already been read, so
-these tests build the records directly and call the rule. Nothing reaches the
-network and no stand-in API is needed.
-
-The payloads come from `tests/fixtures/shipbob.py`, so a test and the rest of the
-suite can never disagree about what CASE-1001 looks like. Read that file's notes
-before trusting a value: identifiers beginning with a 9 were invented by us,
-everything else is quoted in REQUIREMENTS.md.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

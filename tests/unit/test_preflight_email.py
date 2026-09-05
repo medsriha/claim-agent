@@ -1,11 +1,3 @@
-"""The email a merchant gets when their claim cannot be processed at all (FR-0.4).
-
-Every test here works from CASE-1004, the age example REQUIREMENTS.md quotes: delivered
-26 December 2025, opened 9 March 2026, which is 73 days apart. The other three reasons a
-claim can be stopped are reached by handing the same case a different set of reasons,
-because what the email says is decided by the reasons, not by the case.
-"""
-
 from __future__ import annotations
 
 import locale

@@ -1,5 +1,3 @@
-"""What the pre-flight screen hands on: the delivery date it chose, and a verdict that adds up."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

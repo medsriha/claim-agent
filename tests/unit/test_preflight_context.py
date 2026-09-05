@@ -1,11 +1,3 @@
-"""The facts worked out before the investigation starts (FR-0.5).
-
-What the order was worth, whether that is high value, how long the merchant
-waited before filing, and what a rep has corrected for this merchant before.
-Every one of them is arithmetic on records that are handed in, so these tests
-never touch a network, a database, or a clock.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

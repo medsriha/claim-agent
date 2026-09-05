@@ -1,9 +1,3 @@
-"""Writing past claims down and finding the ones like a new claim (FR-S.1 to FR-S.14).
-
-Everything works against a database file in a throwaway directory, so the suite
-never writes into the project and no two tests can see each other's data.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
