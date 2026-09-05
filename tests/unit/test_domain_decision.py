@@ -1,11 +1,3 @@
-"""What a decision record says about itself (FR-C.1, FR-C.2).
-
-The four derived answers here are what every figure on the analysis screen is built from, so a
-mistake in one of them is a mistake in all of them. They are tested against the distinction
-FR-C.2 draws: a decision that differs from the advice is worth remembering, and one that agrees
-with it is not.
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal

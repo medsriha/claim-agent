@@ -1,12 +1,3 @@
-"""Whether the evidence gathered so far can support a recommendation, and what to ask for.
-
-CASE-1005 anchors the empty-evidence tests: it has zero attachments and is already
-"Waiting on Client", so the right output is a specific request for all four kinds, not a
-priced verdict. The rest of the tests focus on the distinction `agent/tools.py`'s module
-docstring draws and this module is built to protect: evidence the merchant can still send
-again, versus evidence *we* failed to read, which must never be asked of them.
-"""
-
 from __future__ import annotations
 
 from claim_agent.domain.evidence import EvidenceFinding, EvidenceKind, EvidenceState

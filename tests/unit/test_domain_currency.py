@@ -1,12 +1,3 @@
-"""Which currency a claim is in, and what its figures are worth in dollars.
-
-No requirement covers currency — REQUIREMENTS.md never mentions it and ShipBob's API has
-no currency field. These tests pin the behaviour worked out from the sample data, and
-the nearest requirements they serve: the dollar cap (FR-1.20), never narrowing two
-candidates to one (FR-1.13), the same answer twice (NFR-1), and failing toward a person
-(NFR-4).
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal

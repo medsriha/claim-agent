@@ -1,22 +1,3 @@
-"""Reading money off a document, and checking the document against its own figures.
-
-Two halves, and both of them exist because of what ShipBob's own sample claims contain.
-
-**Reading a figure.** CASE-1001's order screenshot reads `£55.95` where ShipBob's record
-for the same product says `52.00`. The pound sign is the most valuable thing on that
-screenshot — it is the difference between a claim under the hundred-dollar cap and one
-over it — so these tests are mostly about keeping it, and about refusing every figure
-that cannot be read exactly rather than guessing at it (FR-1.13, FR-1.20).
-
-**Checking a document.** CASE-1002's sales order does not add up on its own terms: three
-items coming to `46.93`, a printed subtotal of `49.85`, a tax total printed as `0.00`, a
-line reading "Shopify Tax $2.92" sitting among the items, and a final total of `49.42`.
-That document has its own test below, with its real figures.
-
-No requirement covers any of this; DESIGN.md records why it exists. The requirement ids
-named in these tests are the nearest ones, not ones that describe the behaviour.
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal
