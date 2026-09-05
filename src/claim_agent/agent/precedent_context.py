@@ -1,5 +1,3 @@
-"""Fetching the past claims like this one, just before the investigation starts."""
-
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence

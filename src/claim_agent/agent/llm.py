@@ -1,5 +1,3 @@
-"""Building the model the investigation asks, and asking it for a filled-in form."""
-
 from __future__ import annotations
 
 from typing import Any, TypeVar

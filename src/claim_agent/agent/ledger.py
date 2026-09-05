@@ -1,5 +1,3 @@
-"""The ordered record of what one investigation actually did (NFR-3, NFR-5)."""
-
 from __future__ import annotations
 
 from enum import StrEnum

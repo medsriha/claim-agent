@@ -1,5 +1,3 @@
-"""Remembering an expensive answer, so one claim never pays for it twice (NFR-8)."""
-
 from __future__ import annotations
 
 import asyncio

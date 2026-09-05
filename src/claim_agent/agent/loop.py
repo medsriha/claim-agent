@@ -1,5 +1,3 @@
-"""The tool-use loop every AI pass in this system runs inside (FR-1.1, FR-1.3)."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
