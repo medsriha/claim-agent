@@ -77,43 +77,39 @@ limitation rather than something a reader has to discover.
 
 ## Documenting the code
 
-**The DESIGN.md rule applies inside the code too: write so someone who has never seen this
-project can follow it.** A reader should understand what a piece of code is for without already
-knowing the domain, the requirements, or the rest of the codebase. Assume the next person is
-new here — because they are.
+**Keep documentation short.** Explain what a reader cannot get from the code itself, then
+stop. Reasoning, trade-offs and history belong in DESIGN.md, where someone will actually
+read them — not in a file header.
 
-**Every module, class, and function gets a docstring.** Short ones included; a small function
-still has to say what it is for.
-
-- Open with one sentence in plain words saying what it does: "Work out how many days passed
-  between delivery and the merchant opening the case." Not "Compute the delta."
-- Say **why it exists** when that is not obvious, and name the requirement id it serves
-  (`FR-0.2`) so the reader can look up the full rule.
-- Explain a domain word the first time it appears. Nobody arrives knowing what a claim line, a
-  terminal verdict, or shared evidence means.
-- Tell the caller what they need: what goes in, what comes back, and what it raises. Say what an
-  empty or missing value means — in this project that is usually the interesting case.
-- Do not restate the signature. `"""Return the settings."""` on `get_settings()` earns its
-  space back only by saying something the name does not, such as why it is cached.
+- **Module docstring: one line.** What the file is for, and the requirement ids it serves.
+  Two or three lines only when a file genuinely needs it. No essays, no rationale, no
+  section headings.
+- **Class and function docstrings: one sentence.** Add an `Args:`/`Returns:`/`Raises:` block
+  only when the signature does not already say it, or when an empty or missing value means
+  something surprising.
+- **Do not restate the signature.** `"""Return the settings."""` on `get_settings()` earns
+  its space back only by saying something the name does not.
+- **Skip the docstring** on a private helper whose name already says what it does.
+- **Constants do not get docstrings.** A short `#` comment above one, if it needs anything.
 
 **Comments explain why, never what.**
 
-- Comment the reasoning, the trade-off, or the surprise. If a line needs a comment to say what
-  it does, rename or simplify it instead.
-- Anything that looks wrong but is deliberate needs a comment saying so, or the next person will
-  helpfully "fix" it.
+- Comment the reasoning, the trade-off, or the surprise, in a line or two. If a line needs a
+  comment to say what it does, rename or simplify it instead.
+- Anything that looks wrong but is deliberate needs a comment saying so, or the next person
+  will helpfully "fix" it.
 - Keep comments true. One that describes code which has since changed is worse than none —
   correct it in the same edit.
 - No commented-out code, and no `TODO` comments. Gaps belong in DESIGN.md under **Future
-  production**, where someone will actually read them.
+  production**.
 
 **Plain language throughout.** Short sentences, everyday words, and spell an abbreviation out
 the first time. This applies to docstrings, comments, log messages, error messages, and test
-names alike — anything a human reads.
+names alike.
 
 **None of this is about Python.** A React component and a TypeScript module get the same
-treatment as a function in `src/` — a plain-words opening comment saying what it is for,
-comments that explain why, and no `TODO`s.
+treatment — a one-line opening comment saying what it is for, comments that explain why, and
+no `TODO`s.
 
 ## Progress
 
