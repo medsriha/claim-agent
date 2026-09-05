@@ -8,11 +8,9 @@ from claim_agent.domain.decision import DecisionRecord, DecisionStage, Proposal,
 from claim_agent.domain.outcome import Recommendation
 
 A_MOMENT = datetime(2026, 3, 21, 10, 4, 11, tzinfo=UTC)
-"""The moment FR-C.1's own reference record was decided at."""
 
 
 def investigated(**overrides: Any) -> DecisionRecord:
-    """One investigated claim a representative approved exactly as it stood."""
     fields: dict[str, Any] = {
         "decision_id": "DEC-CASE-9001-01",
         "case_id": "CASE-9001",
@@ -37,11 +35,6 @@ def investigated(**overrides: Any) -> DecisionRecord:
 
 
 def screened(**overrides: Any) -> DecisionRecord:
-    """One claim the quick checks stopped, approved as it stood.
-
-    No outcome on either side, and no statement of how sure anything was — a stopped claim
-    never reaches the AI (FR-C.1).
-    """
     fields: dict[str, Any] = {
         "decision_id": "DEC-CASE-9002-01",
         "case_id": "CASE-9002",

@@ -2,14 +2,8 @@ from __future__ import annotations
 
 import respx
 
-# Every sample shipment is uninsured and every sample claim is a damage claim, so these
-# two values are the same on all five cases (FR-0.2).
 DAMAGED_IN_TRANSIT = "Claim | Damaged in Transit"
 
-# The bodies ShipBob serves when a record is missing. Each read names its own resource
-# rather than sharing one generic code, so a caller can tell a missing case from a
-# missing order without looking at which URL it asked for. Our code does not read these
-# bodies — a 404 is a 404 — but a test that serves the wrong shape proves less.
 CASE_NOT_FOUND_BODY: dict[str, object] = {
     "error": "case_not_found",
     "message": "No case found with the provided ID.",
@@ -23,21 +17,10 @@ ORDER_NOT_FOUND_BODY: dict[str, object] = {
     "message": "No order found with the provided ID.",
 }
 
-# Kept as the name most tests already use, and pointed at the case body, because a test
-# asking for a record that is not there is nearly always asking for a case.
 NOT_FOUND_BODY: dict[str, object] = CASE_NOT_FOUND_BODY
 
 
 def case_payload(**overrides: object) -> dict[str, object]:
-    """Build one case record — a merchant's claim as ShipBob stores it.
-
-    The defaults are CASE-1001 exactly as REQUIREMENTS.md quotes it (FR-0.1), because it
-    is the only case whose every field is written down. A test changes what it cares
-    about and leaves the rest alone: `case_payload(sub_category=None)` gives a case whose
-    claim type is empty, `case_payload(status="Closed")` a closed one.
-
-    Returns a fresh dictionary each call, so a test may change the result freely.
-    """
     payload: dict[str, object] = {
         "case_id": "CASE-1001",
         "case_number": "01838218",
@@ -63,14 +46,6 @@ def case_payload(**overrides: object) -> dict[str, object]:
 
 
 def shipment_payload(**overrides: object) -> dict[str, object]:
-    """Build one shipment record — how the parcel travelled and whether it was insured.
-
-    The defaults are CASE-1001's shipment 342578703 as REQUIREMENTS.md quotes it. All
-    five sample shipments are uninsured, so `shipment_payload(is_insured=True)` is the
-    only way to make the insurance gate fire (FR-0.2).
-
-    Returns a fresh dictionary each call.
-    """
     payload: dict[str, object] = {
         "shipment_id": "342578703",
         "order_id": "334291211",
@@ -85,14 +60,6 @@ def shipment_payload(**overrides: object) -> dict[str, object]:
 
 
 def order_line_item(**overrides: object) -> dict[str, object]:
-    """Build one line of an order — a product, how many of it, and what each cost.
-
-    The defaults are the first item on CASE-1001's order: one Additional Collagen Ampoule
-    Duo at $38.00. Prices are plain numbers, never strings, because that is how the API
-    returns them and the reading of them is what tests are checking.
-
-    Returns a fresh dictionary each call.
-    """
     payload: dict[str, object] = {
         "product_id": "1374243085",
         "name": "Additional Collagen Ampoule Duo",
@@ -105,16 +72,6 @@ def order_line_item(**overrides: object) -> dict[str, object]:
 
 
 def order_payload(**overrides: object) -> dict[str, object]:
-    """Build one order record — the products a shipment was meant to contain.
-
-    The defaults are CASE-1001's order 334291211 as REQUIREMENTS.md quotes it: two items
-    worth $90.00 together. There is no subtotal, tax, shipping or discount field in this
-    schema, so order value is only ever the line items multiplied out and added up
-    (FR-0.5).
-
-    Returns a fresh dictionary each call, and a fresh list of line items with it, so a
-    test can append to or edit the list without affecting anyone else.
-    """
     payload: dict[str, object] = {
         "order_id": "334291211",
         "user_id": "334430",
@@ -135,33 +92,13 @@ def order_payload(**overrides: object) -> dict[str, object]:
 
 
 def without(payload: dict[str, object], *field_names: str) -> dict[str, object]:
-    """Copy a record with some fields dropped out of it altogether.
-
-    A field that is absent is not the same as a field that is present and empty, and the
-    difference matters: the pre-flight check for missing key information (FR-0.2) has to
-    cope with a case that never carried a shipment id as well as one whose shipment id is
-    blank. Passing a keyword to a builder covers the second; this covers the first.
-
-    Names that are not in the record are ignored, so a caller cannot be caught out by a
-    field the API dropped. The original is left untouched.
-    """
     return {name: value for name, value in payload.items() if name not in field_names}
 
 
-# ---------------------------------------------------------------------------
-# The five sample cases
-# ---------------------------------------------------------------------------
-
-# CASE-1001, Best Paw Nutrition. Entirely real: REQUIREMENTS.md quotes this case, its
-# shipment and its order in full, which is why they are the builders' defaults.
 CASE_1001 = case_payload()
 SHIPMENT_1001 = shipment_payload()
 ORDER_1001 = order_payload()
 
-# CASE-1002, CleanBoss — the case where it is unclear which product was damaged, because
-# the order holds two different 24oz bottles at different prices (FR-1.13). The
-# description says one product was affected without saying which of the three it was.
-# Every field below is ShipBob's.
 CASE_1002 = case_payload(
     case_id="CASE-1002",
     case_number="01838273",
@@ -215,10 +152,6 @@ ORDER_1002 = order_payload(
     created_date="2026-02-16T02:23:01.000+0000",
 )
 
-# CASE-1003, Huge Supplements — six products, and the only sample claim that can reach the
-# $100 reimbursement cap, since its two dearest items come to $109.98 (FR-1.20). Its
-# description is also the only one claiming two affected products rather than one.
-# Every field below is ShipBob's.
 CASE_1003 = case_payload(
     case_id="CASE-1003",
     case_number="01838282",
@@ -293,14 +226,6 @@ ORDER_1003 = order_payload(
     created_date="2026-02-21T02:08:41.000+0000",
 )
 
-# CASE-1004, Catalyze-X — the age-gate example. Delivered 26 December, opened 9 March:
-# 73 days, well past any reasonable limit, so the claim is turned away before the agent
-# runs and its four attachments are never looked at (FR-0.4, NFR-8). Those two dates are
-# the whole point of this case; do not adjust them.
-#
-# Its order holds exactly one line item, which makes it the only sample case where the
-# split into claim lines needs no judgement at all (FR-1a.5).
-# Every field below is ShipBob's.
 CASE_1004 = case_payload(
     case_id="CASE-1004",
     case_number="02564294",
@@ -341,14 +266,6 @@ ORDER_1004 = order_payload(
     created_date="2025-12-22T16:24:28.000+0000",
 )
 
-# CASE-1005, Loam Science — the case with no evidence at all. It has zero attachments and
-# its status is already "Waiting on Client", so the only possible outcome is a request for
-# information (FR-1.6). An empty attachment list must not be treated as an error.
-#
-# Its order carries a second line worth $0.00, a promotional insert card. Nothing in the
-# requirements says what to do with a free item, and it is the reason this case is not as
-# simple a split as its single affected product suggests.
-# Every field below is ShipBob's.
 CASE_1005 = case_payload(
     case_id="CASE-1005",
     case_number="02584387",
@@ -396,17 +313,6 @@ ORDER_1005 = order_payload(
 )
 
 
-# ---------------------------------------------------------------------------
-# Constructed cases — none of this data came from ShipBob
-# ---------------------------------------------------------------------------
-# Three pre-flight behaviours cannot be shown on the sample data at all, because every
-# sample case is an uninsured damage claim under $200. Each one below exists to make one
-# of those behaviours reachable. Every field is invented, and the case ids start at
-# CASE-9001 so nobody mistakes them for cases ShipBob supplied.
-
-# An insured shipment. Insured claims follow a different process entirely and must be
-# routed away rather than investigated (FR-0.2, gate 4). All five sample shipments are
-# uninsured, so without this the gate could never fire in a test.
 CONSTRUCTED_INSURED_CASE = case_payload(
     case_id="CASE-9001",
     description=(
@@ -435,9 +341,6 @@ CONSTRUCTED_INSURED_ORDER = order_payload(
     created_date="2026-02-27T10:00:00.000+0000",
 )
 
-# A claim that is not a damage claim. Only damaged-in-transit claims are handled here
-# (FR-0.2, gate 2), and every sample case is one, so the wrong-type path needs a case of
-# its own.
 CONSTRUCTED_LOST_IN_TRANSIT_CASE = case_payload(
     case_id="CASE-9002",
     sub_category="Claim | Lost in Transit",
@@ -463,9 +366,6 @@ CONSTRUCTED_LOST_IN_TRANSIT_ORDER = order_payload(
     created_date="2026-02-27T10:00:00.000+0000",
 )
 
-# A claim type that begins with the handled one and carries an insurance marker. It clears
-# the prefix-based claim-type gate, then the insurance gate must route it away even when
-# the shipment's is_insured field is false (FR-0.2, gates 2 and 4).
 CONSTRUCTED_INSURED_SUBCATEGORY_CASE = case_payload(
     case_id="CASE-9003",
     sub_category="Claim | Damaged in Transit - Insured",
@@ -494,11 +394,6 @@ CONSTRUCTED_INSURED_SUBCATEGORY_ORDER = order_payload(
     created_date="2026-02-27T10:00:00.000+0000",
 )
 
-# An order worth $600.00, which is above the high-value mark a rep is warned about
-# (FR-0.5). The dearest sample order is CASE-1003's at $195.94, so no sample case can
-# raise the flag. The threshold itself is a provisional judgement call and lives in the
-# policy configuration: if it is ever set above $600 this order stops being high value and
-# has to grow with it.
 CONSTRUCTED_HIGH_VALUE_CASE = case_payload(
     case_id="CASE-9004",
     description=(
@@ -543,11 +438,6 @@ CONSTRUCTED_HIGH_VALUE_ORDER = order_payload(
 )
 
 
-# A second claim from the merchant behind CASE-1001, which is the only way carry-forward can
-# be shown at all (FR-C.8). The five sample cases belong to five different merchants, so no
-# sample claim ever sees a correction or a precedent produced by another one. This shares
-# CASE-1001's `user_id`, and nothing else about it is borrowed: a different order, a different
-# parcel, and a different product, so what carries across is the merchant and not the claim.
 CONSTRUCTED_REPEAT_MERCHANT_CASE = case_payload(
     case_id="CASE-9005",
     description=(
@@ -591,10 +481,6 @@ CONSTRUCTED_REPEAT_MERCHANT_ORDER = order_payload(
     created_date="2026-03-10T08:00:00.000+0000",
 )
 
-# ---------------------------------------------------------------------------
-# Serving the records from a stand-in API
-# ---------------------------------------------------------------------------
-
 
 def mock_shipbob(
     router: respx.Router,
@@ -605,31 +491,6 @@ def mock_shipbob(
     shipment_status: int = 200,
     order_status: int = 200,
 ) -> None:
-    """Answer the three pre-flight reads with the records given, so no request leaves.
-
-    Pre-flight reads a case, then the shipment and order the case points at (FR-0.1).
-    This registers all three addresses on a stand-in API, taking the shipment and order
-    ids from the case itself — the same way the real code finds them.
-
-    Leaving out the shipment or the order, or asking for a status other than 200, serves
-    that address as an error instead, which is how a test exercises a record that is not
-    there or an API having a bad day (NFR-6). The case itself is always served, since
-    without it there is nothing to look up.
-
-    Args:
-        router: The stand-in API to register on. The `shipbob` fixture in `conftest.py`
-            supplies one already pointed at the address the settings use.
-        case: The case record, which must carry a `case_id`.
-        shipment: The shipment record, or nothing to serve that address as missing.
-        order: The order record, or nothing to serve that address as missing.
-        shipment_status: Status to answer the shipment read with. Anything but 200 is an
-            error response.
-        order_status: The same, for the order read.
-
-    Nothing is registered for an address the case does not name: a case with no shipment
-    id has no shipment address to answer on, and a request that escapes to one is meant
-    to fail loudly.
-    """
     router.get(f"/cases/{case['case_id']}").respond(200, json=case)
 
     shipment_id = case.get("shipment_id") or (shipment or {}).get("shipment_id")
@@ -654,13 +515,6 @@ def _serve(
     status_code: int,
     missing_body: dict[str, object],
 ) -> None:
-    """Register one address on the stand-in API, with a record or with an error.
-
-    A record and a status of 200 serve the record. Anything else — no record, or a status
-    the caller asked for — serves an error body instead, defaulting to 404 when the record
-    is simply absent. The error body names the resource, the way ShipBob's does, so a
-    test never sees a missing order reported as a missing case.
-    """
     if payload is not None and status_code == 200:
         router.get(path).respond(200, json=payload)
         return
