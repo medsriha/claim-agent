@@ -5,10 +5,11 @@ report plus a drafted merchant email. The agent recommends and a representative 
 
 ## Demo
 
-[▶ Watch the 1 minute 39 second app walkthrough](media/demo.mov)
+<img src="media/demo.webp" alt="Walkthrough of a claim moving from investigation to a representative's decision" width="760">
 
-See a claim move from investigation to a representative's decision, including the evidence,
-recommendation, drafted reply, and feedback workflow.
+The 1 minute 39 second walkthrough, at 4x speed. See a claim move from investigation to a
+representative's decision, including the evidence, recommendation, drafted reply, and feedback
+workflow.
 
 ## Run it
 
