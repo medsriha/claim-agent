@@ -1,4 +1,3 @@
-/** Starts the page. Finds the one element in the HTML and draws the app into it. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -8,8 +7,6 @@ import "./styles.css";
 
 const container = document.getElementById("root");
 if (container === null) {
-  // Written into index.html, so its absence means the page itself is broken. Failing
-  // loudly beats a blank screen with nothing in the console.
   throw new Error("The page is missing the element the app draws into.");
 }
 
