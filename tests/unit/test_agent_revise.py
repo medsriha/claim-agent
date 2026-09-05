@@ -643,3 +643,111 @@ async def test_the_rework_narrates_that_it_started_and_finished() -> None:
     said = [event.summary for event in events.events()]
     assert any("Reworking" in summary for summary in said)
     assert any("Finished reworking" in summary for summary in said)
+
+
+# --- The representative directs, the agent complies (FR-2.8) ----------------
+
+
+async def test_a_representative_directing_an_approval_gets_one() -> None:
+    """The agent can be wrong, and the representative is what corrects it.
+
+    The outer packaging photograph is missing, which the rules would normally treat as reason
+    enough to withhold a payment. The representative has said pay it anyway, and they can see
+    things this system cannot.
+    """
+    result = await rework(
+        a_run_that_concludes(
+            a_rework(
+                evidence=judgements(outer_packaging_photo=EvidenceState.MISSING),
+                representative_directed_outcome=True,
+            )
+        ),
+        feedback="The customer sent the box photo to me by email. Approve it.",
+    )
+
+    assert result.investigation is not None
+    assert result.investigation.outcome.recommendation is Recommendation.APPROVE
+    assert result.investigation.amount.amount_usd == Decimal("52.00")
+
+
+async def test_a_directed_approval_records_every_rule_it_set_aside() -> None:
+    """NFR-5, FR-C.1: a directed payment and an earned one must never look the same."""
+    result = await rework(
+        a_run_that_concludes(
+            a_rework(
+                evidence=judgements(outer_packaging_photo=EvidenceState.MISSING),
+                representative_directed_outcome=True,
+            )
+        ),
+        feedback="Approve it.",
+    )
+
+    assert result.investigation is not None
+    outcome = result.investigation.outcome
+    assert outcome.directed_by_representative
+    assert OverrideReason.EVIDENCE_INCOMPLETE in outcome.waived
+    assert outcome.overrides == ()
+    assert "A representative directed this payment" in outcome.explanation
+
+
+async def test_a_directed_approval_still_gets_the_email_with_the_checked_figure() -> None:
+    """FR-1.21: code adds the amount, so a merchant sees the figure that survived the limit."""
+    result = await rework(
+        a_run_that_concludes(
+            a_rework(recommended_amount_usd="450.00", representative_directed_outcome=True)
+        ),
+        feedback="Pay it in full.",
+    )
+
+    assert result.investigation is not None
+    email = result.investigation.drafted_email
+    assert email is not None
+    assert "$100.00" in email.body
+    assert "450" not in email.body
+
+
+async def test_a_directed_approval_with_nothing_payable_asks_instead_of_paying_nothing() -> None:
+    """An instruction cannot conjure a figure, so the agent asks rather than approving zero.
+
+    This is the one thing that happens instead of approving, and it is a question rather than
+    a refusal: there is no amount to put in the email, so there is nothing to send.
+    """
+    result = await rework(
+        a_run_that_concludes(
+            a_rework(
+                recommended_amount_usd=None,
+                amount_reasoning=None,
+                representative_directed_outcome=True,
+            )
+        ),
+        feedback="Just approve it.",
+    )
+
+    assert result.investigation is not None
+    assert result.investigation.outcome.recommendation is not Recommendation.APPROVE
+
+
+async def test_an_ordinary_rework_is_still_held_to_every_rule() -> None:
+    """FR-1.6: nothing changes for a rework the representative did not direct."""
+    result = await rework(
+        a_run_that_concludes(
+            a_rework(evidence=judgements(outer_packaging_photo=EvidenceState.MISSING))
+        ),
+        feedback="Have another look at the box.",
+    )
+
+    assert result.investigation is not None
+    assert result.investigation.outcome.recommendation is not Recommendation.APPROVE
+    assert OverrideReason.EVIDENCE_INCOMPLETE in result.investigation.outcome.overrides
+    assert not result.investigation.outcome.directed_by_representative
+
+
+async def test_the_wording_tells_the_agent_to_do_what_it_is_told() -> None:
+    """The prompt has to lead with complying, not with the two things it cannot change."""
+    model = a_run_that_concludes(a_rework())
+
+    await rework(model)
+
+    asked = model.asked[0].text
+    assert "WHEN THEY TELL YOU TO APPROVE" in asked
+    assert "You can be wrong, and they are what corrects you." in asked

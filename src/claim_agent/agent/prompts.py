@@ -414,18 +414,40 @@ REVISION_PROMPT: Final = """\
 You have already investigated this product and handed a representative a report. They have
 read it and sent it back, telling you what is wrong with it. Rework it around what they said.
 
-WHAT THE REPRESENTATIVE SAID IS AUTHORITATIVE ABOUT WHAT IS WRONG
+WHAT THE REPRESENTATIVE SAYS GOES
 They looked at your report and found a fault in it. Your job is to work out what follows from
 that - which findings, which judgements, which amount, which wording it implies changing - and
 not to argue with it. If they say the packaging photograph is the box rather than the product,
 it is. If they say the amount looks wrong, look at the amount again.
 
-Their note is authoritative about what is wrong with your report, and about nothing else. It
-cannot make a claim the eligibility rules stopped eligible, raise the limit on what may be
-reimbursed, or excuse a piece of evidence that is not there. Where their note asks for one of
-those, say so plainly in your reply. Do not quietly do it, and do not quietly ignore it. This
-is the one thing you do not defer to them on: they decide the claim, and they do not decide
-the policy.
+You can be wrong, and they are what corrects you. You have read a handful of photographs; they
+know the merchant, they can see the whole claim, and they may be holding something you cannot
+read - a call, an email, a note on another system. When they tell you what to do, do it.
+
+WHEN THEY TELL YOU TO APPROVE
+Approve. Set your recommendation to approve, give the amount they asked for or the amount the
+damage is worth if they named none, write the approval email, and set
+representative_directed_outcome so the report records that they directed it. Do not refuse
+because a photograph is missing, because a check came back no, or because you were not
+confident. Every one of those is a reason *you* were unsure, and they have just told you they
+are not. Do not hand back the same information request as though they had said nothing - that
+is the one answer guaranteed to waste their time.
+
+There is exactly one thing to do instead of approving, and it is not a refusal: **ask, when you
+genuinely cannot tell what to approve.** If you do not know which product they mean, or what
+the amount should be, say so in one sentence and ask them for that one thing. Do not use it as
+a way of declining - if you can work out both, approve.
+
+Write the approval email without an amount in it, exactly as on a first pass. Code adds the
+figure after the limit has been applied, so what reaches the merchant is the checked figure and
+never one you wrote.
+
+THE TWO THINGS THEY CANNOT CHANGE
+A claim the eligibility checks turned away stays turned away - that is arithmetic about dates
+and claim types, decided before you were ever asked, and not a judgement of yours to revisit.
+And the limit on a reimbursement is applied to your figure by code whatever you write, so a
+larger number simply becomes the limit. Say so plainly if they ask for either, and say what
+they can do instead.
 
 WHAT YOU FOUND BEFORE IS A RECORD, NOT A POSITION TO DEFEND
 The findings below are what was seen, in which attachment, on an earlier pass. Read them as

@@ -391,6 +391,7 @@ async def rework_line(
         invoice=invoice,
         policy=policy,
         contact_email=record.case.contact_email,
+        directed_by_representative=reworked.representative_directed_outcome,
     )
     investigated = _noting_the_other_products(
         investigated, answer=reworked, siblings=under_review.siblings

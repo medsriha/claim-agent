@@ -30,6 +30,7 @@ rather than an error page (NFR-4).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
@@ -63,6 +64,7 @@ from claim_agent.report.models import (
     ClarificationReportContent,
     InvestigationReportContent,
     Report,
+    ReportState,
 )
 from claim_agent.shipbob.client import ShipBobClient
 from claim_agent.shipbob.evidence_client import EvidenceClient
@@ -180,6 +182,7 @@ async def answer_the_representative(
             answered,
             feedback=feedback,
             at=at,
+            reports=reports,
             evidence=evidence,
             fetcher=fetcher,
             chat=chat,
@@ -291,6 +294,7 @@ async def _investigate_the_claim_again(
     *,
     feedback: str,
     at: UtcDatetime,
+    reports: ReportStore,
     evidence: EvidenceClient,
     fetcher: ImageFetcher,
     chat: BaseChatModel,
@@ -360,9 +364,18 @@ async def _investigate_the_claim_again(
     # looking at and lose the conversation with it (FR-R.13), so its findings are folded into
     # the next version instead and only genuinely new reports are written beside it.
     superseded = tuple(report for report in built if report.report_id == parked.report_id)
-    fresh = tuple(report for report in built if report.report_id != parked.report_id)
+    fresh = _placed_beside_what_is_already_there(
+        tuple(report for report in built if report.report_id != parked.report_id),
+        reports=reports,
+    )
 
-    revised = build_revised_report(parked, answered, feedback=feedback, at=at, reinvestigated=True)
+    revised = build_revised_report(
+        parked,
+        answered.model_copy(update={"reply": _also(answered.reply, _what_it_produced(fresh))}),
+        feedback=feedback,
+        at=at,
+        reinvestigated=True,
+    )
     if superseded:
         revised = revised.model_copy(
             update={
@@ -380,6 +393,83 @@ async def _investigate_the_claim_again(
         still_unsettled=bool(superseded),
     )
     return Written(revised, alongside=fresh)
+
+
+def _placed_beside_what_is_already_there(
+    built: Sequence[Report], *, reports: ReportStore
+) -> tuple[Report, ...]:
+    """Fit freshly investigated reports around the ones a claim already has.
+
+    **This is the guard against a fresh investigation destroying a decision.** Every report a
+    build produces is version 1, and writing one replaces whatever shares its name — so a claim
+    whose products were already reported on would have those reports written straight over,
+    taking their review state, their conversation and the record of what a representative
+    decided with them.
+
+    Three cases, and they are genuinely different:
+
+    - **Nothing there yet.** The report is written as it is, version 1.
+    - **Something there, still under review.** The new findings become its next version, and
+      what a representative has already done to it travels with them (FR-R.13, FR-C.1).
+    - **Something there and approved.** It is left completely alone. Approving is final and
+      terminal (FR-2.9), and investigating a claim again is not a way round that — a line whose
+      email is about to go out must not change underneath the person who released it.
+
+    A store that cannot be read withholds the report rather than writing it. Losing findings
+    that can be produced again is the lesser harm; overwriting an approval cannot be undone.
+    """
+    placed: list[Report] = []
+    for report in built:
+        try:
+            existing = reports.get(report.report_id)
+        except StorageError:
+            logger.warning("fresh_findings_withheld", report_id=report.report_id)
+            continue
+
+        if existing is None:
+            placed.append(report)
+        elif existing.state is ReportState.APPROVED:
+            logger.info("fresh_findings_withheld_from_an_approved_line", report_id=report.report_id)
+        else:
+            placed.append(
+                report.model_copy(
+                    update={
+                        "version": existing.version + 1,
+                        "decisions_taken": existing.decisions_taken,
+                        "reviews": existing.reviews,
+                        "revisions": existing.revisions,
+                    }
+                )
+            )
+    return tuple(placed)
+
+
+def _what_it_produced(fresh: Sequence[Report]) -> str:
+    """One sentence saying what investigating the claim again actually turned up.
+
+    **The agent's reply is written before the investigation runs**, so on its own it can only
+    say what is about to happen. Left at that, a representative reads "I am investigating this
+    again", waits, and then has to work out from the report whether anything came of it —
+    which is exactly what made the first version of this read as broken.
+
+    So the outcome is added afterwards, by code, because code is the only thing that knows it.
+    """
+    if not fresh:
+        return (
+            "I had the whole claim investigated again, and it still could not establish which "
+            "products this claim is for — so there is no product to price and nothing new to "
+            "approve. What it now says is unclear is in the report above."
+        )
+    named = ", ".join(sorted(report.product_name or report.report_id for report in fresh))
+    return (
+        f"I had the whole claim investigated again. It produced a report for {named}, below, "
+        "each with its own recommendation for you to decide on."
+    )
+
+
+def _also(reply: str, added: str) -> str:
+    """Put a sentence code knows after one the agent wrote, without running them together."""
+    return f"{reply.rstrip()} {added}" if reply.strip() else added
 
 
 def _only_a_reply(parked: Report, said: str, *, feedback: str, at: UtcDatetime) -> Written:

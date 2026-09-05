@@ -53,10 +53,9 @@ export const PAGE_WORDS = {
   /**
    * Shown under a round where the agent had the whole claim investigated again (FR-1a.4).
    *
-   * The service records that as a flag on the round, not as a sentence. The agent's own reply
-   * usually says it too, in its own words, but the flag is the fact — and a representative
-   * needs to know that new reports exist further down the claim.
+   * The service records that as a flag on the round, not as a sentence. What the investigation
+   * actually produced is in the agent's own reply, put there by the service after the run — so
+   * this says only that it happened, and never promises reports that may not exist.
    */
-  investigatedAgain:
-    "The claim was investigated again, so this claim now has a report for each damaged product.",
+  investigatedAgain: "The whole claim was investigated again off the back of this.",
 } as const;

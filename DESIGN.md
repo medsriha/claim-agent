@@ -2453,6 +2453,35 @@ correction. Nothing it can reach is able to send an email or move money.
   commentary. The investigation streams what it is doing; this does not, because it was not worth
   a second streaming endpoint for a step that takes a fraction of the time. It is written up under
   [Would improve](#would-improve).
+- **The representative tells the agent what to do, and it does it.** When they say approve, the
+  agent approves: it sets the recommendation, gives the amount, writes the email, and the rules
+  that would normally withhold a payment are set aside. **This is a deliberate departure from
+  FR-R.8**, which says this is the one place the agent does not defer, and it was taken as a
+  product decision after the first version was tried.
+
+  The reason is the one the whole system rests on: *the agent can be wrong, and the
+  representative is what corrects it.* Every rule that withholds a payment encodes the agent's
+  own uncertainty — it will not pay while a photograph is missing because **it** cannot tell
+  what the photograph would have shown. A representative can. They know the merchant, they can
+  see the whole claim, and they may be holding evidence this system cannot read: a phone call,
+  an email, a note somewhere else. An agent that refuses them is insisting it is right about
+  the thing it is worst at.
+
+  What is set aside is **recorded, never hidden**. The report says a representative directed
+  the payment and names every rule that was waived, so a payment released this way and one the
+  evidence earned can never be mistaken for each other.
+
+  Three things survive untouched, because none of them is the agent's uncertainty:
+  - **The reimbursement limit.** It is applied where a figure is read, before any of this, so a
+    larger number simply becomes the limit (FR-1.20).
+  - **No figure the model wrote reaches a merchant.** Code adds the checked amount to the email
+    afterwards, exactly as on a first pass (FR-1.21).
+  - **A claim the eligibility checks turned away stays turned away.** That is arithmetic about
+    dates and claim types, decided before the agent was ever asked.
+
+  And there is exactly one thing the agent does instead of approving, which is not a refusal:
+  **it asks**, when it genuinely cannot tell which product is meant or what the amount should
+  be. There would be no figure to put in the email, so there is nothing to send.
 - **Every message is answered; what it may change is what differs.** The first version of this
   refused a message outright unless it was about an investigated product, and answered with a
   sentence of the system's own. That was wrong in the one case it most mattered: a report whose
@@ -2755,6 +2784,16 @@ finds in production.
 - **The agent decides when a claim is investigated again.** It sets a flag and code acts on it.
   Nothing limits how often that can happen, so a conversation that keeps circling could keep
   paying for whole investigations, and nothing measures it.
+- **A representative can direct a payment the evidence does not support, and nothing checks
+  them.** That is the point of it — they are the correction for an agent that can be wrong —
+  but the same door is open to a mistake, a misread message, or anybody at all, because there
+  is no sign-in. The record says a representative directed it and names what was waived, and
+  that record is the only control there is. Anyone who can reach this service can release a
+  payment up to the limit with one sentence.
+- **Whether the representative actually asked for an approval is the model's reading of their
+  words.** "Approve it" is clear; "this looks right to me" is not. The flag is set by the
+  agent, so a message it reads too generously becomes a directed payment nobody quite asked
+  for. Nothing outside the model checks that reading.
 - **An agent shown its earlier answer may argue for it.** Reworking a report puts the report's own
   findings in front of the same agent that produced them, which is exactly the setup that makes a
   model defend what it already said. Two things push back — the findings are worded as

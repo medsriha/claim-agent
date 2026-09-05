@@ -364,6 +364,7 @@ def settle_conclusion(
     invoice: Invoice | None,
     policy: Policy,
     contact_email: str | None,
+    directed_by_representative: bool = False,
 ) -> LineInvestigation:
     """Turn what one run came back with into the write-up a representative reads.
 
@@ -394,6 +395,11 @@ def settle_conclusion(
         invoice: ShipBob's priced record of the shipment, or `None` if it could not be had.
         policy: The thresholds this claim is judged by, the reimbursement cap included.
         contact_email: Where a merchant email would go. `None` when the claim names nobody.
+        directed_by_representative: True when a representative told the agent what to do and
+            it is carrying that out. The rules that would withhold the payment are then set
+            aside and recorded, because the agent can be wrong and the representative is what
+            corrects it. **Always false on a first pass**, where nobody has said anything yet,
+            so this changes nothing about how a claim is first investigated (FR-1.14).
 
     Returns:
         The finished write-up: the evidence, the judgements, the recommendation that
@@ -420,6 +426,7 @@ def settle_conclusion(
         amount=amount,
         policy=policy,
         requested_details=requested_details,
+        directed_by_representative=directed_by_representative,
     )
 
     if decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION:

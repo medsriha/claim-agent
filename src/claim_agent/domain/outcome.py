@@ -129,6 +129,16 @@ class OutcomeDecision(BaseModel):
     The two being equal is the ordinary case, and it is worth being able to tell
     that apart from "the rules had nothing to say" — hence keeping both rather than
     only recording a difference.
+
+    `directed_by_representative` means a representative told the agent what to do and it
+    did it. The rules that would have withheld the payment are then in `waived` rather
+    than in `overrides`: they were evaluated, they applied, and a person set them aside.
+    Keeping them is the whole point — an approval a representative directed and one the
+    evidence earned must never look the same in the record (NFR-5, FR-C.1).
+
+    **The reimbursement cap is not among the things that can be waived**, because it is
+    not applied here at all. A figure is capped where it is read, in
+    `claim_agent.domain.reimbursement`, before this function ever sees it (FR-1.20).
     """
 
     model_config = ConfigDict(frozen=True, extra="ignore")
@@ -137,6 +147,8 @@ class OutcomeDecision(BaseModel):
     recommended_by_agent: Recommendation
     overrides: tuple[OverrideReason, ...] = ()
     explanation: str
+    directed_by_representative: bool = False
+    waived: tuple[OverrideReason, ...] = ()
 
     @property
     def was_overridden(self) -> bool:
@@ -190,6 +202,7 @@ def decide_outcome(
     budget_exhausted: bool = False,
     requested_details: Sequence[str] = (),
     confidence: float = 1.0,
+    directed_by_representative: bool = False,
 ) -> OutcomeDecision:
     """Settle what is recommended for one claim line, after the rules have had their say.
 
@@ -249,6 +262,25 @@ def decide_outcome(
             incomplete and goes to the representative instead.
         confidence: The agent's confidence in its overall next action. Approval must
             clear the same threshold as each supporting assessment.
+        directed_by_representative: True when a representative told the agent to approve
+            this line and it is carrying out that instruction rather than recommending
+            one of its own. **The rules that would have withheld the payment are then
+            set aside**, and recorded in `waived` so the report can say what a person
+            overruled. Never true on a first pass: nobody has said anything yet.
+
+            This is deliberate and it is a departure from FR-R.8, taken as a product
+            decision. **The reason is that the agent can be wrong, and the representative
+            is what corrects it.** Every rule below encodes the agent's own uncertainty —
+            it will not pay while a photograph is missing because *it* cannot tell what
+            the photograph would have shown. A representative can: they know the merchant,
+            they can see the claim, and they may have the evidence somewhere this system
+            cannot read. Refusing them is the agent insisting it is right about the very
+            thing it is worst at, and it leaves a person with no way to act on their own
+            judgement except to argue with a machine. What survives untouched is the cap, because it is
+            applied where a figure is read rather than here, and the rule that no figure
+            the model wrote reaches a merchant (FR-1.20, FR-1.21). A directed approval
+            with nothing payable is still refused, because there would be no figure to
+            put in the email — the agent asks what to pay instead.
 
     Returns:
         The recommendation that stands, what the investigation had said, every rule that
@@ -287,16 +319,21 @@ def decide_outcome(
         )
 
     if recommended_by_agent is Recommendation.APPROVE:
-        withheld.extend(
-            _reasons_to_withhold_approval(
-                evidence=evidence,
-                assessments=assessments,
-                line=line,
-                amount=amount,
-                policy=policy,
-                confidence=confidence,
-            )
+        against_approval = _reasons_to_withhold_approval(
+            evidence=evidence,
+            assessments=assessments,
+            line=line,
+            amount=amount,
+            policy=policy,
+            confidence=confidence,
         )
+        if directed_by_representative and amount is not None and amount.is_payable:
+            # A representative told the agent to approve, and there is a figure to
+            # approve. Every rule that would have withheld it is set aside and written
+            # down instead, so the record shows exactly what a person overruled rather
+            # than an approval that looks like one the evidence earned.
+            return _a_representative_directed_it(against_approval, withheld=withheld)
+        withheld.extend(against_approval)
 
     if not withheld:
         return OutcomeDecision(
@@ -321,6 +358,37 @@ def decide_outcome(
         recommended_by_agent=recommended_by_agent,
         overrides=overrides,
         explanation=_explanation(recommended_by_agent, recommendation, because),
+    )
+
+
+def _a_representative_directed_it(
+    against_approval: Sequence[tuple[OverrideReason, str]],
+    *,
+    withheld: Sequence[tuple[OverrideReason, str]],
+) -> OutcomeDecision:
+    """Approve because a representative said to, and record what that set aside.
+
+    The explanation names every rule a person overruled, in the rules' own words, because a
+    payment released this way and one the evidence earned must be told apart at a glance by
+    whoever reads the report afterwards (NFR-3, NFR-5).
+
+    An approval nothing would have withheld is still marked as directed. That the
+    representative asked for it is a fact about how the decision was reached, and it is worth
+    recording whether or not it made any difference.
+    """
+    stood_against = (*withheld, *against_approval)
+    set_aside = tuple(dict.fromkeys(reason for reason, _ in stood_against))
+    return OutcomeDecision(
+        recommendation=Recommendation.APPROVE,
+        recommended_by_agent=Recommendation.APPROVE,
+        directed_by_representative=True,
+        waived=set_aside,
+        explanation=(
+            "A representative directed this payment, setting aside that "
+            f"{_written_list([clause for _, clause in stood_against])}."
+            if stood_against
+            else "A representative directed this payment, and no rule stood against it."
+        ),
     )
 
 

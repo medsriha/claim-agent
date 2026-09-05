@@ -482,7 +482,23 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
     parsing and the rules cannot drift apart between the two.
   - **Be aware:** the per-claim cap is *not* reapplied across siblings on a rework. That check
     needs every product's figure at once, and a rework answers for one product.
-- [x] FR-R.8 — the rules do not give way, and the agent says so rather than complying quietly.
+- [ ] FR-R.8 — **knowingly not met, by a product decision.** The requirement says this is the
+  one place the agent does not defer to a representative. It now does: when they tell it to
+  approve, it approves, and the rules that would withhold the payment are set aside and
+  recorded. The reason is that the agent can be wrong and the representative is what corrects
+  it — every one of those rules encodes the agent's own uncertainty about evidence a person may
+  be able to settle from outside this system. Reversing this means changing the requirement, not
+  the code. Left unticked so the gap between the two is visible.
+  - **Conclusion:** what a representative overrules is written on the report — `waived` names
+    every rule and `directed_by_representative` says who released it — so a directed payment and
+    an earned one can never be mistaken for each other.
+  - **Be aware:** three things do not give way, because none is the agent's uncertainty. The
+    reimbursement limit is applied where a figure is read, before the rules run. No figure the
+    model wrote reaches a merchant. And a claim the quick checks turned away stays turned away.
+  - **Be aware:** the only thing the agent does instead of approving is *ask*, when it cannot
+    tell which product or what amount is meant. That is not a refusal, and the prompt says so.
+- [x] FR-R.8 (the half that stands) — where a rule genuinely cannot give way, the agent says so
+  plainly rather than complying quietly or ignoring it.
   - **Conclusion:** for a claim the quick checks stopped, the *agent* says so, with the actual
     reason in front of it — "filed 73 days after delivery and the limit is 60" rather than a
     canned refusal. That is what the requirement asks for. The only thing it may change about

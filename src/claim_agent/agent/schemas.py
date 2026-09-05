@@ -437,6 +437,12 @@ class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
     What it says back to the representative comes from the shared reply above, so a product
     report and a claim-level one answer them in the same shape.
 
+    `representative_directed_outcome` says the representative told you what to do and you are
+    carrying that out rather than recommending something of your own. It is what lets a person
+    correct the agent: the rules that withhold a payment encode the agent's own uncertainty,
+    and a representative who can see what the agent cannot may set them aside. Code then
+    approves the line and records every rule that was waived (FR-2.8, FR-C.1).
+
     `concerns_shared_evidence` says the feedback was about the invoice, the customer
     confirmation or the photograph of the outer box — the three that describe the parcel and
     are settled once for the whole claim (FR-1a.3). Correcting one of those ought to correct
@@ -445,6 +451,16 @@ class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
 
     model_config = ConfigDict(extra="forbid")
 
+    representative_directed_outcome: bool = Field(
+        default=False,
+        description=(
+            "True when the representative told you what to do about this claim and you are "
+            "carrying out that instruction rather than recommending something of your own — "
+            "'approve it', 'pay the two bottles', 'refund it'. Set it only alongside the "
+            "recommendation and amount they asked for. If you cannot work out the amount or "
+            "which product they mean, leave it false and ask them instead."
+        ),
+    )
     concerns_shared_evidence: bool = Field(
         default=False,
         description=(
