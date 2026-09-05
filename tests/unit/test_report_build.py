@@ -11,7 +11,7 @@ from tests.unit.test_agent_investigate import a_conclusion
 from tests.unit.test_report_render import a_context, a_line, a_stopped_claim
 
 from claim_agent.agent.budget import BudgetSnapshot
-from claim_agent.agent.revise import ClaimFindingsRevision
+from claim_agent.agent.revise import ClaimFindingsRevision, ClaimRevision
 from claim_agent.agent.run import ClaimInvestigation
 from claim_agent.agent.schemas import ClaimSplit
 from claim_agent.agent.triage import ClaimTriage
@@ -33,6 +33,7 @@ from claim_agent.report.build import (
     build_revised_report,
     build_screening_report,
 )
+from claim_agent.report.conversation import _findings_became_the_next_version
 from claim_agent.report.models import (
     InvestigationReportContent,
     Report,
@@ -527,3 +528,31 @@ def test_a_claim_with_no_shipment_record_names_no_carrier() -> None:
 
     assert report is not None
     assert report.carrier is None
+
+
+def test_a_stopped_claim_never_has_investigated_findings_folded_into_it() -> None:
+    """FR-0.4, NFR-4: a report that cannot be read back is worse than one that never changed.
+
+    Copying fields onto a report does not re-run the checks that it is internally consistent —
+    those run when a report is built, and again when one is read out of the store. So a
+    stopped claim given findings about products would be stored happily and fail the moment a
+    representative asked for it back. It is unreachable today and refused anyway.
+    """
+    stopped = build_screening_report(a_stopped_screening(), at=A_MOMENT)
+    assert stopped is not None
+    investigated = build_investigation_report(
+        a_passing_screening(),
+        ClaimInvestigation(
+            case_id=CASE.case_id, triage=a_triage((COLLAGEN, "COLLAGEN1")), findings=a_line()
+        ),
+        at=A_MOMENT,
+    )
+
+    after = _findings_became_the_next_version(
+        stopped, investigated, ClaimRevision(reply="x"), feedback="Look again.", at=A_MOMENT
+    )
+
+    assert after.content.kind == "screening"
+    assert after.product_names == ()
+    # Written down and read back, which is where the inconsistency would have surfaced.
+    assert Report.model_validate(after.model_dump()) == after

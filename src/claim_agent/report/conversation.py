@@ -511,10 +511,22 @@ def _findings_became_the_next_version(
 
     So the version, the conversation and the review history come from the report that was sent
     back, and everything the investigation established comes from the build. The two halves are
-    copied together, because the report refuses to hold a recommendation that disagrees with
-    its own content.
+    copied together, because a report whose recommendation disagreed with its own content could
+    be written down and then never read back.
+
+    **That last sentence is the whole reason for the guard below.** Copying fields onto a report
+    does not re-run the checks that a report is internally consistent — those run when one is
+    built, and when one is read out of the store. So an impossible combination written here
+    would be stored successfully and blow up later, when a representative asked for the report
+    back. A claim the quick checks stopped is the one combination the checks forbid: it has no
+    products, and findings about products cannot be folded into it. It is unreachable today,
+    because a stopped claim is never investigated, and it is refused rather than trusted to
+    stay that way.
     """
     revised = build_revised_report(parked, revision, feedback=feedback, at=at, reinvestigated=True)
+    if isinstance(parked.content, ScreeningReportContent):
+        logger.error("fresh_findings_withheld_from_a_stopped_claim", report_id=parked.report_id)
+        return revised
     return revised.model_copy(
         update={
             "product_names": built.product_names,
