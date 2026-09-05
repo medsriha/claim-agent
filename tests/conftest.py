@@ -1,5 +1,3 @@
-"""Shared fixtures."""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator

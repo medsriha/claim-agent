@@ -1,13 +1,3 @@
-"""Building decision records for tests.
-
-Every field has a default that makes a plain, agreed-with, investigated decision, so a test names
-only the thing it is about. A test that wants a representative to have changed something says so
-and says nothing else.
-
-**All of it is invented**, like everything else under `tests/fixtures`. Nothing in the running
-system writes a decision yet.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
