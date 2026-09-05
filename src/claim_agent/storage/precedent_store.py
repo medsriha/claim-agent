@@ -1,30 +1,3 @@
-"""Where past claims are kept, and how the ones like a new claim are found.
-
-Every damaged product whose claim has been **closed** is written down here, and when a
-new one arrives the most similar past ones are read back out (FR-S.1, FR-S.5). It is
-the only part of the system that can notice two claims disagreeing.
-
-Nothing still in review is kept. A claim nobody has decided has no outcome, and storing
-this system's own untested suggestion would make the store circular.
-
-**Reading happens in two stages, and the split is the whole design.** The database
-searches text on its own, so the first stage asks it for records sharing any
-meaningful word with the claim in hand. That turns a store of thousands into a
-handful without reading them all. The second stage scores that handful carefully,
-in Python, using the rules in `claim_agent.domain.precedent` — which are pure, so
-the same claim against the same store always comes back with the same records in
-the same order (NFR-1).
-
-**No model is involved.** Comparing meaning with one would need another paid
-service, another credential and a network call, and would answer slightly
-differently on two runs. Word overlap and the shape of the evidence run offline,
-cost nothing, and are the same every time. What that costs in accuracy is written
-up in DESIGN.md rather than hidden.
-
-Nothing here judges a claim. It stores what an investigation concluded and hands
-back what it stored.
-"""
-
 from __future__ import annotations
 
 import sqlite3

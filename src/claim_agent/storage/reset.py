@@ -1,9 +1,3 @@
-"""Emptying every store at once, so a demonstration can start from a system that remembers nothing.
-
-Nothing in a claim's path calls this. The admin panel does, and so does anyone clearing a machine
-by hand.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path

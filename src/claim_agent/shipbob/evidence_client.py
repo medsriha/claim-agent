@@ -1,31 +1,3 @@
-"""Fetching the evidence an investigation runs on: a case's images, and a priced invoice.
-
-A damaged-in-transit claim is argued from two things ShipBob hands over on request. The
-first is the case's **attachments** — the photographs and screenshots the merchant
-uploaded, which are the only record of what the damage looked like (FR-1.4). The second
-is an **invoice**: ShipBob's priced list of what the shipment contained, generated when
-asked for rather than stored, and the only figures a recommended reimbursement may be
-worked out from (FR-1.18).
-
-**Why this is not part of the client that reads a case, a shipment and an order.** That
-client promises three reads and nothing else, because looking at photographs is the
-expensive part of investigating a claim, and a claim turned away by the cheap pre-flight
-screen must never pay for it (NFR-8). Putting these two calls beside those three would
-make that promise untrue, and would let the cheap screen become expensive by accident. So
-they live apart: only an investigation that has decided a claim is worth looking into
-holds one of these.
-
-**Reading only.** There is deliberately no way from here to email a merchant or submit a
-reimbursement. Those two are irreversible, they happen only after a rep has approved them,
-and they live somewhere an investigation cannot reach at all (FR-1.2).
-
-Every way these calls can go wrong is a handled outcome with a plain message rather than a
-crash (NFR-6), and the failures are told apart on purpose. "ShipBob will not price this
-shipment" is a settled answer, which sends the claim to a human with a reason to give
-them. "ShipBob could not be reached" is a fault that may well pass. A caller that could
-not tell those two apart would report one as the other.
-"""
-
 from __future__ import annotations
 
 import json

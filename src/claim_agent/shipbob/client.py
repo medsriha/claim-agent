@@ -1,23 +1,3 @@
-"""Reading a case, its shipment and its order from the ShipBob API.
-
-A claim begins as a support case a merchant opened. That case names an order and a
-shipment, and those three records together are everything the pre-flight screen needs
-in order to decide whether the claim can be processed at all (FR-0.1).
-
-**Three reads and nothing else.** There is deliberately no way from here to list a
-case's attachments, generate an invoice, email a merchant, or pay a reimbursement.
-Attachments are photographs, and looking at photographs is the expensive part of
-investigating a claim, so they are only ever fetched once a claim has been found worth
-investigating — a claim turned away at the pre-flight screen must cost a few cheap
-reads and nothing more (FR-0.1, NFR-8). Emailing and paying happen only after a human
-has approved them, and live somewhere this code cannot reach.
-
-Reads fail in ordinary ways — ShipBob is slow, a network drops, a record is not there —
-and every one of those is a handled outcome with a clear message rather than a crash
-(NFR-6). A failure that might be temporary is tried again a few times before it is
-given up on.
-"""
-
 from __future__ import annotations
 
 import json
