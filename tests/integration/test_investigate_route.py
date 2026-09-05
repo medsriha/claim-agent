@@ -112,6 +112,28 @@ def an_unsettled_split() -> tuple[object, StructuredModel]:
     )
 
 
+def a_merchant_resolvable_split() -> tuple[object, StructuredModel]:
+    """An unsettled split whose missing fact can be supplied by the merchant."""
+    detail = "a clear photograph showing the damaged product's front label"
+    return (
+        scripted(AIMessage(content="I have read the claim.")),
+        StructuredModel(
+            scripted(
+                ClaimSplit(
+                    is_ambiguous=True,
+                    ambiguity="The photograph does not distinguish two similar products.",
+                    requested_details=(detail,),
+                    email_subject="More information needed for your claim",
+                    email_body=f"Please send {detail}.",
+                    reasoning="The product label is not legible.",
+                    confidence=0.4,
+                )
+            ),
+            max_attempts=1,
+        ),
+    )
+
+
 A_REMARK_IN_SEVERAL_LINES = (
     "Here is what I am weighing up:\n"
     "\n"
@@ -422,6 +444,32 @@ async def test_a_split_nobody_could_settle_keeps_a_clarification_report(
     (kept,) = reports.for_case("CASE-1001").reports
     assert kept.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert kept.drafted_email is None
+
+
+async def test_a_merchant_resolvable_split_returns_a_request_and_email(
+    settings: Settings, shipbob: respx.Router
+) -> None:
+    """FR-1a.4: concrete product-identification questions go to the merchant."""
+    shipbob.get("/cases/CASE-1001").respond(200, json=CASE_1001)
+    shipbob.get("/shipments/342578703").respond(200, json=SHIPMENT_1001)
+    shipbob.get("/orders/334291211").respond(200, json=ORDER_1001)
+    shipbob.get("/cases/CASE-1001/attachments").respond(200, json=ATTACHMENTS_1001)
+    reports = ReportStore(settings.database_path)
+    app = create_app(settings, report_store=reports)
+    app.dependency_overrides[get_models] = lambda: a_merchant_resolvable_split
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        response = await http.post("/cases/CASE-1001/investigate")
+
+    result = json.loads(dict(read_stream(response.text))["result"])
+    (report,) = result["reports"]
+    detail = "a clear photograph showing the damaged product's front label"
+    assert report["recommendation"] == "request_info"
+    assert report["content"]["requested_details"] == [detail]
+    assert detail in report["drafted_email"]["body"]
+    (kept,) = reports.for_case("CASE-1001").reports
+    assert kept.recommendation is Recommendation.REQUEST_INFO
+    assert kept.drafted_email is not None
 
 
 def a_settled_investigation() -> tuple[object, StructuredModel]:

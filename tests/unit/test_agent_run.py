@@ -95,8 +95,8 @@ def a_split(*products: tuple[str, str]) -> ClaimSplit:
 def a_conclusion(product: str, sku: str) -> InvestigationConclusion:
     """A well-evidenced conclusion recommending payment for one product.
 
-    Its email leaves the marker where a figure belongs and writes none of its own,
-    which is the only way the model may mention money at all (FR-1.21).
+    Its email writes no amount of its own; code adds the capped figure after the model
+    has answered (FR-1.21).
     """
     return InvestigationConclusion(
         evidence=tuple(
@@ -122,7 +122,7 @@ def a_conclusion(product: str, sku: str) -> InvestigationConclusion:
         reasoning="The photographs show it broken and it is on the invoice.",
         confidence=0.95,
         email_subject="About your damaged order",
-        email_body="We are sorry. We will refund {{amount}} for the damage.",
+        email_body="We are sorry. We approved your damage claim.",
     )
 
 
@@ -198,8 +198,8 @@ async def test_fr_1_3_a_claim_with_two_products_has_a_budget_for_each() -> None:
 async def test_fr_1a_4_an_unsettled_split_investigates_nothing() -> None:
     """FR-1a.4: no product may be investigated while it is unclear which are claimed.
 
-    A wrong split is silent and expensive, so the claim goes to a representative with
-    what is unclear stated, and no per-product run happens at all.
+    A wrong split is silent and expensive, so the claim states what is unclear and no
+    per-product run happens at all.
     """
     claim = await run_claim(
         split=ClaimSplit(

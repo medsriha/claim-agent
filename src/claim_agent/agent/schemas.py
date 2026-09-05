@@ -16,11 +16,11 @@ held exactly and cents drift. Text goes into an exact decimal untouched. Anythin
 not money — a symbol, a third decimal place, a word — is refused rather than interpreted,
 and the claim goes to a person instead.
 
-**No figure the model writes ever reaches a merchant.** The email fields carry `{{amount}}`
-where a figure belongs, and code substitutes the amount *after* the cap has been applied —
-so what is sent is the figure that survived the cap and not the one that was proposed. Any
-other money-shaped text in the wording is rejected. This is the guarantee that did not
-change when FR-1.21 was reversed, and it is the one worth defending.
+**No figure the model writes ever reaches a merchant.** The model drafts approval wording
+without an amount. Code adds the amount *after* the cap has been applied, so what is sent is
+the figure that survived the cap and not the one that was proposed. Any money-shaped text in
+the model's wording is rejected. This is the guarantee that did not change when FR-1.21 was
+reversed, and it is the one worth defending.
 
 These shapes are deliberately separate from the ones in `claim_agent.domain`, even
 where they look similar. What the model is permitted to assert is a narrower thing
@@ -37,12 +37,11 @@ from claim_agent.domain.evidence import EvidenceKind, EvidenceState
 from claim_agent.domain.outcome import Recommendation
 
 AMOUNT_PLACEHOLDER = "{{amount}}"
-"""Where the model writes a figure it is not allowed to know.
+"""The marker used by approval drafts produced under the previous prompt.
 
-The email wording is the model's, every number in it is ours. The model puts this
-marker where the amount belongs and code replaces it with the figure the
-arithmetic produced (FR-1.21). A drafted email that still contains the marker
-after substitution, or that contains money written any other way, is refused.
+New prompts tell the model to omit the amount; code appends the capped figure after
+the answer. Keeping this marker lets those older drafts be finished without exposing
+it to a representative (FR-1.21).
 """
 
 
@@ -114,11 +113,12 @@ class ClaimSplit(BaseModel):
     """Which products a claim is for — the conclusion of the triage pass (FR-1a.1).
 
     `is_ambiguous` is the important field. Set it when it cannot be established
-    which products are meant, and say what is unclear in `ambiguity`: a rep told
-    "the photos show a damaged 24oz bottle, but the order has two different 24oz
-    bottles at different prices" settles that in seconds, whereas a wrong split is
-    silent and expensive (FR-1a.4). Never resolve an ambiguity by choosing the
-    likelier candidate.
+    which products are meant, and say what is unclear in `ambiguity`. Never resolve
+    an ambiguity by choosing the likelier candidate.
+
+    When the merchant can settle the ambiguity, `requested_details` names exactly
+    what they must provide and the two email fields contain the wording to send them.
+    An ambiguity only a representative can resolve leaves all three empty (FR-1a.4).
 
     An ambiguous split may still list the products it was choosing between. It must
     not present them as settled.
@@ -135,9 +135,34 @@ class ClaimSplit(BaseModel):
     )
     ambiguity: str | None = Field(
         default=None,
-        description="What exactly is unclear, and what would resolve it. Null if nothing is.",
+        description=(
+            "A concise one- or two-sentence summary of what is unclear. Do not include "
+            "headings, a numbered analysis, or repeat the requested_details list. Null if "
+            "nothing is unclear."
+        ),
     )
-    reasoning: str = Field(description="How you reached this split.")
+    requested_details: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Every specific detail the merchant can provide to settle an ambiguous split. "
+            "Empty when the split is settled or only a representative can resolve it."
+        ),
+    )
+    email_subject: str | None = Field(
+        default=None,
+        description=(
+            "Subject of the merchant email requesting those details. Null when "
+            "requested_details is empty."
+        ),
+    )
+    email_body: str | None = Field(
+        default=None,
+        description=(
+            "Exact merchant email requesting every requested detail. Null when "
+            "requested_details is empty."
+        ),
+    )
+    reasoning: str = Field(description="One or two short sentences explaining the split.")
     confidence: Confidence = Field(description="How sure you are of the split, from 0 to 1.")
 
 
@@ -236,8 +261,8 @@ class InvestigationConclusion(BaseModel):
     `email_subject` and `email_body` are the exact wording that would be sent to the
     merchant if a rep approved an approval or information request (FR-2.7), and the
     email must ask for each listed detail. Both email fields are null when representative
-    clarification is needed. Write `{{amount}}` where a figure belongs and nowhere else —
-    the figure is substituted afterwards, and any other money-shaped text is rejected.
+    clarification is needed. Approval wording carries no amount — the capped figure is
+    added afterwards — and any money-shaped text the model writes is rejected.
     The words "draft", "unsent" and the like must not appear: that the email is a draft
     is recorded beside it, not inside it, so no such marker can ever reach a merchant
     (FR-1.17).
@@ -268,10 +293,18 @@ class InvestigationConclusion(BaseModel):
         description="True if you cannot tell which product on the order was damaged.",
     )
     ambiguity: str | None = Field(
-        default=None, description="What is unclear and what would resolve it, or null."
+        default=None,
+        description=(
+            "A concise one- or two-sentence summary of what is unclear, without headings, "
+            "numbered analysis, or repeated merchant requests. Null if nothing is unclear."
+        ),
     )
     recommendation: Recommendation = Field(description="What you recommend doing about this line.")
-    reasoning: str = Field(description="Why you recommend it.")
+    reasoning: str = Field(
+        description=(
+            "One or two short sentences giving the decision basis without retelling every finding."
+        )
+    )
     recommended_amount_usd: str | None = Field(
         default=None,
         description=(
@@ -285,13 +318,16 @@ class InvestigationConclusion(BaseModel):
     amount_reasoning: str | None = Field(
         default=None,
         description=(
-            "Why that figure and not another. This is the whole justification for the "
-            "amount, so a representative can disagree with it. Null unless you name one."
+            "One or two short sentences explaining why that figure and not another, so a "
+            "representative can disagree with it. Null unless you name one."
         ),
     )
     concerns: tuple[str, ...] = Field(
         default=(),
-        description="Anything weak, conflicting or uncertain a reviewer should know.",
+        description=(
+            "Short, separate items for anything weak, conflicting or uncertain a reviewer "
+            "should know. Do not repeat requested_details or write a headed mini-report."
+        ),
     )
     confidence: Confidence = Field(
         description="How sure you are of this recommendation overall, from 0 to 1."
@@ -317,9 +353,10 @@ class InvestigationConclusion(BaseModel):
     email_body: str | None = Field(
         default=None,
         description=(
-            "The email to the merchant, in the exact wording that would be sent. "
+            "The merchant-facing email wording. "
             "For request_info, name every specific detail the merchant needs to provide. "
-            "For approve, write {{amount}} where the approved amount belongs; never write "
-            "a figure yourself. Null when the next action is request_rep_clarification."
+            "For approve, communicate the approval but do not write an amount or placeholder; "
+            "code adds the capped figure to produce the final wording. Null when the next action is "
+            "request_rep_clarification."
         ),
     )

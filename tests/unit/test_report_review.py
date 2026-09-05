@@ -9,6 +9,7 @@ import pytest
 from tests.unit.test_report_models import a_report, a_screening_report
 
 from claim_agent.domain.decision import DecisionStage, RepAction
+from claim_agent.domain.models import DraftedEmail
 from claim_agent.domain.outcome import Recommendation
 from claim_agent.errors import ConflictError
 from claim_agent.policy import Policy
@@ -117,7 +118,7 @@ def test_rewording_the_email_is_a_flag_on_the_approval_rather_than_an_action_of_
     assert outcome.decision.action is RepAction.APPROVED
     assert outcome.decision.email_edited
     assert outcome.report.drafted_email is not None
-    assert outcome.report.drafted_email.body == A_REWORDING.body
+    assert outcome.report.drafted_email.body == f"{A_REWORDING.body}\n\nApproved amount: $52.00"
     assert outcome.report.reviews[-1].edited_email == A_REWORDING
 
 
@@ -280,9 +281,31 @@ def test_a_rewording_replaces_the_wording_and_never_the_recipient() -> None:
     outcome = approve(a_report(), edited_email=A_REWORDING, policy=POLICY, at=A_MOMENT)
 
     assert outcome.report.drafted_email is not None
-    assert outcome.report.drafted_email.body == A_REWORDING.body
+    assert outcome.report.drafted_email.body == f"{A_REWORDING.body}\n\nApproved amount: $52.00"
     assert outcome.report.drafted_email.subject == A_REWORDING.subject
     assert outcome.report.drafted_email.to == "merchant@example.test"
+
+
+def test_changing_the_approved_amount_updates_the_email_amount() -> None:
+    """The merchant email must communicate the amount the representative actually approves."""
+    report = a_report(
+        drafted_email=DraftedEmail(
+            to="merchant@example.test",
+            subject="About your claim",
+            body="Your claim is approved.\n\nApproved amount: $52.00",
+        )
+    )
+
+    outcome = approve(
+        report,
+        decided_amount_usd=Decimal("31.20"),
+        policy=POLICY,
+        at=A_MOMENT,
+    )
+
+    assert outcome.report.drafted_email is not None
+    assert "$31.20" in outcome.report.drafted_email.body
+    assert "$52.00" not in outcome.report.drafted_email.body
 
 
 def test_a_report_with_nothing_to_send_stays_with_nothing_to_send() -> None:

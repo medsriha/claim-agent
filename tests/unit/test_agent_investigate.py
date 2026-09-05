@@ -200,9 +200,8 @@ def a_conclusion(**overrides: object) -> InvestigationConclusion:
     the damage rather than a share of the price, so a test that assumed one could be
     derived from the other would be asserting a rule that no longer exists.
 
-    Its email still leaves the marker where a figure belongs and writes none of its own —
-    the one rule about money that survived the reversal, because the figure a merchant
-    reads must be the one that got past the cap.
+    Its email writes no amount of its own. Code adds the figure that got past the cap after
+    the model has answered.
     """
     fields: dict[str, object] = {
         "evidence": evidence_all_in_hand(),
@@ -215,10 +214,7 @@ def a_conclusion(**overrides: object) -> InvestigationConclusion:
         "concerns": ("The photograph is taken close in, so the outer box is not visible in it.",),
         "confidence": 0.9,
         "email_subject": "About your damaged shipment",
-        "email_body": (
-            f"We have looked at your claim and will refund {AMOUNT_PLACEHOLDER} for the "
-            "damaged collagen."
-        ),
+        "email_body": "We have looked at your claim and approved the damaged collagen.",
     }
     fields.update(overrides)
     return InvestigationConclusion.model_validate(fields)
@@ -752,23 +748,20 @@ async def test_an_email_carrying_a_figure_the_model_wrote_is_refused_and_goes_to
     assert any("amount of money" in concern for concern in result.concerns)
 
 
-async def test_an_approval_the_rules_withheld_never_promises_the_merchant_money() -> None:
-    """FR-1.6, FR-1.21: a figure is written into an email only where payment is recommended.
-
-    The investigation recommended paying and wrote the marker where a figure belongs, but
-    a piece of evidence is missing, so payment is withheld. There is now nothing to put
-    where the marker is, and an email reading "we will refund {{amount}}" must never reach
-    a representative looking sendable — so the line goes to a person.
-    """
+async def test_an_approval_withheld_for_missing_evidence_requests_it_without_money() -> None:
+    """FR-1.6, FR-1.21: a merchant request never promises an unapproved amount."""
     conclusion = a_conclusion(
         evidence=evidence_all_in_hand(customer_confirmation=EvidenceState.MISSING)
     )
 
     result = await investigate(a_run_that_concludes(conclusion))
 
-    assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert result.drafted_email is None
-    assert result.concerns != ()
+    assert result.outcome.recommendation is Recommendation.REQUEST_INFO
+    assert result.drafted_email is not None
+    assert "additional information" in result.drafted_email.body
+    assert "customer who received the parcel" in result.drafted_email.body
+    assert "$40.00" not in result.drafted_email.body
+    assert AMOUNT_PLACEHOLDER not in result.drafted_email.body
 
 
 # --- The shared evidence is settled once for the claim (FR-1a.3) ------------

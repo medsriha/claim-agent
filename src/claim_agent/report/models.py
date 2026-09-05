@@ -72,7 +72,11 @@ class ScreeningReportContent(BaseModel):
 
 
 class ClarificationReportContent(BaseModel):
-    """Claim-level findings when no safe product-level investigation can be produced."""
+    """Claim-level findings when no safe product-level investigation can be produced.
+
+    `requested_details` is populated when the merchant can settle the unclear split.
+    It stays empty when the problem needs a representative instead.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -82,6 +86,7 @@ class ClarificationReportContent(BaseModel):
     candidate_lines: tuple[ClaimLine, ...] = ()
     ambiguity: str
     concerns: tuple[str, ...]
+    requested_details: tuple[str, ...] = ()
 
 
 ReportContent = InvestigationReportContent | ScreeningReportContent | ClarificationReportContent
@@ -147,6 +152,32 @@ class Report(BaseModel):
     reviews: tuple[ReportReview, ...] = ()
     created_at: UtcDatetime
 
+    @model_validator(mode="before")
+    @classmethod
+    def _finish_legacy_approval_email(cls, value: object) -> object:
+        """Resolve old stored amount markers from the report's already-capped amount."""
+        if not isinstance(value, dict):
+            return value
+        recommendation = value.get("recommendation")
+        amount = value.get("amount_usd")
+        email_value = value.get("drafted_email")
+        if recommendation not in (Recommendation.APPROVE, Recommendation.APPROVE.value):
+            return value
+        if amount is None or email_value is None:
+            return value
+
+        email = (
+            email_value
+            if isinstance(email_value, DraftedEmail)
+            else DraftedEmail.model_validate(email_value)
+        )
+        if "{{amount}}" not in email.subject and "{{amount}}" not in email.body:
+            return value
+
+        resolved = dict(value)
+        resolved["drafted_email"] = email.with_approved_amount(Decimal(str(amount)))
+        return resolved
+
     @model_validator(mode="after")
     def _must_be_internally_consistent(self) -> Self:
         """Refuse a report whose metadata and structured content tell different stories."""
@@ -184,9 +215,13 @@ class Report(BaseModel):
                 )
             if self.claim_line_id is not None or self.product_name is not None:
                 raise ValueError("A claim-level clarification must not invent a settled product.")
-            if self.recommendation is not Recommendation.REQUEST_REP_CLARIFICATION:
+            if self.recommendation not in (
+                Recommendation.REQUEST_INFO,
+                Recommendation.REQUEST_REP_CLARIFICATION,
+            ):
                 raise ValueError(
-                    "An ambiguous claim must ask the representative for clarification."
+                    "An ambiguous claim must request merchant information or representative "
+                    "clarification."
                 )
             if self.amount_usd is not None:
                 raise ValueError("A clarification request cannot carry an approved amount.")
@@ -199,14 +234,22 @@ class Report(BaseModel):
             and self.drafted_email is None
         ):
             raise ValueError("An approval or merchant information request needs an email draft.")
-        if (
-            self.recommendation is Recommendation.REQUEST_INFO
-            and isinstance(self.content, InvestigationReportContent)
-            and not self.content.requested_details
+        if self.drafted_email is not None and (
+            "{{amount}}" in self.drafted_email.subject or "{{amount}}" in self.drafted_email.body
         ):
-            raise ValueError(
-                "A merchant information request must name the specific details needed."
+            raise ValueError("A finished merchant email cannot contain an amount placeholder.")
+        if self.recommendation is Recommendation.REQUEST_INFO:
+            requested_details = (
+                self.content.requested_details
+                if isinstance(
+                    self.content, (InvestigationReportContent, ClarificationReportContent)
+                )
+                else ()
             )
+            if not requested_details:
+                raise ValueError(
+                    "A merchant information request must name the specific details needed."
+                )
 
         if self.decided is not None and self.state is not ReportState.APPROVED:
             raise ValueError("Only an approved report says what the representative settled on.")

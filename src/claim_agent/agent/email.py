@@ -1,10 +1,10 @@
-"""Finishing the merchant email the model drafted, and refusing it when the model wrote money.
+"""Finishing the merchant email with the capped amount, and refusing invented money.
 
 The investigation writes the wording of the email a merchant would receive, because
 it is the only part of the system that knows what actually happened to this claim.
-It is not allowed to write a single figure *here*. Where an amount belongs it writes a
-marker, `{{amount}}`, and this file puts the real figure there — the amount that came
-out of the cap in `claim_agent.domain.reimbursement` (FR-1.21).
+It is not allowed to write a figure in the email. This file adds the real figure after
+the model answers — the amount that came out of the cap in
+`claim_agent.domain.reimbursement` (FR-1.21).
 
 **Note what that protects, because it is not what it used to protect.** The
 investigation now decides what the damage is worth, so the point is no longer that a
@@ -21,10 +21,14 @@ money in it is refused outright rather than tidied up. Refusing sends the claim 
 person (NFR-4); cleaning it up would leave a rep reading wording that neither the
 model nor anyone else actually wrote.
 
-**The search runs before the substitution, and there is nothing after it.** The
-figure this file inserts is money-shaped by definition, so checking the finished
+**The search runs before the amount is added, and there is nothing after it.** The
+figure this file adds is money-shaped by definition, so checking the finished
 email would refuse every approval there has ever been. If you are here to add a
 second check at the end, that is why there isn't one.
+
+Older model wording may still contain the former `{{amount}}` marker. It is accepted
+only on approvals and replaced with the capped figure for backwards compatibility.
+New prompts never ask the model to produce it.
 
 The email also may not describe itself as a draft, for the reason the pre-flight
 screen's email gives at more length: a representative has to read the exact wording
@@ -47,7 +51,7 @@ import re
 from collections.abc import Sequence
 from decimal import ROUND_HALF_UP
 
-from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, InvestigationConclusion
+from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, ClaimSplit, InvestigationConclusion
 from claim_agent.domain.evidence import EvidenceFinding, EvidenceKind, gaps_the_merchant_can_fill
 from claim_agent.domain.models import DraftedEmail
 from claim_agent.domain.outcome import Recommendation
@@ -193,8 +197,8 @@ counts as money when something beside it says so:
 
 1. a currency symbol in front of it, "$52.00";
 2. a currency symbol behind it, "52 €", which is how much of the world writes it;
-3. a currency symbol beside the marker, "${{amount}}". The marker stands for the whole
-   figure, symbol included, so a symbol next to it would come out as "$$52.00";
+3. a currency symbol beside the legacy marker, "${{amount}}". The marker stands for the
+   whole figure, symbol included, so a symbol next to it would come out as "$$52.00";
 4. a currency word after it, in digits or in words: "52 dollars", "fifty-two dollars";
 5. a currency code in front of it, "USD 52";
 6. nothing beside it at all, but written to exactly two decimal places, "52.00" or
@@ -249,8 +253,12 @@ Every space in them is written as "any whitespace", so a phrase that happens to 
 across two lines is still found."""
 
 
+EmailWording = InvestigationConclusion | ClaimSplit
+"""A structured agent answer that carries merchant email wording."""
+
+
 def finish_email(
-    conclusion: InvestigationConclusion,
+    conclusion: EmailWording,
     *,
     recommendation: Recommendation,
     amount: AmountDerivation | None,
@@ -261,9 +269,9 @@ def finish_email(
 
     Three things happen, in this order. The wording is checked for money the model wrote
     itself and for anything describing the email as a draft, and either one refuses the
-    email. Then, and only for a recommendation of payment, the marker the model left is
-    replaced with the figure the arithmetic produced. What comes back is written but
-    unsent, and it says so on itself rather than in its words.
+    email. Then, and only for a recommendation of payment, the figure produced by the
+    capped arithmetic is added to the email. What comes back is written but unsent, and
+    it says so on itself rather than in its words.
 
     **The figure is only ever filled in on a recommendation of payment.** Any other
     recommendation with a marker still in it is refused, even when an amount was worked
@@ -278,8 +286,8 @@ def finish_email(
     something upstream went wrong, and going to a person is the right answer to that
     (NFR-4).
 
-    An approval whose wording never mentions the figure is refused: the approval email's
-    purpose is to communicate the exact amount the report proposes.
+    The model's approval wording does not need to mention a figure. This function appends
+    the exact capped amount so the final email always communicates it.
 
     Args:
         conclusion: The investigation's whole answer. Only the subject and body are read
@@ -300,9 +308,10 @@ def finish_email(
 
     Raises:
         ModelOutputRejectedError: the model wrote money itself, described the email as a draft,
-            left the marker where no figure can go, or an approval arrived with nothing
+            left the legacy marker where no figure can go, or an approval arrived with nothing
             payable. Every one of these is refused rather than repaired, and the caller
-            turns the refusal into an representative clarification request to a person (FR-1.21, FR-1.17, NFR-4).
+            turns the refusal into a representative clarification request (FR-1.21, FR-1.17,
+            NFR-4).
     """
     subject = conclusion.email_subject
     body = conclusion.email_body
@@ -316,16 +325,16 @@ def finish_email(
     _refuse_wording_that_calls_itself_a_draft(conclusion)
 
     if recommendation is Recommendation.APPROVE:
-        if AMOUNT_PLACEHOLDER not in subject and AMOUNT_PLACEHOLDER not in body:
-            raise ModelOutputRejectedError(
-                "The approval email does not communicate the approved amount. It must include "
-                "the amount marker so the exact approved figure can be inserted."
-            )
-        # Substituting last is deliberate: the figure is money-shaped, so the checks
-        # above have to see the model's own words and nothing else.
+        # Adding the amount last is deliberate: the figure is money-shaped, so the
+        # checks above have to see the model's own words and nothing else.
         figure = _as_money(_payable(amount))
-        subject = subject.replace(AMOUNT_PLACEHOLDER, figure)
-        body = body.replace(AMOUNT_PLACEHOLDER, figure)
+        if AMOUNT_PLACEHOLDER in subject or AMOUNT_PLACEHOLDER in body:
+            # Reports drafted under the earlier prompt used a marker. Finish them safely
+            # instead of exposing implementation wording to a representative.
+            subject = subject.replace(AMOUNT_PLACEHOLDER, figure)
+            body = body.replace(AMOUNT_PLACEHOLDER, figure)
+        else:
+            body = f"{body.rstrip()}\n\nApproved amount: {figure}"
     elif recommendation is Recommendation.REQUEST_INFO:
         if AMOUNT_PLACEHOLDER in subject or AMOUNT_PLACEHOLDER in body:
             raise ModelOutputRejectedError(
@@ -341,6 +350,15 @@ def finish_email(
                 "The investigation proposed asking the merchant for information but did not "
                 "identify any specific detail the merchant can provide."
             )
+        if (
+            isinstance(conclusion, InvestigationConclusion)
+            and conclusion.recommendation is not Recommendation.REQUEST_INFO
+        ):
+            # A rule can withhold the model's approval because merchant-fillable evidence
+            # is missing. Its approval wording is no longer suitable, so use a small
+            # deterministic request instead of telling the merchant they were approved.
+            subject = "More information needed for your damage claim"
+            body = "We need some additional information before we can complete your claim."
         missing_from_body = [detail for detail in details if detail.lower() not in body.lower()]
         if missing_from_body:
             requested = "\n".join(f"- {detail}" for detail in missing_from_body)
@@ -360,7 +378,7 @@ def money_the_model_wrote(text: str) -> tuple[str, ...]:
 
     This is the check that makes "no figure of the model's own reaches a merchant" a rule
     rather than an instruction (FR-1.21). It is meant to be run on the model's own words,
-    before the capped figure is substituted into them — the model may name an amount in
+    before the capped figure is added to them — the model may name an amount in
     its answer, and may not name one here, because the two can differ by the cap.
 
     Args:
@@ -419,7 +437,7 @@ def name_what_is_missing(findings: Sequence[EvidenceFinding]) -> tuple[str, ...]
     return tuple(MISSING_EVIDENCE_WORDING[kind] for kind in gaps_the_merchant_can_fill(findings))
 
 
-def _refuse_money_the_model_wrote(conclusion: InvestigationConclusion) -> None:
+def _refuse_money_the_model_wrote(conclusion: EmailWording) -> None:
     """Refuse the email if the model put a figure anywhere in it (FR-1.21).
 
     Both the subject and the body are searched. A subject line is part of the exact
@@ -441,7 +459,7 @@ def _refuse_money_the_model_wrote(conclusion: InvestigationConclusion) -> None:
     )
 
 
-def _refuse_wording_that_calls_itself_a_draft(conclusion: InvestigationConclusion) -> None:
+def _refuse_wording_that_calls_itself_a_draft(conclusion: EmailWording) -> None:
     """Refuse the email if its own words say it is a draft (FR-1.17, FR-2.7)."""
     in_subject = draft_markers_the_model_wrote(conclusion.email_subject or "")
     in_body = draft_markers_the_model_wrote(conclusion.email_body or "")
@@ -477,9 +495,9 @@ def _payable(amount: AmountDerivation | None) -> AmountDerivation:
 def _as_money(amount: AmountDerivation) -> str:
     """Write the figure the way a merchant reads it: "$52.00".
 
-    The marker the model leaves stands for the whole figure, currency symbol included,
-    which is why the symbol is added here and why a symbol beside the marker is refused
-    as money the model wrote.
+    The legacy marker stands for the whole figure, currency symbol included, which is why
+    the symbol is added here and why a symbol beside that marker is refused as money the
+    model wrote.
 
     The figure is held as an exact decimal from the invoice all the way to this line and
     is never turned into a floating point number, so no cent can drift on the way to a

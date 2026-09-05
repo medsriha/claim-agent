@@ -16,33 +16,65 @@ export function StructuredReport({ report }: { report: Report }): React.JSX.Elem
     return <InvestigationContent content={report.content} />;
   }
   if (report.content.kind === "clarification") {
-    return <ClarificationContent content={report.content} />;
+    return (
+      <ClarificationContent
+        content={report.content}
+        recommendation={report.recommendation}
+      />
+    );
   }
   return <ScreeningContent content={report.content} />;
 }
 
 function ClarificationContent({
   content,
+  recommendation,
 }: {
   content: ClarificationReportContent;
+  recommendation: Report["recommendation"];
 }): React.JSX.Element {
+  const asksMerchant = recommendation === "request_info";
+
   return (
     <div className="structured-report">
-      <p className="line-overruled">
-        Representative clarification is needed. No merchant email was generated.
-      </p>
-      <section className="line-concerns">
-        <h4 className="line-section">What needs clarification</h4>
-        <p>{content.ambiguity}</p>
-        {content.candidate_lines.length > 0 && (
+      <section className="line-priority">
+        <h4 className="line-section">
+          {asksMerchant ? "Needed from the merchant" : "Representative action needed"}
+        </h4>
+        {asksMerchant && content.requested_details.length > 0 && (
           <ul className="line-list">
-            {content.candidate_lines.map((line) => (
-              <li key={line.claim_line_id}>{line.claimed.name}</li>
+            {content.requested_details.map((detail) => (
+              <li key={detail}>{detail}</li>
             ))}
           </ul>
         )}
+        {!asksMerchant && <p className="line-key-finding">{shortSummary(content.ambiguity)}</p>}
       </section>
-      <AttachmentGallery attachments={content.attachments} />
+
+      <details className="line-details">
+        <summary className="line-details-summary">Why this action is needed</summary>
+        <p className="line-detail-copy">{content.ambiguity}</p>
+        {content.candidate_lines.length > 0 && (
+          <>
+            <h4 className="line-section">Possible products</h4>
+            <ul className="line-list">
+              {content.candidate_lines.map((line) => (
+                <li key={line.claim_line_id}>{line.claimed.name}</li>
+              ))}
+            </ul>
+          </>
+        )}
+      </details>
+
+      {content.attachments.length > 0 && (
+        <details className="line-details">
+          <summary className="line-details-summary">
+            Claim images ({String(content.attachments.length)})
+          </summary>
+          <AttachmentGallery attachments={content.attachments} />
+        </details>
+      )}
+
       <ReportContext context={content.context} correctionsConsidered={[]} />
     </div>
   );
@@ -58,8 +90,6 @@ function InvestigationContent({
 
   return (
     <div className="structured-report">
-      <p className="line-explanation">{outcome.explanation}</p>
-
       {overruled && (
         <p className="line-overruled">
           The investigation recommended <strong>{humanise(outcome.recommended_by_agent)}</strong>.
@@ -69,8 +99,8 @@ function InvestigationContent({
       )}
 
       {outcome.recommendation === "request_info" && content.requested_details.length > 0 && (
-        <section className="line-concerns">
-          <h4 className="line-section">Additional details needed from the merchant</h4>
+        <section className="line-priority">
+          <h4 className="line-section">Needed from the merchant</h4>
           <ul className="line-list">
             {content.requested_details.map((detail) => (
               <li key={detail}>{detail}</li>
@@ -79,20 +109,32 @@ function InvestigationContent({
         </section>
       )}
 
-      <section className="line-concerns">
-        <h4 className="line-section">Concerns</h4>
-        {concerns.length === 0 ? (
-          <p className="line-none">Nothing was flagged as weak, conflicting, or uncertain.</p>
-        ) : (
+      {outcome.recommendation === "request_rep_clarification" && (
+        <section className="line-priority">
+          <h4 className="line-section">Representative action needed</h4>
+          <p className="line-key-finding">
+            {shortSummary(concerns[0] ?? outcome.explanation)}
+          </p>
+        </section>
+      )}
+
+      <details className="line-details">
+        <summary className="line-details-summary">Why this recommendation was made</summary>
+        <p className="line-detail-copy">{outcome.explanation}</p>
+      </details>
+
+      {concerns.length > 0 && (
+        <details className="line-details">
+          <summary className="line-details-summary">
+            Concerns ({String(concerns.length)})
+          </summary>
           <ul className="line-list">
             {concerns.map((concern) => (
               <li key={concern}>{concern}</li>
             ))}
           </ul>
-        )}
-      </section>
-
-      <AttachmentGallery attachments={content.attachments} />
+        </details>
+      )}
 
       <ReportContext
         context={content.context}
@@ -101,7 +143,9 @@ function InvestigationContent({
       <AmountWorking amount={amount} />
 
       <details className="line-details">
-        <summary className="line-details-summary">The evidence and the four questions</summary>
+        <summary className="line-details-summary">Evidence and assessment details</summary>
+
+        <AttachmentGallery attachments={content.attachments} />
 
         <h4 className="line-section">Evidence</h4>
         <ul className="line-evidence">
@@ -218,10 +262,18 @@ function ScreeningContent({
             <li key={reason}>{humanise(reason)}</li>
           ))}
         </ul>
-        {content.findings.map((finding) => (
-          <p key={finding}>{finding}</p>
-        ))}
       </section>
+
+      {content.findings.length > 0 && (
+        <details className="line-details">
+          <summary className="line-details-summary">Screening findings</summary>
+          <ul className="line-list">
+            {content.findings.map((finding) => (
+              <li key={finding}>{finding}</li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <ReportContext context={content.context} correctionsConsidered={[]} />
 
@@ -242,6 +294,17 @@ function ScreeningContent({
       </details>
     </div>
   );
+}
+
+/** Keep the default report view scannable while preserving the complete wording below it. */
+function shortSummary(value: string, limit = 220): string {
+  const beforeNumberedDetail = value.split(/\s+\(\d+\)/u, 1)[0]?.trim() ?? value.trim();
+  if (beforeNumberedDetail.length <= limit) {
+    return beforeNumberedDetail;
+  }
+  const shortened = beforeNumberedDetail.slice(0, limit + 1);
+  const lastSpace = shortened.lastIndexOf(" ");
+  return `${shortened.slice(0, lastSpace > 0 ? lastSpace : limit).trimEnd()}…`;
 }
 
 function ReportContext({

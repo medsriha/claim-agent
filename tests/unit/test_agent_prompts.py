@@ -38,12 +38,12 @@ from claim_agent.agent.prompts import (
     INVESTIGATION_PROMPT,
     PROMPT_VERSION,
     SYSTEM_PROMPT,
+    TRIAGE_PROMPT,
     build_image_classification_messages,
     build_investigation_messages,
     build_triage_messages,
     quote_untrusted,
 )
-from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER
 from claim_agent.domain.assessment import REQUIRED_ASSESSMENTS
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, MatchOutcome
 from claim_agent.domain.evidence import (
@@ -295,6 +295,16 @@ def test_the_prompts_say_plainly_that_the_model_decides_how_to_investigate() -> 
     assert "far fewer\ncalls than one with six" in SYSTEM_PROMPT
 
 
+def test_report_fields_are_written_for_scanning_without_repeated_mini_reports() -> None:
+    """FR-2.5a: structured fields stay concise enough for the UI to establish hierarchy."""
+    assert "WRITE FOR SCANNING" in SYSTEM_PROMPT
+    assert "Do not write headings or numbered\nmini-reports inside a field" in SYSTEM_PROMPT
+    assert "one or two short sentences" in TRIAGE_PROMPT
+    assert "report fields must not repeat the list" in TRIAGE_PROMPT
+    assert "Keep each concern to one short issue" in INVESTIGATION_PROMPT
+    assert "Do not repeat the requested_details list" in INVESTIGATION_PROMPT
+
+
 # --- It can only read (FR-1.2) ----------------------------------------------
 
 
@@ -404,10 +414,12 @@ def test_a_past_correction_is_shown_and_marked_as_somebody_elses_words() -> None
 # --- No money comes out of the model (FR-1.21, NFR-2) -----------------------
 
 
-def test_the_placeholder_the_prompts_teach_is_the_one_the_code_substitutes() -> None:
-    """FR-1.21: the model marks where an amount goes; code puts the amount there."""
-    assert AMOUNT_PLACEHOLDER in SYSTEM_PROMPT
-    assert AMOUNT_PLACEHOLDER in INVESTIGATION_PROMPT
+def test_the_prompts_keep_amounts_and_placeholders_out_of_email_wording() -> None:
+    """FR-1.21: code adds the capped amount after the model has finished writing."""
+    assert "Never write a figure or an\namount placeholder in the email" in SYSTEM_PROMPT
+    assert "must not contain an amount or amount\nplaceholder" in INVESTIGATION_PROMPT
+    assert "{{amount}}" not in SYSTEM_PROMPT
+    assert "{{amount}}" not in INVESTIGATION_PROMPT
 
 
 def test_the_prompts_teach_how_to_write_an_amount_and_never_a_currency_symbol() -> None:

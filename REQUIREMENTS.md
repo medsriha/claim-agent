@@ -275,13 +275,13 @@ available to every claim line. Only the damaged-product photos are product-speci
 This is both a cost control — the invoice is not re-read once per line — and a consistency
 guarantee: every line in a claim sees the same verdict on the shared evidence.
 
-**FR-1a.4 — Ask the representative when the split is ambiguous.**
+**FR-1a.4 — Ask the right party when the split is ambiguous.**
 If it cannot be established which products are being claimed for, no meaningful per-product
-investigation is possible. Return a claim-level report with
-`request_rep_clarification`, state what is ambiguous, include the confidence, and do not
-generate a merchant email or guess a split. A rep who is told "the photos show a damaged 24oz
-bottle, but the order contains two different 24oz bottles at different prices" can resolve
-it in seconds; a wrong split is silent and expensive.
+investigation is possible, and the system must not guess a split. State what is ambiguous and
+include the confidence. If the merchant can resolve it by providing specific details, return
+`request_info`, name every detail needed, and draft the merchant email. If the problem is
+internal or there is no specific merchant-supplied detail that would resolve it, return
+`request_rep_clarification` and no email.
 
 **FR-1a.5 — Treat a single-product claim as one claim line.**
 There is no special case for single-product claims. One damaged product is one claim line
@@ -439,15 +439,20 @@ It needs to be *photographed*, not damaged. Intact packaging with a damaged prod
 is a legitimate claim.
 
 **FR-1.12 — A failed assessment requests representative clarification.**
-It means something appears wrong or conflicts with the claim, rather than that a specific
-merchant-supplied detail is absent. The report names the failed assessment and no email is made.
+An assessment is treated as failed only after merchant-fillable gaps have been separated out.
+It means the available evidence establishes something wrong or conflicting that another specific
+detail from the merchant would not resolve. The report names the failed assessment and no email
+is made. If the merchant can resolve the issue by supplying or correcting something specific, it
+is a `request_info` instead, not a failed-assessment path.
 
 **FR-1.13 — Ask rather than pick when the damaged item is ambiguous.**
 Orders can contain several similar products at different prices. If photos do not
 distinguish which one was damaged, the amount cannot be determined, and the system must
-ask instead of choosing the most likely candidate. If the merchant can supply a specific
-missing detail, use `request_info` and name that detail in the email. If records conflict or
-something appears incorrect, use `request_rep_clarification` and generate no email.
+ask instead of choosing the most likely candidate. If the merchant can supply a specific detail,
+clearer image, corrected document, or explanation that would settle it, use `request_info`, name
+every detail in the report, and request each one in the email. Use
+`request_rep_clarification` with no email only when the merchant cannot resolve the conflict or
+the system cannot identify a concrete merchant action.
 
 > **Reference — `GET /orders/336431771` (CASE-1002, CleanBoss)**
 > ```json
@@ -470,11 +475,19 @@ something appears incorrect, use `request_rep_clarification` and generate no ema
 There is no separate escalation or denial outcome. Each action is a proposal to the rep,
 and none takes effect on its own.
 
+The routing question is **who can supply the next fact**, not merely whether the claim is
+ambiguous. On a safely completed run, a concrete merchant-supplied answer maps to `request_info`,
+even when the current evidence is ambiguous or conflicting. `request_rep_clarification` is
+reserved for internal failures, judgement calls, or problems with no specific merchant-provided
+resolution. This rule governs FR-1a.4, FR-1.12, FR-1.13, and FR-1.15 wherever their wording
+overlaps; NFR-4 still takes priority when the run itself failed.
+
 **FR-1.15 — Never recommend approval under uncertainty.**
 Where the overall action confidence or any supporting assessment confidence is low, or
-evidence is weak, the action must be
-`request_rep_clarification`, with the uncertainty and the clarification needed stated. The
-agent may recommend paying only when it can show why.
+evidence is weak, approval is unavailable. If a specific merchant-supplied detail would resolve
+that uncertainty, use `request_info`; otherwise use `request_rep_clarification`, with the
+uncertainty and the clarification needed stated. The agent may recommend paying only when it can
+show why.
 
 **FR-1.16 — Request representative clarification when the step budget is exhausted**,
 carrying forward whatever was established, so the rep is not handed an empty result. This
@@ -609,9 +622,13 @@ cannot tell why the system is unsure will either rubber-stamp or redo the work �
 defeat the purpose. Silence here is a defect, not a clean result.
 
 **FR-2.5a — Make the report decidable at a glance, and checkable in depth.**
-The recommendation, the amount, and the concerns must be readable immediately. The evidence
-behind them must be one step away. A rep who agrees should be able to approve quickly; a
-rep who doubts should be able to verify without leaving the report.
+The default view leads with the next action, confidence, and either the approved amount, the
+specific merchant requests, or a short statement of what the rep must clarify. Supporting
+reasoning, concerns, images, evidence, assessments, context, and amount working are available in
+clearly labelled expandable sections. There is no nested report scrollbar. Each field is concise,
+has one purpose, and does not embed headings, numbered mini-reports, or repeat the same list of
+requests. A rep who agrees should be able to approve quickly; a rep who doubts should be able to
+verify every finding without leaving the report.
 
 **FR-2.6 — Surface context the rep should know before approving.**
 Whether this is a high-value shipment, relevant history for this merchant, and — if a past
@@ -623,6 +640,10 @@ that would be sent.
 - `approve`: draft an email that communicates the exact approved amount.
 - `request_info`: draft an email that requests every specific detail needed from the merchant.
 - `request_rep_clarification`: return no email draft.
+
+For approval, the agent supplies the wording and its proposed amount as separate structured
+fields. Deterministic code applies the reimbursement cap and adds the resulting exact amount to
+the email. The report and email never expose an amount placeholder.
 
 **FR-2.8 — Support the rep's review actions.**
 A report is presented to the rep, who may:
@@ -1218,10 +1239,10 @@ findings. The model never returns a free-form verdict.
 
 A monetary amount **is** now taken from model output, which FR-1.21 explains and which this
 requirement previously forbade. It is constrained rather than free: the figure is a schema
-field written as money, refused outright if it is not, read into an exact decimal, and
-capped. Merchant-facing wording still carries no figure the model wrote — a marker is
-substituted after the cap has been applied, so what reaches a merchant is the figure that
-survived it and not the one that was proposed.
+field written as money, refused outright if it is not, read into an exact decimal, and capped.
+Merchant-facing wording still carries no figure the model wrote. Deterministic code adds
+the approved amount after the cap has been applied, so what reaches a merchant is the figure that
+survived it and not the one that was proposed. No placeholder is exposed in the report or email.
 
 **NFR-3 — Explainability.**
 Every conclusion traces to the observation that produced it. It must be possible to answer

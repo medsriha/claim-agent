@@ -162,13 +162,13 @@ still unticked below.
     that stops early can leave a kind "missing" when an unexamined image was it, which
     would ask a merchant for something they already sent. See DESIGN.md.
 
-- [x] FR-1a.4 — An ambiguous split is handed to a representative, and no split is guessed.
+- [x] FR-1a.4 — An ambiguous split asks the party who can resolve it, and no split is guessed.
   - **Conclusion:** three different things produce it — the model saying so, no products
-    named at all, and a product matching two order lines. All three stop every
-    per-product run, because nothing may be investigated until somebody has said what is
-    being claimed for.
-  - **Be aware:** the candidates are still listed so a rep can settle it in seconds. They
-    are deliberately not presented as a settled split.
+    named at all, and a product matching two order lines. All three stop every per-product
+    run. Concrete merchant-answerable gaps produce `request_info` with the exact details and
+    an email; internal or non-actionable ambiguity produces `request_rep_clarification`.
+  - **Be aware:** the candidates are still listed so the reviewer can see the unresolved
+    choice. They are deliberately not presented as a settled split.
 
 - [x] FR-1a.5 — One damaged product is one claim line, through the same machinery as five.
   - **Conclusion:** there is no special case anywhere for a single-product claim, and a
@@ -277,12 +277,15 @@ still unticked below.
 - [x] FR-1.12 — A failed judgement requests representative clarification, naming what is wrong.
   - **Be aware:** a question answered "no" and a question *never answered* are different
     problems and no longer share a label. An unanswered question is our unfinished work,
-    so it goes to the representative; a genuine "no" also stays internal and produces no email.
+    so it goes to the representative. A genuine "no" also stays internal only after any
+    concrete merchant-fillable gap has been separated into `request_info`.
 
 - [x] FR-1.13 — Where the damaged item is ambiguous, the system asks instead of choosing.
   - **Conclusion:** CASE-1002 is the real example and the photographs bear it out — a
     broken CleanBoss bottle whose label does not say which of two 24oz products at
-    different prices it is.
+    different prices it is. A legible label, corrected document, product name, or quantity is
+    a concrete merchant request, so this path returns `request_info` and an email. Only an
+    ambiguity the merchant cannot resolve stays with the representative.
 
 - [x] FR-1.14 — Confidence plus one of three next actions, and nothing else.
   - **Conclusion:** `approve`, `request_info`, or `request_rep_clarification`. Escalation and
@@ -291,7 +294,9 @@ still unticked below.
 
 - [x] FR-1.15 — Never recommend approval under uncertainty.
   - **Conclusion:** both the overall action confidence shown on the report and the weakest
-    supporting assessment must clear the policy threshold before approval can stand.
+    supporting assessment must clear the policy threshold before approval can stand. Below the
+    threshold, a concrete merchant-fillable gap remains `request_info`; otherwise the action is
+    `request_rep_clarification`.
   - **Be aware:** the confidence figure is the model's own opinion of itself, nothing has
     ever checked it against what turned out to be true, and the threshold is a number we
     invented. It now withholds real payments. This is the weakest link in the layer.
@@ -346,8 +351,9 @@ still unticked below.
   - **Two guarantees survived, and they are the ones to defend.** Money is read as text into
     an exact decimal and never through a float — anything not exactly money is refused rather
     than interpreted, and the claim goes to a person. And **no figure the model wrote reaches
-    a merchant**: the email carries a marker that code replaces with the amount *after* the
-    cap, so a proposal of $180 on a $100 cap sends $100 and never $180.
+    a merchant**: the model leaves money out of the email and code appends the amount *after*
+    the cap, so a proposal of $180 on a $100 cap sends $100 and never $180. New drafts contain
+    no placeholder; the finalizer safely resolves the marker in older drafts.
   - **Be aware:** past claims' settled amounts are now shown to the agent, having been
     deliberately withheld before. That was the whole basis of "judge it against similar
     claims", and withholding them left the instruction with nothing behind it.
@@ -387,8 +393,10 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
   - **Conclusion:** a report with nothing worrying says so rather than showing an empty heading.
     A stopped claim carries its own reasons and findings in screening content.
 - [x] FR-2.5a — decidable at a glance, checkable below.
-  - **Conclusion:** recommendation, amount and concerns first; evidence, questions, working and the
-    email under them. A test pins the order rather than trusting it.
+  - **Conclusion:** the default view leads with action, confidence, and the approved amount,
+    merchant requests, or a short rep clarification. Reasoning, concerns, images, evidence,
+    questions, context, and amount working stay available in labelled expandable sections. The
+    report has no inner scrollbar, and prompt/schema rules keep each field short and non-repetitive.
 - [ ] FR-2.6 — the two things this asks for are already computed and already reach the model:
   the high-value flag and the merchant's past corrections. What is missing is a rep-facing
   report to put them on, and the third clause — *which* past correction influenced this

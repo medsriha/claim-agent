@@ -65,9 +65,9 @@ class ClaimInvestigation(BaseModel):
     product, each with its own recommendation, amount, reasoning and drafted email.
 
     `lines` is empty when the split could not be established: nothing may be
-    investigated until somebody has said which products are being claimed for, so
-    the claim goes to a representative instead (FR-1a.4). `triage.ambiguity` says
-    what was unclear.
+    investigated until somebody has said which products are being claimed for.
+    `triage.ambiguity` says what was unclear, and its split says whether the merchant
+    can provide concrete details or a representative must resolve it (FR-1a.4).
 
     `claim_concerns` are things about the claim as a whole rather than any one
     product — today that means the cap being reached across several products.
@@ -153,8 +153,8 @@ async def investigate_claim(
 
     if triage.is_ambiguous or not triage.claim_lines:
         # Nothing may be investigated while it is unclear which products are being
-        # claimed for. Guessing a split is silent and expensive; asking is neither
-        # (FR-1a.4).
+        # claimed for. Guessing a split is silent and expensive; asking the party who
+        # can settle it is neither (FR-1a.4).
         logger.info("claim_split_unsettled", case_id=triage.case_id, ambiguity=triage.ambiguity)
         return ClaimInvestigation(case_id=triage.case_id, triage=triage)
 

@@ -242,7 +242,7 @@ async def test_a_reworded_email_is_shown_in_full(client: AsyncClient, store: Rep
         )
     ).json()
 
-    assert body["drafted_email"]["body"] == "We are refunding you."
+    assert body["drafted_email"]["body"] == ("We are refunding you.\n\nApproved amount: $52.00")
     assert body["reviews"][-1]["edited_email"]["body"] == "We are refunding you."
 
 

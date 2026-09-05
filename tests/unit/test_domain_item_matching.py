@@ -3,7 +3,7 @@
 Every test uses either a real sample case's own product names and codes, or the same
 constructed-two-lines pattern `test_domain_reimbursement.py` uses for CASE-1002's
 ambiguity — two order lines that are genuinely indistinguishable from the merchant's own
-words, which is exactly the case FR-1.13 says a person has to resolve.
+words, which is exactly the case FR-1.13 says must be resolved without guessing.
 """
 
 from __future__ import annotations

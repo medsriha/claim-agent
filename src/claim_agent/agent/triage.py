@@ -29,11 +29,12 @@ in one claim can never disagree about whether the box was photographed. The four
 thing, a photograph of the damaged product itself, belongs to one product and is not
 settled here.
 
-**A claim this pass cannot split is handed to a person, not guessed at (FR-1a.4).**
+**A claim this pass cannot split is sent to whoever can resolve it, not guessed at (FR-1a.4).**
 Orders hold similar products at different prices; CASE-1002 holds two different 24oz
 bottles, one costing twice the other. Choosing between them would invent the payout,
-so an unclear split comes back saying exactly what is unclear, and a representative
-settles it in seconds (FR-1.13).
+so an unclear split comes back saying exactly what is unclear. When the merchant can
+answer a concrete question, the result names those details for an email; internal or
+non-actionable ambiguity stays with the representative (FR-1.13).
 
 **Nothing here raises for an ordinary failure.** A pass that ran out of steps, a
 model that could not be reached, images that could not be listed: each one comes back
@@ -80,7 +81,9 @@ logger = get_logger(__name__)
 TRIAGE_CLOSING_REQUEST: Final = (
     "Say which products this claim is for. Name each one as the order writes it, and say "
     "how many of it were damaged. If you cannot tell which product is meant, say that you "
-    "cannot, say what is unclear, and say what would settle it — do not choose."
+    "cannot, say what is unclear, and say what would settle it — do not choose. If the "
+    "merchant can settle it, name every detail they must provide and draft the email asking "
+    "for them; otherwise leave the merchant-request and email fields empty."
 )
 """What the pass is asked once it has stopped looking at things.
 
@@ -140,9 +143,9 @@ class ClaimTriage(BaseModel):
 
     This is what the per-product investigations are built from. Read `ambiguity`
     first: while there is something in it, the split was not established and no
-    per-product investigation should be started from these lines. The claim goes to
-    a representative instead, who can settle in seconds what the system was right to
-    refuse to guess at (FR-1a.4, FR-1.13).
+    per-product investigation should be started from these lines. The claim asks the
+    merchant when they can provide specific missing details; otherwise it goes to a
+    representative (FR-1a.4, FR-1.13).
 
     Frozen, because it is the account of a pass that has already run.
 
@@ -167,8 +170,8 @@ class ClaimTriage(BaseModel):
             reporting order (FR-1a.3). Every product's investigation is handed this
             same answer. The damaged-product photograph is not here: it belongs to
             one product and is settled by that product's own run.
-        ambiguity: What is unclear about the split, in words a representative can
-            act on, or `None` when nothing is. It is also where a pass that failed
+        ambiguity: What is unclear about the split, in actionable words, or `None`
+            when nothing is. It is also where a pass that failed
             outright says why, because from the outside "we could not tell" and "we
             could not finish" both mean the claim needs a person (NFR-4).
         attachment_classifications: What each image the pass looked at turned out to
@@ -197,12 +200,13 @@ class ClaimTriage(BaseModel):
 
     @property
     def is_ambiguous(self) -> bool:
-        """Whether the split was left unsettled, and the claim needs a person.
+        """Whether the split was left unsettled and no product may be investigated.
 
         Worked out from `ambiguity` rather than stored beside it, so the two can
         never contradict each other. A stored flag would eventually be set wrong in
-        one branch, and a caller trusting it would investigate products the system
-        had refused to choose between (FR-1a.4).
+        one branch, and a caller trusting it would investigate products the system had
+        refused to choose between. The split separately says whether the merchant can
+        provide the missing details or a representative must resolve it (FR-1a.4).
         """
         return self.ambiguity is not None
 
@@ -578,9 +582,9 @@ def _claim_lines_from(
 def _what_is_unclear(split: ClaimSplit, lines: Sequence[ClaimLine]) -> str | None:
     """Say what stops this split being acted on, or `None` when nothing does (FR-1a.4).
 
-    Three separate ways a split can fail to settle anything, and all of them end the
-    same way — with a representative being told what would resolve it, rather than
-    the system choosing (FR-1.13):
+    Three separate ways a split can fail to settle anything. All stop the system from
+    choosing; the split's requested details separately decide whether the merchant or
+    a representative is asked to resolve it (FR-1.13):
 
     * the pass says outright that it could not tell which products are meant;
     * it named no products at all, which is not an answer to "which products";

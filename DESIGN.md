@@ -33,8 +33,9 @@ the next action is merchant-facing, a draft email. Then it stops.
 
 There are three next actions. An approval report carries the confidence and approved amount,
 and its email communicates that amount. A request for merchant information names the exact
-details needed in both the report and email. Anything incorrect, ambiguous, internally failed,
-or insufficiently confident asks the representative for clarification and produces no email.
+details needed in both the report and email, including a merchant-resolvable ambiguity. Anything
+incorrect, ambiguous, internally failed, or insufficiently confident that the merchant cannot
+resolve with a specific detail asks the representative for clarification and produces no email.
 Escalation and denial are not outcomes in this contract.
 
 **The system never decides, and never sends anything.** A representative reads what it found and
@@ -913,10 +914,10 @@ where an AI is involved at all.
    item that is really on the order, and it carries that item's name, code and price with it
    (FR-1a.2). A claimed product that is not on the order cannot be paid for, and saying so is
    itself a useful finding.
-5. If it cannot be established which products are meant, the claim is handed to a person with a
-   note saying exactly what is unclear, and no split is guessed at (FR-1a.4). A representative
-   told "the photos show a damaged 24oz bottle, but the order has two different 24oz bottles at
-   different prices" settles that in seconds. A wrong split is silent and expensive.
+5. If it cannot be established which products are meant, no split is guessed (FR-1a.4). The
+   claim-level report says exactly what is unclear. When the merchant can settle it with named
+   details, it requests those details and drafts the email; internal or non-actionable ambiguity
+   asks the representative. A wrong split is silent and expensive.
 6. One damaged product is one piece of work, through exactly the same machinery as five. There is
    no shortcut for the simple case (FR-1a.5).
 
@@ -944,8 +945,9 @@ and what was seen in each image — which is exactly what the per-product invest
 - **A number of steps it cannot exceed.** Every run has a budget, and running out is an answer in
   itself: the claim goes to a person, carrying whatever was established along the way, rather than
   looping or coming back empty (FR-1.3, FR-1.16).
-- **Being unsure is a valid answer, and the preferred one.** Handing an ambiguous split to a
-  person is treated as success, not failure. The alternative — picking the likelier of two similar
+- **Being unsure is a valid answer, and the preferred one.** An ambiguous split is treated as
+  success, not failure: it asks the merchant when they can supply concrete missing details and
+  otherwise asks the representative. The alternative — picking the likelier of two similar
   bottles — produces a payment nobody checked.
 
 **When things go wrong** — Every failure ends with a person, never with a decision (NFR-4). If
@@ -1040,17 +1042,18 @@ arrived at, and the draft email. Nothing is sent and nothing is stored.
   AI cannot argue with, and it is now the only thing standing between a judgement and a payout.
   The figure is also read as exact money — refused outright if it is not written as money at all,
   rather than being guessed at (FR-1.21, FR-1.20).
-- **The email is written by the AI, with a gap where the money goes.** The wording is the AI's, so
-  it can speak to the actual claim, but the figure is put in afterwards — and it is the figure
-  that got past the limit, which may not be the one the AI proposed. An AI recommending two
-  hundred dollars on a claim that may only be reimbursed a hundred would otherwise promise the
-  merchant the larger number. Any amount of money found anywhere else in what it wrote is
+- **The AI writes the email without an amount.** Its wording can speak to the actual claim, then
+  deterministic code adds the figure that got past the limit, which may not be the amount the AI
+  proposed. An AI recommending two hundred dollars on a claim capped at one hundred therefore
+  produces an email for one hundred. New drafts contain no placeholder; the finalizer resolves
+  the old marker if it reads an earlier stored draft. Any amount of money the AI writes itself is
   rejected, and the claim goes to a person.
 - **How sure it is, is part of the answer.** Each of the four questions carries its own confidence,
   and so does the identification of which product was damaged, because that is the judgement the
-  money rests on. Below a set level, paying is not available and the claim goes to a person with
-  the doubt spelled out (FR-1.15). The figure is shown to a representative either way — a number
-  someone can see is worth more than a threshold they cannot.
+  money rests on. Below a set level, paying is not available. A named fact the merchant can supply
+  becomes an information request; uncertainty with no concrete merchant resolution goes to the
+  representative (FR-1.15). The figure is shown to a representative either way — a number someone
+  can see is worth more than a threshold they cannot.
 - **Each product is judged on its own.** A poorly evidenced product cannot drag down a
   well-evidenced one, and a strong one cannot carry a weak one (FR-1b.3). One product can be
   recommended for payment while its neighbour is waiting on a photograph.
@@ -1408,7 +1411,10 @@ calls, and image analysis are visible live without growing into a second report.
 result contains only canonical structured reports and their persistence status—never a second
 raw-investigation report. Each report contains
 the settled evidence, assessments, outcome, amount, context, concerns, attachment image URLs, and
-one drafted email; the UI owns their layout.
+one conditional email draft; the UI owns their layout. Its default report view shows only the
+decision, confidence, approved amount or immediate next request, and a short reason. Labelled
+expanders hold reasoning, concerns, images, evidence, assessments, context, and amount working, so
+the full record stays checkable without becoming the first thing a representative must read.
 
 **Where the code is** — `src/claim_agent/agent/events.py` defines progress, while
 `src/claim_agent/api/routes/investigate.py` emits the final report result and
@@ -1576,9 +1582,9 @@ the figures out, `src/claim_agent/api/routes/analysis.py` is the way in, and
 
 ### The report a representative decides from
 
-**What it does** — Turns everything an investigation established into one written report, keeps
-it, and lets a representative approve it or send it back. Until now the work was done and then
-thrown away when the reply ended. Now it is written down, and a person can act on it.
+**What it does** — Turns everything an investigation established into one structured report,
+keeps it, and lets a representative approve it or send it back. Until now the work was done and
+then thrown away when the reply ended. Now it is written down, and a person can act on it.
 
 **Why we need it** — This is the moment the system hands over. A representative reads the report
 and decides; nothing reaches a merchant and no money moves until they do (FR-2.1 to FR-2.10). It
@@ -1589,11 +1595,10 @@ that exists (FR-C.1, FR-R.13).
 **How it works**
 
 1. A claim is investigated exactly as before. Nothing about the investigation changes.
-2. When it finishes, each damaged product's findings are written into a **report** — a written
-   document a person reads, in the order they need it: what is recommended and for how much,
-   what is worrying, what the claim is worth and what this merchant was corrected about before,
-   then the four pieces of evidence, the four questions, the working behind the figure, and last
-   the exact email that would go to the merchant.
+2. When it finishes, each damaged product's findings are written into a structured **report**.
+   The default view leads with the next action, confidence, and amount or immediate request.
+   Supporting reasoning, concerns, images, evidence, questions, context, and amount working are
+   grouped under labelled expanders. Any applicable merchant email is a separate second output.
 3. A claim the quick checks stopped is written up the same way, from its own reasons. It has no
    products in it, so its report is about the whole claim rather than one product.
 4. Each report is filed under the claim it belongs to and can be fetched back afterwards. Closing
@@ -1611,17 +1616,14 @@ stage that sends an approved email does not exist yet, so an approval stops at b
 
 **Choices we made**
 
-- **The report is a written document, not a set of fields.** The AI already answers in fixed
-  fields, and a plain function turns those into the document. That was asked for, and it means
-  what a representative reads is one thing they can copy to somebody else. The cost is real and
-  worth stating: a screen can no longer lay out the parts on its own, because there are no parts
-  to lay out — the requirement asking for structured data rather than prose is knowingly not met.
-- **A few facts sit outside the document.** Which claim it is, which product, what is
-  recommended, how much, how sure the system was, what the order was worth, who carried the
-  parcel, what the merchant said was wrong, and whether it has been approved. The list of a
-  claim's reports needs the first few to draw a row, and the record of what a representative
-  decided needs the rest to say what they changed and to group decisions afterwards. Everything
-  else is in the writing.
+- **The report remains structured end to end.** Evidence, assessments, outcome, amount, concerns,
+  context, and attachments stay as typed fields that the UI lays out directly. There is no second
+  prose report and no Markdown parsing step. The applicable merchant email is stored separately
+  from the report content and rendered once.
+- **The default view is intentionally small.** It contains what the representative needs to act:
+  next action, confidence, approved amount or immediate request, and a short reason. Complete
+  supporting detail remains one click away in labelled sections rather than inside a nested
+  scrolling document.
 - **What the merchant said was wrong is read out of their own description**, using the reader
   built for exactly that alongside this. It is what they said, never checked, and the report does
   not weigh it — it is kept because it is one of the few things about a claim known before

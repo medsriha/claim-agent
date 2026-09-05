@@ -182,7 +182,7 @@ export function transcriptFor(
       messages.push({
         id: "precedent",
         speaker: "system",
-        label: "Similar claims handled before",
+        label: "Similar claims",
         body: {
           kind: "precedent",
           found: precedent.found,

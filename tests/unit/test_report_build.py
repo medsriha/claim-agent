@@ -11,6 +11,7 @@ from tests.unit.test_report_render import a_context, a_line, a_stopped_claim
 
 from claim_agent.agent.budget import BudgetSnapshot
 from claim_agent.agent.run import ClaimInvestigation
+from claim_agent.agent.schemas import ClaimSplit
 from claim_agent.agent.triage import ClaimTriage
 from claim_agent.domain.claim_line import ClaimedProduct, build_claim_lines
 from claim_agent.domain.decision import DecisionStage
@@ -217,8 +218,8 @@ def test_a_run_that_never_concluded_reports_no_confidence_rather_than_low_confid
     assert report.confidence is None
 
 
-def test_a_split_that_could_not_be_settled_produces_a_claim_clarification_report() -> None:
-    """An ambiguous split asks the rep for clarification and never drafts merchant email."""
+def test_an_internal_split_ambiguity_produces_a_rep_clarification_report() -> None:
+    """An ambiguity without a concrete merchant request stays with the representative."""
     investigation = ClaimInvestigation(
         case_id=CASE.case_id,
         triage=a_triage().model_copy(update={"ambiguity": "Two products look alike."}),
@@ -231,6 +232,59 @@ def test_a_split_that_could_not_be_settled_produces_a_claim_clarification_report
     assert report.claim_line_id is None
     assert report.drafted_email is None
     assert report.content.kind == "clarification"
+
+
+def test_a_merchant_resolvable_split_requests_details_and_drafts_the_email() -> None:
+    """An ambiguous split goes to the merchant when the agent knows exactly what to ask."""
+    detail = "a clear photograph showing the damaged bottle's front label"
+    split = ClaimSplit(
+        is_ambiguous=True,
+        ambiguity="The photograph could show either of two 24oz bottles.",
+        requested_details=(detail,),
+        email_subject="More information needed for your claim",
+        email_body=f"Please send {detail}.",
+        reasoning="The label is not legible.",
+        confidence=0.4,
+    )
+    investigation = ClaimInvestigation(
+        case_id=CASE.case_id,
+        triage=a_triage().model_copy(update={"ambiguity": split.ambiguity, "split": split}),
+        lines=(),
+    )
+
+    (report,) = build_investigation_reports(a_passing_screening(), investigation, at=A_MOMENT)
+
+    assert report.recommendation is Recommendation.REQUEST_INFO
+    assert report.claim_line_id is None
+    assert report.drafted_email is not None
+    assert detail in report.drafted_email.body
+    assert report.content.kind == "clarification"
+    assert report.content.requested_details == (detail,)
+
+
+def test_an_unsafe_split_email_falls_back_to_the_representative() -> None:
+    """Unsafe merchant wording is never surfaced merely because the split requested details."""
+    split = ClaimSplit(
+        is_ambiguous=True,
+        ambiguity="The photograph does not identify the bottle.",
+        requested_details=("a clear photograph of the bottle's front label",),
+        email_subject="More information needed",
+        email_body="Please send a clearer image; the possible item costs $12.99.",
+        reasoning="The label is unreadable.",
+        confidence=0.4,
+    )
+    investigation = ClaimInvestigation(
+        case_id=CASE.case_id,
+        triage=a_triage().model_copy(update={"ambiguity": split.ambiguity, "split": split}),
+        lines=(),
+    )
+
+    (report,) = build_investigation_reports(a_passing_screening(), investigation, at=A_MOMENT)
+
+    assert report.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert report.drafted_email is None
+    assert report.content.kind == "clarification"
+    assert report.content.requested_details == ()
 
 
 # --- The same findings always produce the same report (NFR-1) ----------------

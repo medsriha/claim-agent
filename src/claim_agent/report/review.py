@@ -117,7 +117,11 @@ def approve(
                 "state": ReportState.APPROVED,
                 "decided": settled,
                 "decisions_taken": sequence + 1,
-                "drafted_email": _the_email_that_stands(report, edited_email),
+                "drafted_email": _the_email_that_stands(
+                    report,
+                    edited_email,
+                    settled=settled,
+                ),
                 "reviews": (
                     *report.reviews,
                     _review_entry(
@@ -318,7 +322,10 @@ def _over_the_cap_by(settled: Proposal, *, policy: Policy | None) -> Decimal | N
 
 
 def _the_email_that_stands(
-    report: Report, edited_email: EmailWording | None
+    report: Report,
+    edited_email: EmailWording | None,
+    *,
+    settled: Proposal,
 ) -> DraftedEmail | None:
     """The merchant's email as it stands after an approval.
 
@@ -326,8 +333,18 @@ def _the_email_that_stands(
     the claim's own contact address and is not a representative's to change (FR-3.2). A report
     with nothing to send stays with nothing to send — there is no address to reword an email to.
     """
-    if edited_email is None or report.drafted_email is None:
-        return report.drafted_email
-    return report.drafted_email.model_copy(
-        update={"subject": edited_email.subject, "body": edited_email.body}
+    if report.drafted_email is None:
+        return None
+    email = (
+        report.drafted_email
+        if edited_email is None
+        else report.drafted_email.model_copy(
+            update={"subject": edited_email.subject, "body": edited_email.body}
+        )
     )
+    if settled.outcome is Recommendation.APPROVE and settled.amount_usd is not None:
+        return email.with_approved_amount(
+            settled.amount_usd,
+            previous_amount_usd=report.amount_usd,
+        )
+    return email

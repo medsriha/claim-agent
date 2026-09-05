@@ -28,8 +28,8 @@ others** (FR-1b.4). Three things make that true rather than hoped for:
   neither may be given one.
 
 **The model proposes a figure; it never writes one into merchant wording.** Code reads
-the proposed amount as an exact decimal, applies the cap, and substitutes the resulting
-approved amount into an approval email (FR-1.21). The only money in a finished email is
+the proposed amount as an exact decimal, applies the cap, and adds the resulting approved
+amount to the approval email (FR-1.21). The only money in a finished email is
 therefore the checked amount a representative can verify.
 
 **Every failure ends in front of a person** (NFR-4). A run that used up its steps, a

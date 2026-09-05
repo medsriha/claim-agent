@@ -5,7 +5,6 @@ import { approveReport, sendReportBack } from "../api/reportsClient";
 import { ApiFailure } from "../api/failure";
 import type { DraftedEmail, Report, ReportReview } from "../api/types";
 import { formatMoney, humanise } from "../display";
-import { PAGE_WORDS } from "../chat/pageWords";
 import { StructuredReport } from "./LineReport";
 import { Spinner } from "./Spinner";
 
@@ -75,9 +74,7 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
       {unavailableReason !== null ? (
         <p className="report-problem">{unavailableReason}</p>
       ) : settled ? (
-        <p className="report-settled">
-          Approved. {PAGE_WORDS.nothingActsOnAnApproval}
-        </p>
+        <p className="report-settled">Email sent.</p>
       ) : (
         <div className="report-actions">
           <label className="report-field">
@@ -93,21 +90,23 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
           </label>
 
           <div className="report-buttons">
-            <button
-              type="button"
-              className="button-primary"
-              disabled={busy !== null}
-              onClick={() =>
-                void act("approving", () =>
-                  approveReport(current.report_id, {
-                    ...(reworded ? { email: { subject, body } } : {}),
-                  }),
-                )
-              }
-            >
-              {busy === "approving" ? <Spinner /> : null}
-              {reworded ? "Reword and approve" : "Approve"}
-            </button>
+            {current.recommendation !== "request_rep_clarification" && (
+              <button
+                type="button"
+                className="button-primary"
+                disabled={busy !== null}
+                onClick={() =>
+                  void act("approving", () =>
+                    approveReport(current.report_id, {
+                      ...(reworded ? { email: { subject, body } } : {}),
+                    }),
+                  )
+                }
+              >
+                {busy === "approving" ? <Spinner /> : null}
+                Send Email
+              </button>
+            )}
             <button
               type="button"
               className="button-secondary"
@@ -120,8 +119,6 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
               Send back
             </button>
           </div>
-
-          <p className="report-note">{PAGE_WORDS.nothingActsOnAnApproval}</p>
         </div>
       )}
 

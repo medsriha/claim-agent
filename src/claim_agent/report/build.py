@@ -13,12 +13,15 @@ produce the same reports twice (NFR-1).
 
 from __future__ import annotations
 
+from claim_agent.agent.email import finish_email
 from claim_agent.agent.investigate import LineInvestigation
 from claim_agent.agent.run import ClaimInvestigation
 from claim_agent.domain.case_facts import read_case_facts
 from claim_agent.domain.decision import DecisionStage
 from claim_agent.domain.models import Attachment, Case, UtcDatetime
 from claim_agent.domain.outcome import Recommendation
+from claim_agent.errors import ModelOutputRejectedError
+from claim_agent.observability import get_logger
 from claim_agent.preflight.models import ClaimContext, PreflightResult
 from claim_agent.report.models import (
     ClaimView,
@@ -29,6 +32,8 @@ from claim_agent.report.models import (
     ScreeningReportContent,
     SiblingLine,
 )
+
+logger = get_logger(__name__)
 
 
 def report_id_for_claim(case_id: str) -> str:
@@ -114,8 +119,9 @@ def build_investigation_reports(
 
     **A claim whose split could not be settled produces one claim-level clarification report.**
     Nothing was established about any product, because nothing may be investigated while it is
-    unclear which products are being claimed for (FR-1a.4). The report therefore names the
-    ambiguity and asks the representative to clarify it without inventing a product or an email.
+    unclear which products are being claimed for (FR-1a.4). The report names the ambiguity and
+    asks the merchant for concrete missing details when they can resolve it; otherwise it asks
+    the representative. Neither path invents a product.
 
     Args:
         screening: What the quick checks established, read for the claim itself and for the facts
@@ -149,10 +155,35 @@ def _claim_clarification(
     *,
     at: UtcDatetime,
 ) -> Report:
-    """Report an unsettled or incorrect claim split without drafting a merchant email."""
+    """Report an unsettled split, asking the merchant when they can resolve it."""
     described = read_case_facts(screening.record.case)
     triage = investigation.triage
     ambiguity = triage.ambiguity or "The investigation could not establish a claimable product."
+    requested_details = triage.split.requested_details if triage.split is not None else ()
+    recommendation = Recommendation.REQUEST_REP_CLARIFICATION
+    drafted_email = None
+    report_details: tuple[str, ...] = ()
+    concerns = (ambiguity, *investigation.claim_concerns)
+
+    if requested_details and triage.split is not None:
+        try:
+            drafted_email = finish_email(
+                triage.split,
+                recommendation=Recommendation.REQUEST_INFO,
+                amount=None,
+                contact_email=screening.record.case.contact_email,
+                requested_details=requested_details,
+            )
+        except ModelOutputRejectedError as refused:
+            logger.warning(
+                "claim_split_email_refused",
+                case_id=screening.case_id,
+            )
+            concerns = (ambiguity, refused.message, *investigation.claim_concerns)
+        else:
+            recommendation = Recommendation.REQUEST_INFO
+            report_details = requested_details
+
     return Report(
         report_id=report_id_for_claim(screening.case_id),
         version=1,
@@ -163,7 +194,7 @@ def _claim_clarification(
         user_id=screening.record.case.user_id,
         stage=DecisionStage.INVESTIGATION,
         state=ReportState.AWAITING_REVIEW,
-        recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
+        recommendation=recommendation,
         amount_usd=None,
         confidence=triage.split.confidence if triage.split is not None else None,
         carrier=_carrier(screening),
@@ -172,13 +203,14 @@ def _claim_clarification(
         order_value_usd=screening.context.order_value_usd,
         decided=None,
         decisions_taken=0,
-        drafted_email=None,
+        drafted_email=drafted_email,
         content=ClarificationReportContent(
             context=screening.context,
             attachments=triage.attachments,
             candidate_lines=triage.claim_lines,
             ambiguity=ambiguity,
-            concerns=(ambiguity, *investigation.claim_concerns),
+            concerns=concerns,
+            requested_details=report_details,
         ),
         created_at=at,
     )

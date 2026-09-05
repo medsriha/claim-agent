@@ -317,3 +317,27 @@ class DraftedEmail(BaseModel):
     subject: str
     body: str
     is_draft: Literal[True] = True
+
+    def with_approved_amount(
+        self,
+        amount_usd: Decimal,
+        *,
+        previous_amount_usd: Decimal | None = None,
+    ) -> DraftedEmail:
+        """Return final approval wording containing the exact amount and no placeholder.
+
+        New model output contains no amount, so the usual path appends one short line.
+        The replacements keep older stored drafts and a rep editing older wording safe.
+        When a rep changes the approved figure, the prior checked figure is replaced too.
+        """
+        figure = f"${amount_usd.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
+        subject = self.subject.replace("{{amount}}", figure)
+        body = self.body.replace("{{amount}}", figure)
+        if previous_amount_usd is not None:
+            previous = f"${previous_amount_usd.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
+            if previous != figure:
+                subject = subject.replace(previous, figure)
+                body = body.replace(previous, figure)
+        if figure not in subject and figure not in body:
+            body = f"{body.rstrip()}\n\nApproved amount: {figure}"
+        return self.model_copy(update={"subject": subject, "body": body})

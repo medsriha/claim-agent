@@ -412,17 +412,21 @@ def test_an_approval_whose_amount_comes_to_nothing_is_refused() -> None:
         )
 
 
-def test_an_approval_email_that_never_mentions_the_amount_is_refused() -> None:
-    """An approval email must communicate the exact amount the report approved."""
+def test_the_capped_amount_is_added_when_the_model_writes_no_placeholder() -> None:
+    """The model writes approval wording; code adds the exact amount after the cap."""
     conclusion = a_conclusion(body="We have approved your claim and a credit is on its way.")
 
-    with pytest.raises(ModelOutputRejectedError):
-        finish_email(
-            conclusion,
-            recommendation=Recommendation.APPROVE,
-            amount=an_amount("52.00"),
-            contact_email="ops@merchant.example",
-        )
+    email = finish_email(
+        conclusion,
+        recommendation=Recommendation.APPROVE,
+        amount=an_amount("52.00"),
+        contact_email="ops@merchant.example",
+    )
+
+    assert email.body == (
+        "We have approved your claim and a credit is on its way.\n\nApproved amount: $52.00"
+    )
+    assert AMOUNT_PLACEHOLDER not in email.body
 
 
 def test_a_request_that_needs_no_figure_is_finished_untouched() -> None:

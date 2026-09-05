@@ -1251,6 +1251,33 @@ p {
   font-size: 0.9rem;
 }
 
+.line-priority {
+  margin: 0.65rem 0;
+  padding: 0.65rem 0.75rem;
+  background: var(--sb-surface);
+  border: 1px solid var(--sb-line);
+  border-left: 3px solid var(--sb-brand);
+  border-radius: var(--sb-radius-small);
+}
+
+.line-priority .line-section {
+  margin-top: 0;
+  color: var(--sb-ink-soft);
+}
+
+.line-key-finding,
+.line-detail-copy {
+  margin: 0;
+  color: var(--sb-ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.line-detail-copy {
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+}
+
 .line-section {
   margin: 0.7rem 0 0.3rem;
   font-size: 0.78rem;
@@ -1850,10 +1877,8 @@ p {
   color: var(--sb-flag);
 }
 
-/* The report, held apart from the controls and capped so it does not push the buttons away. */
+/* The report is compact by default; its supporting sections expand in place when needed. */
 .report-document {
-  max-height: 26rem;
-  overflow-y: auto;
   margin: 0.8rem 0;
   padding: 0.8rem;
   background: var(--sb-canvas);

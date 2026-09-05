@@ -82,7 +82,7 @@ from claim_agent.agent.ledger import RunLedger, StepKind
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.prompts import build_image_classification_messages, quote_untrusted
-from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, DamagedItem, ImageObservation
+from claim_agent.agent.schemas import DamagedItem, ImageObservation
 from claim_agent.domain.case_facts import read_case_facts
 from claim_agent.domain.claim_line import ClaimedProduct
 from claim_agent.domain.currency import convert_to_usd, currency_for_claim
@@ -353,8 +353,8 @@ class AmountCheck(ToolOutcome):
     here could carry an amount at all — the arithmetic produced the figure and a model
     that had seen one could copy it into a merchant email. The model now produces the
     figure itself, so hiding it here would achieve nothing. The guarantee that remains is
-    at the other end: the email carries a marker, and code substitutes the *capped* amount
-    into it, so what reaches a merchant is the figure that survived the cap.
+    at the other end: the model leaves money out of the email and code adds the *capped*
+    amount, so what reaches a merchant is the figure that survived the cap.
 
     `capped` says the proposal was above the limit and `recommended_usd` is what it became.
     `items_total_usd` is what the products cost, which is context and not a limit — a claim
@@ -1078,8 +1078,8 @@ async def _amount_check(
 
     **It shows figures, unlike every earlier version of this tool.** That is the reversal
     of FR-1.21 — the model produces the amount now, so withholding one here would protect
-    nothing. What still holds is that the email carries a marker and code substitutes the
-    capped figure into it, so no number the model wrote reaches a merchant.
+    nothing. What still holds is that the model leaves money out of the email and code adds
+    the capped figure afterwards, so no number the model wrote reaches a merchant.
 
     An item that is on no invoice line, or that could be either of two, prices nothing at
     all: narrowing two candidates to one is the judgement this system is not allowed to
@@ -1186,8 +1186,8 @@ async def _amount_check(
             succeeded=True,
             summary=(
                 f"{summary} Those products cost {derivation.items_total_usd} on invoice "
-                f"{invoice.invoice_id}. Write {AMOUNT_PLACEHOLDER} where an amount belongs "
-                "in the email — the figure is put in after the cap has been applied."
+                f"{invoice.invoice_id}. Do not write an amount or placeholder in the email — "
+                "the capped figure is added after you answer."
             ),
             priced_products=priced_products,
             priced_from=invoice.invoice_id,

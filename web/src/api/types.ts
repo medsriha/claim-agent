@@ -418,7 +418,7 @@ export interface ScreeningReportContent {
   readonly requires_rep_clarification: boolean;
 }
 
-/** Claim-level findings that need the representative, never the merchant, to clarify them. */
+/** Claim-level findings for an unresolved product split. */
 export interface ClarificationReportContent {
   readonly kind: "clarification";
   readonly context: ClaimContext;
@@ -426,6 +426,7 @@ export interface ClarificationReportContent {
   readonly candidate_lines: readonly ClaimLine[];
   readonly ambiguity: string;
   readonly concerns: readonly string[];
+  readonly requested_details: readonly string[];
 }
 
 export type ReportContent =

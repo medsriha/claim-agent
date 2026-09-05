@@ -37,17 +37,4 @@ export const PAGE_WORDS = {
     "The past claims could not be looked up, so nothing is known about how similar claims " +
     "were handled. This is not the same as there being none.",
 
-  /**
-   * Shown beside the buttons that approve a report or send one back.
-   *
-   * Both actions are real and both are recorded. What does not happen is everything after:
-   * no email is sent and no money moves, because the stage that would do either is not
-   * built. The service cannot say this about itself — it answers with a report, and a
-   * report has no way to describe what the rest of the system does not do — so the screen
-   * owns the sentence. It is the one place a representative is told that approving here is
-   * not the same as a merchant hearing anything.
-   */
-  nothingActsOnAnApproval:
-    "Approving is recorded and nothing else happens: no email is sent to the merchant and " +
-    "no money moves, because the stage that would do either does not exist yet.",
 } as const;

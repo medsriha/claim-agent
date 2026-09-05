@@ -43,7 +43,7 @@ from claim_agent.agent.images import ImageFetcher
 from claim_agent.agent.ledger import RunLedger, StepKind
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.observations import ObservationCache
-from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, ImageObservation
+from claim_agent.agent.schemas import ImageObservation
 from claim_agent.agent.tools import (
     CHECK_CURRENCY,
     CHECK_DOCUMENT_TOTALS,
@@ -687,8 +687,7 @@ async def test_the_amount_check_never_tells_the_model_what_the_figure_is(
     here would protect nothing when the model produced it.
 
     The guarantee that remains is at the other end and is asserted below: the sentence
-    still tells the run to write the marker in the email, so no figure of the model's own
-    reaches a merchant.
+    tells the run to leave the amount out of the email so only the capped figure is added.
     """
     serve_the_claim(api)
     run = build_run(shipbob_http, images_http)
@@ -712,7 +711,7 @@ async def test_the_amount_check_never_tells_the_model_what_the_figure_is(
     assert check.items_total_usd == "52.00"
     assert check.capped is False
     # The one rule about money that did not change with FR-1.21.
-    assert AMOUNT_PLACEHOLDER in said(message)
+    assert "Do not write an amount or placeholder in the email" in said(message)
 
 
 async def test_the_amount_check_says_when_a_figure_is_over_the_cap(
