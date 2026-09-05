@@ -16,6 +16,7 @@ const HEADINGS: Record<FailureKind, string> = {
   not_found: "No such claim",
   upstream_unavailable: "ShipBob could not be read",
   invalid_request: "The service would not accept that",
+  storage_unavailable: "What the service keeps could not be read",
   unreachable: "The claims service is not answering",
   unexpected: "Something went wrong",
 };

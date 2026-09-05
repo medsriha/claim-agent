@@ -14,6 +14,9 @@
  * - `upstream_unavailable` — ShipBob could not be read. Nothing is wrong with the claim.
  * - `invalid_request` — the service refused what was sent. Only the policy panel can
  *   cause this, by submitting a value the claim policy will not accept.
+ * - `storage_unavailable` — what the service keeps for itself could not be read. Kept apart
+ *   from `upstream_unavailable` because that one names ShipBob, and saying ShipBob is down
+ *   when it is the service's own store would send somebody looking in the wrong place.
  * - `unreachable` — the claims service itself did not answer.
  * - `unexpected` — anything else, kept separate rather than guessed at.
  */
@@ -21,6 +24,7 @@ export type FailureKind =
   | "not_found"
   | "upstream_unavailable"
   | "invalid_request"
+  | "storage_unavailable"
   | "unreachable"
   | "unexpected";
 
@@ -156,6 +160,9 @@ function kindOf(code: string): FailureKind {
   }
   if (code === "invalid_request") {
     return "invalid_request";
+  }
+  if (code === "storage_unavailable") {
+    return "storage_unavailable";
   }
   return "unexpected";
 }

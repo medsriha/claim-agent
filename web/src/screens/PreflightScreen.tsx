@@ -5,7 +5,7 @@
  * answer is fetched first, and only then are the findings played out one at a time, because
  * starting earlier could put "read the parcel ✓" on screen for a read that had not finished
  * or had just failed. The investigation is not a replay — it genuinely reports as it works,
- * and each thing it says is added the moment the service says it.
+ * and its latest action replaces the previous one in a compact activity banner.
  *
  * What that leaves invented is worth being exact about, because it used to be everything.
  * The steps are real, their order is real, and their wording is the service's. What is
@@ -98,11 +98,11 @@ async function lookUpPrecedent(result: PreflightResult): Promise<PrecedentLookup
 }
 
 /**
- * Ask for the claim to be investigated, and add what the service says as it says it.
+ * Ask for the claim to be investigated, and show what the service says as it says it.
  *
- * This is the one place on the screen where messages arrive rather than being laid out.
- * Each one is appended the moment it comes in; the conversation's own pacing then draws it
- * in turn, which is why a step can appear a moment after it happened.
+ * This is the one place on the screen where a message changes in place rather than being
+ * laid out from a finished answer. Only the newest progress action is retained, so the
+ * stream cannot fill the conversation with narration while the useful report is arriving.
  *
  * **A failure never throws away what already arrived.** The screening is on screen and a
  * representative can use it, so a stream that breaks part-way adds what went wrong and
@@ -132,6 +132,23 @@ async function investigate(
     );
   };
 
+  const showLatestAction = (message: TranscriptMessage): void => {
+    setConversation((current) =>
+      current === null || current.caseId !== caseId
+        ? current
+        : {
+            ...current,
+            // The activity banner is the one step message in the conversation. Replacing
+            // it also gives the new action a new key, so it starts collapsed each time.
+            messages: [
+              ...current.messages.filter((one) => one.body.kind !== "step"),
+              message,
+            ],
+            working: true,
+          },
+    );
+  };
+
   try {
     await investigateCase(caseId, (message) => {
       switch (message.kind) {
@@ -139,7 +156,7 @@ async function investigate(
           // The screening was already said, at the top of the conversation, from the
           // request that fetched it. Saying it again would read as it having happened twice.
           if (message.event.kind !== "screened") {
-            add([stepMessage(message.event, (id) => productNames.get(id) ?? null)], true);
+            showLatestAction(stepMessage(message.event, (id) => productNames.get(id) ?? null));
           }
           return;
 

@@ -198,20 +198,24 @@ export function transcriptFor(
     });
   });
 
-  messages.push({
-    id: "verdict",
-    speaker: "system",
-    label: "The decision",
-    body: {
-      kind: "verdict",
-      caseId: result.case_id,
-      verdict: result.verdict,
-      // Handed on exactly as they arrived. The first reason names the merchant email's
-      // subject line, so sorting these on screen would misrepresent which one it leads with.
-      reasons: [...result.terminal_reasons],
-      evaluatedAt: result.evaluated_at,
-    },
-  });
+  // A passing claim moves straight from its checks to the next useful information. Only a
+  // stopped claim needs a decision banner calling attention to the terminal outcome.
+  if (result.verdict === "terminal") {
+    messages.push({
+      id: "verdict",
+      speaker: "system",
+      label: "The decision",
+      body: {
+        kind: "verdict",
+        caseId: result.case_id,
+        verdict: result.verdict,
+        // Handed on exactly as they arrived. The first reason names the merchant email's
+        // subject line, so sorting these would misrepresent which one it leads with.
+        reasons: [...result.terminal_reasons],
+        evaluatedAt: result.evaluated_at,
+      },
+    });
+  }
 
   // A stopped claim is owed an explanation, so the service writes one up and drafts the
   // email. A claim that passes carries neither, because there is nothing to explain yet.
