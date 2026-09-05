@@ -69,6 +69,7 @@ from claim_agent.agent.schemas import (
     EvidenceJudgement,
     RevisedClaimReport,
     RevisionConclusion,
+    SettledProduct,
 )
 from claim_agent.agent.tools import investigation_tools
 from claim_agent.domain.assessment import Assessment
@@ -239,16 +240,20 @@ class ClaimRevision(Reply):
             this is applied whenever anything else about the report changed.
         email: The merchant's email as it should now read, or `None` to leave the wording
             alone.
-        reinvestigate: Whether the claim should be investigated again from its evidence. Set
-            when what the representative said settles enough to make that worth doing — most
-            often naming the damaged products — or when they asked for it outright. The
-            caller runs the investigation; nothing here does.
+        settled: The products a representative has just told the agent this claim is for. Each
+            becomes a claim line the caller looks into on its own, which is what turns a claim
+            nobody could split into one with a figure on it — at one pass per product rather
+            than the whole claim over again (FR-1a.4).
+        reinvestigate: Whether the whole claim should be investigated again from its evidence.
+            Set only when the representative asks for exactly that; naming a product is
+            `settled`, which is far quicker. The caller runs it; nothing here does.
     """
 
     recommendation: Recommendation | None = None
     ambiguity: str | None = None
     requested_details: tuple[str, ...] = ()
     email: DraftedEmail | None = None
+    settled: tuple[SettledProduct, ...] = ()
     reinvestigate: bool = False
 
     @property
@@ -625,7 +630,11 @@ async def rework_claim_report(
         # or because it is asking for the claim to be investigated instead. Carrying the report
         # through untouched matters: filling in what the model left blank would drop a merchant
         # email nobody asked to drop.
-        return ClaimRevision(**said.model_dump(), reinvestigate=answered.needs_fresh_investigation)
+        return ClaimRevision(
+            **said.model_dump(),
+            settled=answered.settled_products,
+            reinvestigate=answered.needs_fresh_investigation,
+        )
 
     email = _the_merchant_email(
         answered, contact_email=case_record.case.contact_email, existing=drafted_email
@@ -647,6 +656,7 @@ async def rework_claim_report(
         # representative to resolve something carries no merchant wording, here as everywhere
         # else (FR-2.7).
         email=email if asks_the_merchant else None,
+        settled=answered.settled_products,
         reinvestigate=answered.needs_fresh_investigation,
     )
 

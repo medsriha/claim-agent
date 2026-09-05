@@ -543,6 +543,11 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
   merchant (FR-R.14). What is still missing is FR-C.2's other writer — a correction derived from
   an approval that *differed* from the recommendation — so a representative who silently approves
   at a different figure still teaches the system nothing.
+  - **Be aware:** the store can now be emptied from the admin panel, for demonstrations
+    (`POST /admin/corrections/forget`). It destroys real history with no undo and no sign-in in
+    front of it, which is written up in DESIGN.md. Nothing forgets a *single* correction, and
+    nothing should: choosing which of a representative's corrections to lose is a judgement
+    nobody has specified.
 
 ## Claim precedent — finding similar past claims
 

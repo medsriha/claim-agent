@@ -36,6 +36,8 @@ INSERT INTO rep_corrections (user_id, case_id, summary, recorded_at)
 VALUES (?, ?, ?, ?)
 """
 
+_DELETE_ALL = "DELETE FROM rep_corrections"
+
 
 class MerchantMemory:
     """Reads and writes the corrections held against a merchant.
@@ -125,6 +127,29 @@ class MerchantMemory:
                     _to_stored_text(correction.recorded_at.astimezone(UTC)),
                 ),
             )
+
+    def forget_everything(self) -> int:
+        """Remove every correction held against every merchant, and say how many went.
+
+        **This exists for demonstrations and for nothing else.** The system is meant never to
+        forget what a representative corrected — that is the whole point of the store, and the
+        next claim from a merchant is supposed to start knowing it. Somebody showing the system
+        needs to start from nothing, though, and doing that by hand means reaching into the
+        database, which is worse than a named method that says plainly what it is for.
+
+        There is deliberately no way to remove *one* correction. Choosing which of a
+        representative's corrections to forget is a judgement nobody has specified, and an
+        interface that allowed it would invite quietly deleting an inconvenient one.
+
+        Returns:
+            How many corrections were removed. Zero when there were none, which is ordinary.
+
+        Raises:
+            StorageError: The database could not be reached or written.
+        """
+        initialise(self._database_path)
+        with connect(self._database_path) as connection:
+            return int(connection.execute(_DELETE_ALL).rowcount)
 
 
 def _to_correction(row: sqlite3.Row) -> MerchantCorrection:

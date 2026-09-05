@@ -4,8 +4,13 @@ Almost every threshold this system judges a claim by is a placeholder we invente
 so the code would run — only the $100 reimbursement cap is a real ShipBob figure.
 They all live in one file so they can be corrected without touching any logic, but
 until this existed, correcting one meant setting an environment variable and
-restarting the service. These three addresses let someone read the values, change
+restarting the service. Three of these addresses let someone read the values, change
 them, and put them back, and a change takes effect on the very next claim screened.
+
+**A fourth empties the merchant corrections**, so a demonstration can start from a system that
+remembers nothing. It is here rather than anywhere else because it is an operator's act on the
+running service, like a threshold change — and like one, it is undone by nobody, since the
+whole point of the store is that the system does not forget.
 
 **There is no sign-in.** Anyone who can reach these addresses can change what every
 claim after them is judged by, and nothing records who did it. That is the same
@@ -19,9 +24,9 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
-from claim_agent.admin.models import PolicyUpdate, PolicyView
+from claim_agent.admin.models import ForgottenCorrections, PolicyUpdate, PolicyView
 from claim_agent.admin.panel import describe_policy, revise_policy
-from claim_agent.api.deps import LivePolicyDep
+from claim_agent.api.deps import LivePolicyDep, MerchantMemoryDep
 from claim_agent.observability import get_logger
 
 logger = get_logger(__name__)
@@ -100,3 +105,31 @@ async def reset_policy(live: LivePolicyDep) -> PolicyView:
     live.reset()
     logger.info("claim_policy_reset")
     return describe_policy(live)
+
+
+@router.post("/corrections/forget", summary="Forget every correction held against a merchant")
+async def forget_corrections(memory: MerchantMemoryDep) -> ForgottenCorrections:
+    """Empty the store of what representatives have corrected, for every merchant (FR-3.8).
+
+    **This is a demonstration control, and it destroys real history.** Every claim after it is
+    screened and investigated as though no representative had ever corrected anything for that
+    merchant — which is the point when somebody wants to show the system learning from
+    nothing, and a genuine loss otherwise. There is no undo, no record of who did it, and no
+    sign-in in front of it.
+
+    It removes everything or nothing. Choosing which of a representative's corrections to
+    forget is a judgement nobody has specified, and offering it would invite quietly deleting
+    an inconvenient one.
+
+    Args:
+        memory: The store of what representatives have corrected (FR-0.5).
+
+    Returns:
+        How many corrections were removed. Zero is an ordinary answer: there were none.
+
+    Raises:
+        StorageError: The database could not be reached or written.
+    """
+    forgotten = memory.forget_everything()
+    logger.info("merchant_corrections_forgotten", forgotten=forgotten)
+    return ForgottenCorrections(forgotten=forgotten)

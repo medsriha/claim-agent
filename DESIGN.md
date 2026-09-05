@@ -868,6 +868,21 @@ same one place the panel writes to, which is what makes a change take effect imm
   or the system's own wording: the explanation under each threshold is the sentence written beside
   that threshold in the code, "PROVISIONAL" and all.
 
+- **The panel also forgets what representatives have corrected.** A second control, apart from
+  the form, empties the store of merchant corrections. It is there because a demonstration often
+  has to start from a system that remembers nothing, and the alternative was reaching into the
+  database by hand.
+
+  **It destroys real history and there is no undo.** Every claim after it is judged as though no
+  representative had ever corrected anything for that merchant. The screen carries a warning
+  saying exactly that, which is one of the few sentences on the whole demonstration that the
+  screen writes rather than the service — the service answers with a count, and what the count
+  *means* for later claims is the part worth warning about.
+
+  It removes everything or nothing. Choosing which of a representative's corrections to forget is
+  a judgement nobody has specified, and offering it would invite quietly deleting an inconvenient
+  one.
+
 **When things go wrong** — A value the service will not accept leaves the policy exactly as it
 was: the panel shows the service's own complaint under each value it rejected, and the form still
 holds what was typed so it can be corrected rather than typed again. An order that lists a
@@ -884,6 +899,11 @@ is stored, so a restart loses it. No confirmation step before a change that affe
 that follows. And it holds for one running copy of the service only: a second copy would carry on
 judging claims by its own values, which is the sort of split-brain that is very hard to see from
 either screen.
+
+The control that forgets merchant corrections is worse on every count, because what it destroys
+is real and permanent: no sign-in in front of it, no confirmation step, no record of who pressed
+it, and nothing to restore from. It exists for demonstrations and should not be reachable by
+anybody else.
 
 **Where the code is** — `src/claim_agent/live_policy.py` holds the policy in force,
 `src/claim_agent/admin/` turns it into what a panel needs and back again,
@@ -2497,17 +2517,26 @@ correction. Nothing it can reach is able to send an email or move money.
     reworded. Its verdict is arithmetic and no message can overturn one — but the agent says so
     itself, with the actual reason, which is what the requirement asks for rather than a canned
     refusal.
-- **Settling an unsettled claim has the claim investigated again.** When the representative's
-  message says which products were damaged — or simply asks for the claim to be investigated —
-  the agent says so, and the claim goes through a real investigation: the evidence is read again,
-  the claim is split again, and each product is judged from its photographs. That is the only
-  honest route from "we cannot tell which product" to "here is what to pay", because a figure can
-  only come from evidence somebody actually looked at.
-- **Their answer reaches that investigation through a channel that already existed.** A message is
-  written against the merchant the moment it is sent, and an investigation reads a merchant's
-  corrections as starting context. So nothing new had to be invented to get the representative's
-  answer in front of the split — the same mechanism that improves the merchant's *next* claim
-  improves this one.
+- **Naming a product costs one pass, not the whole claim over again.** When the representative
+  says which products were damaged, the agent puts them straight into the answer, each becomes a
+  claim line matched against the order, and each is looked into on its own — its photographs
+  read, its price taken from the order. Their instruction travels with it, so "the 24oz cleaner
+  is the one, refund it" comes back as an approved report with the figure on it.
+
+  **This was built the heavy way first and it was wrong.** The first version investigated the
+  whole claim again: re-reading every image, re-splitting the claim, re-judging every product.
+  On a claim nobody could split that very often fails to split it a *second* time — so a
+  representative who had just answered that exact question waited ninety seconds and got back
+  the same report, with the agent telling them it could not price a claim that had never been
+  investigated. Doing the least that answers them is not an optimisation here; it is the
+  difference between working and not.
+- **Investigating the whole claim again is still there, for when they ask for it.** It is the
+  slow path and it is now reached only by asking, never by naming a product.
+- **Their answer reaches the run through a channel that already existed.** A message is written
+  against the merchant the moment it is sent, and every run reads a merchant's corrections as
+  starting context. So nothing new had to be invented to get the representative's answer in
+  front of the work — the same mechanism that improves the merchant's *next* claim improves
+  this one.
 - **The note is shown to the agent inside a marked block**, like anything else the system did not
   write itself. The wording around it says what makes this block different: it is authoritative
   about what is wrong with the report, and still cannot change the rules.

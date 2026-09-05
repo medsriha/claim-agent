@@ -30,6 +30,7 @@ rather than an error page (NFR-4).
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -50,21 +51,28 @@ from claim_agent.agent.revise import (
 )
 from claim_agent.agent.run import investigate_claim
 from claim_agent.api.deps import ModelsFor
-from claim_agent.domain.claim_line import ClaimLine
+from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, build_claim_lines
 from claim_agent.domain.evidence import SHARED_EVIDENCE
-from claim_agent.domain.models import UtcDatetime, Verdict
+from claim_agent.domain.models import Attachment, UtcDatetime, Verdict
+from claim_agent.domain.outcome import Recommendation
+from claim_agent.domain.reimbursement import nothing_priced_yet
 from claim_agent.errors import ClaimAgentError, StorageError
 from claim_agent.observability import get_logger
 from claim_agent.policy import Policy
 from claim_agent.preflight.gather import gather_case_record
-from claim_agent.preflight.models import CaseRecord
+from claim_agent.preflight.models import CaseRecord, ClaimContext
 from claim_agent.preflight.service import run_preflight
-from claim_agent.report.build import build_investigation_reports, build_revised_report
+from claim_agent.report.build import (
+    build_investigation_reports,
+    build_revised_report,
+    report_for_one_product,
+)
 from claim_agent.report.models import (
     ClarificationReportContent,
     InvestigationReportContent,
     Report,
     ReportState,
+    ScreeningReportContent,
 )
 from claim_agent.shipbob.client import ShipBobClient
 from claim_agent.shipbob.evidence_client import EvidenceClient
@@ -176,6 +184,22 @@ async def answer_the_representative(
         policy=policy,
     )
 
+    if isinstance(answered, ClaimRevision) and answered.settled:
+        return await _look_into_what_they_settled(
+            parked,
+            answered,
+            feedback=feedback,
+            at=at,
+            record=record,
+            reports=reports,
+            evidence=evidence,
+            fetcher=fetcher,
+            chat=chat,
+            structured=structured,
+            precedent_store=precedent_store,
+            policy=policy,
+        )
+
     if isinstance(answered, ClaimRevision) and answered.reinvestigate:
         return await _investigate_the_claim_again(
             parked,
@@ -286,6 +310,144 @@ async def _ask_the_agent(
         structured=structured,
         events=EventStream(),
     )
+
+
+async def _look_into_what_they_settled(
+    parked: Report,
+    answered: ClaimRevision,
+    *,
+    feedback: str,
+    at: UtcDatetime,
+    record: CaseRecord,
+    reports: ReportStore,
+    evidence: EvidenceClient,
+    fetcher: ImageFetcher,
+    chat: BaseChatModel,
+    structured: StructuredModel,
+    precedent_store: PrecedentStore,
+    policy: Policy,
+) -> Written:
+    """Look into the products a representative just named, and nothing else (FR-1a.4).
+
+    **This is what a representative naming a product should cost: one pass per product.** The
+    heavy alternative — investigating the whole claim again — re-reads every image, re-splits
+    the claim and re-judges everything, and on a claim nobody could split it very often comes
+    back unable to split it a second time. A representative who has just answered that exact
+    question should not be made to wait for the system to fail at it again.
+
+    So their answer is turned straight into claim lines, matched against the order the way the
+    split would have matched them, and each one is investigated on its own. Their instruction
+    travels with it: if they said to pay the claim, the run comes back approved, with the
+    figure, because the rules that would withhold it encode the agent's uncertainty and they
+    have just corrected it.
+
+    The claim-level report is superseded rather than overwritten — its conversation is the
+    record of how this was reached (FR-R.13) — and each product's report is written beside it.
+    """
+    lines = build_claim_lines(
+        parked.case_id,
+        tuple(
+            ClaimedProduct(name=product.name, quantity=product.quantity, sku=product.sku)
+            for product in answered.settled
+        ),
+        record.order,
+    )
+    # Each product on its own, at the same time, exactly as an investigation does it: they need
+    # nothing from each other, and one slow product must not hold up a simple one (FR-1b.3).
+    #
+    # Each run fetches the priced invoice and reads the photographs for itself, because each
+    # builds its own memo of what it has looked at. On a claim of one product — which is what a
+    # representative naming one almost always means — that costs nothing; on several it pays
+    # for the same invoice more than once.
+    looked_into = await asyncio.gather(
+        *(
+            rework_line(
+                under_review=_nothing_established_yet(line, parked, ambiguity=answered.ambiguity),
+                feedback=feedback,
+                record=record,
+                evidence_client=evidence,
+                fetcher=fetcher,
+                chat=chat,
+                structured=structured,
+                events=EventStream(),
+                policy=policy,
+                precedent=precedent_for_line(
+                    store=precedent_store, case=record.case, line=line, policy=policy
+                ),
+            )
+            for line in lines
+        )
+    )
+
+    produced = _placed_beside_what_is_already_there(
+        tuple(
+            report_for_one_product(
+                line=done.investigation,
+                case=record.case,
+                carrier=record.shipment.carrier if record.shipment is not None else None,
+                context=_context_of(parked),
+                attachments=_attachments_of(parked),
+                at=at,
+            )
+            for done in looked_into
+            if done.investigation is not None
+        ),
+        reports=reports,
+    )
+
+    logger.info(
+        "settled_products_looked_into",
+        case_id=parked.case_id,
+        named=len(lines),
+        produced=len(produced),
+    )
+    return Written(
+        build_revised_report(
+            parked,
+            answered.model_copy(
+                update={"reply": _also(answered.reply, _what_it_produced(produced))}
+            ),
+            feedback=feedback,
+            at=at,
+            reinvestigated=True,
+        ),
+        alongside=produced,
+    )
+
+
+def _nothing_established_yet(
+    line: ClaimLine, parked: Report, *, ambiguity: str | None
+) -> ReportUnderReview:
+    """One product to look into, with an honest account of what is known about it: nothing.
+
+    A claim nobody could split was never investigated, so there are no findings to carry
+    forward and no figure to start from. Saying that plainly is better than seeding the run
+    with a blank report that looks like one somebody produced — the run reads what it is given
+    as a record of what was seen, and there is nothing to have seen.
+    """
+    return ReportUnderReview(
+        line=line,
+        context=_context_of(parked),
+        attachments=_attachments_of(parked),
+        recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
+        amount=nothing_priced_yet(),
+        concerns=(ambiguity,) if ambiguity else (),
+        conversation=what_has_been_said(parked),
+        siblings=(),
+    )
+
+
+def _context_of(report: Report) -> ClaimContext:
+    """The facts the deterministic screen worked out, whichever kind of report holds them."""
+    return report.content.context
+
+
+def _attachments_of(report: Report) -> tuple[Attachment, ...]:
+    """Every image on the claim, or none for a report that never listed any."""
+    content = report.content
+    if isinstance(content, ScreeningReportContent):
+        return ()
+    return content.attachments
 
 
 async def _investigate_the_claim_again(

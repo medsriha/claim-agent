@@ -139,7 +139,7 @@ def build_investigation_reports(
         return (_claim_clarification(screening, investigation, at=at),)
 
     return tuple(
-        _one_product(
+        report_for_one_product(
             line=line,
             case=screening.record.case,
             carrier=_carrier(screening),
@@ -218,7 +218,7 @@ def _claim_clarification(
     )
 
 
-def _one_product(
+def report_for_one_product(
     *,
     line: LineInvestigation,
     case: Case,
@@ -228,6 +228,10 @@ def _one_product(
     at: UtcDatetime,
 ) -> Report:
     """Write one damaged product's findings into a report.
+
+    Used both by an investigation writing up every product it looked into, and by a
+    representative naming a product on a claim nobody could split — the second produces exactly
+    the same kind of report, so it is written by exactly the same function (FR-1a.4).
 
     `confidence` is read off the investigation's own conclusion rather than worked out here. It is
     `None` when the run never reached one, which must not be read as low confidence: nothing was

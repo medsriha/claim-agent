@@ -153,3 +153,14 @@ class PolicyUpdate(BaseModel):
     """
 
     values: dict[str, str | bool | list[str]]
+
+
+class ForgottenCorrections(BaseModel):
+    """How many merchant corrections an operator has just thrown away.
+
+    A count rather than nothing at all, because "it worked" and "there was nothing there" look
+    identical on a screen otherwise, and somebody clearing a store before a demonstration wants
+    to know which of the two happened.
+    """
+
+    forgotten: int

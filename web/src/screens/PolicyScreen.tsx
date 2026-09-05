@@ -16,7 +16,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiFailure } from "../api/failure";
 import { FailureNotice } from "../components/FailureNotice";
 import { PolicyValueRow } from "../components/PolicyValueRow";
-import { fetchPolicy, resetPolicy, savePolicy } from "../api/policyClient";
+import { fetchPolicy, forgetCorrections, resetPolicy, savePolicy } from "../api/policyClient";
+import { PAGE_WORDS } from "../chat/pageWords";
 import { formatMoment } from "../display";
 import type { PolicyValue, PolicyView, SubmittedValues } from "../api/policyTypes";
 import type { ValueProblem } from "../api/failure";
@@ -166,7 +167,69 @@ export function PolicyScreen(): React.JSX.Element {
           </button>
         </div>
       </section>
+
+      <PastCorrections />
     </main>
+  );
+}
+
+/**
+ * Emptying the store of what representatives have corrected.
+ *
+ * Sits apart from the policy form because it is not a policy value: the form changes what
+ * later claims are judged by, and this throws away what the system has already learned. It is
+ * here because both are things an operator does to a service that is already running.
+ *
+ * It keeps its own state rather than sharing the form's. The two have nothing to do with each
+ * other, and a failure to forget must not read as a failure to save.
+ */
+function PastCorrections(): React.JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const [forgotten, setForgotten] = useState<number | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const forget = (): void => {
+    setBusy(true);
+    setFailure(null);
+    setForgotten(null);
+    forgetCorrections()
+      .then((answer) => {
+        setForgotten(answer.forgotten);
+      })
+      .catch((error: unknown) => {
+        setFailure(
+          error instanceof ApiFailure
+            ? error.message
+            : "This screen ran into a problem of its own.",
+        );
+      })
+      .finally(() => {
+        setBusy(false);
+      });
+  };
+
+  return (
+    <section className="panel">
+      <h2 className="panel-title">Past rep corrections</h2>
+      <p className="policy-note">{PAGE_WORDS.forgettingCorrections}</p>
+
+      <div className="policy-actions">
+        <button className="button-secondary" type="button" disabled={busy} onClick={forget}>
+          {busy ? "Working…" : "Forget them all"}
+        </button>
+      </div>
+
+      {forgotten !== null && (
+        <p className="policy-saved" role="status">
+          {forgotten === 0 ? "There were none to forget." : `Forgot ${String(forgotten)}.`}
+        </p>
+      )}
+      {failure !== null && (
+        <p className="policy-refusal" role="alert">
+          {failure}
+        </p>
+      )}
+    </section>
   );
 }
 

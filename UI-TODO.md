@@ -696,6 +696,19 @@ said back, what it changed, and what it deliberately left alone.
     conversation is waiting on the representative, because the service sends that as a flag and
     a flag cannot be read.
 
+- [x] UI-42 — Forgetting past rep corrections, from the admin panel.
+  - **What was built:** `POST /admin/corrections/forget`, `MerchantMemory.forget_everything`, and
+    a second section on `screens/PolicyScreen.tsx` apart from the policy form.
+  - **Conclusion:** a demonstration often has to start from a system that remembers nothing, and
+    the alternative was reaching into the database by hand. It answers with a count, so "it
+    worked" and "there was nothing there" are told apart.
+  - **Be aware:** it **destroys real history** and there is no undo, no confirmation step and no
+    sign-in in front of it. `chat/pageWords.ts` went to four sentences for the warning, because
+    the service answers with a count and what the count means for later claims is the part worth
+    warning about.
+  - **Be aware:** it is all or nothing. Forgetting one correction would be a judgement nobody has
+    specified, and offering it would invite quietly deleting an inconvenient one.
+
 - [ ] UI-41 — Tried in a browser.
   - **Not done.** The thread was driven through the real endpoints from the test suite, and the
     project builds, typechecks and lints clean. Nobody has watched a rework happen on screen. The

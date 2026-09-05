@@ -58,4 +58,15 @@ export const PAGE_WORDS = {
    * this says only that it happened, and never promises reports that may not exist.
    */
   investigatedAgain: "The whole claim was investigated again off the back of this.",
+
+  /**
+   * Shown beside the button that empties the merchant corrections, on the policy panel.
+   *
+   * The service has no sentence for this and could not sensibly have one: it answers with a
+   * count, and what the count *means* for every later claim is the thing worth warning about.
+   * It is a warning rather than a label, which is why it lives here.
+   */
+  forgettingCorrections:
+    "Every claim after this is judged as though no representative had ever corrected anything " +
+    "for that merchant. There is no undo, and nothing records who did it.",
 } as const;

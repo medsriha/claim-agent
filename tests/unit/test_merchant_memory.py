@@ -191,3 +191,24 @@ def test_a_database_path_that_cannot_be_used_is_reported_as_a_handled_failure(
 
     with pytest.raises(StorageError):
         memory.corrections_for(BEST_PAW_NUTRITION)
+
+
+# --- Starting a demonstration from nothing (development only) ----------------
+
+
+def test_forgetting_everything_empties_the_store_for_every_merchant(tmp_path: Path) -> None:
+    """A demonstration sometimes has to start from a system that remembers nothing."""
+    memory = MerchantMemory(tmp_path / "claims.db")
+    memory.record_correction(a_correction(user_id="334430", case_id="CASE-1001"))
+    memory.record_correction(a_correction(user_id="283959", case_id="CASE-1002"))
+
+    forgotten = memory.forget_everything()
+
+    assert forgotten == 2
+    assert memory.corrections_for("334430") == ()
+    assert memory.corrections_for("283959") == ()
+
+
+def test_forgetting_an_empty_store_removes_nothing_and_says_so(tmp_path: Path) -> None:
+    """Zero is an ordinary answer: there was nothing there, which is not a failure."""
+    assert MerchantMemory(tmp_path / "claims.db").forget_everything() == 0

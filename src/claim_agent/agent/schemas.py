@@ -470,6 +470,28 @@ class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
     )
 
 
+class SettledProduct(BaseModel):
+    """One product a representative has told the agent this claim is for (FR-1a.4).
+
+    The whole point of a report that names no product is that nobody could work out which
+    products were damaged. A representative saying so settles it — they can see the claim and
+    they may be holding something this system cannot read — and this is how that answer gets
+    from their words into a claim line that can be investigated and priced.
+
+    Copy the name from the order's line items exactly. That is what ties the claim to a real
+    product and to a price, and ShipBob's payment endpoint identifies a product by its name as
+    free text (FR-1a.2, FR-3.3).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(description="The product's name exactly as the order writes it.")
+    quantity: int = Field(
+        default=1, ge=1, description="How many of it the representative says were damaged."
+    )
+    sku: str | None = Field(default=None, description="The product's code from the order, or null.")
+
+
 class RevisedClaimReport(_RepliesToTheRepresentative):
     """A reworked report about a whole claim rather than one product (FR-R.9, FR-R.10).
 
@@ -491,10 +513,16 @@ class RevisedClaimReport(_RepliesToTheRepresentative):
     one, the honest answers are to ask for a fresh investigation or to say what is still
     needed.
 
-    `needs_fresh_investigation` is the escape hatch. Set it when what the representative said
-    settles enough that the claim should be looked into properly again rather than merely
-    reworded — most often because they have told you which products were damaged. Code runs
-    the investigation; you do not.
+    `settled_products` is the important one. When the representative names which products were
+    damaged, put them here: code turns each into a claim line, looks into that one product, and
+    produces a report for it that they can approve. That is how a claim nobody could split
+    becomes a claim with a figure on it, and it costs one pass per product rather than redoing
+    the whole claim.
+
+    `needs_fresh_investigation` is the heavier escape hatch, for when they ask outright for the
+    claim to be investigated again. It re-reads everything, re-splits the claim and re-judges
+    every product, so it takes far longer — never reach for it merely because they named a
+    product, and never as a way of avoiding an answer.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -528,12 +556,20 @@ class RevisedClaimReport(_RepliesToTheRepresentative):
             "leave the wording as it is, and null when nothing should be sent."
         ),
     )
+    settled_products: tuple[SettledProduct, ...] = Field(
+        default=(),
+        description=(
+            "The products the representative has just told you this claim is for. Fill this in "
+            "whenever they name one, however briefly — 'the 24oz multi surface cleaner is the "
+            "one' settles it. Each becomes a claim line that is looked into and priced on its "
+            "own. Empty when they have not said which products were damaged."
+        ),
+    )
     needs_fresh_investigation: bool = Field(
         default=False,
         description=(
-            "True when what the representative said settles enough that this claim should be "
-            "investigated again from its evidence rather than only reworded — for example "
-            "when they have told you which products were damaged, or asked for the claim to "
-            "be investigated."
+            "True only when the representative asks for the whole claim to be investigated "
+            "again. Naming a product is not that — put those in settled_products instead, "
+            "which is far quicker and answers them directly."
         ),
     )

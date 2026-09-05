@@ -85,3 +85,13 @@ type SubmittedValue = string | boolean;
 
 /** What the panel submits: a value per name. */
 export type SubmittedValues = Record<string, SubmittedValue>;
+
+/**
+ * How many merchant corrections an operator has just thrown away.
+ *
+ * A count rather than nothing, because "it worked" and "there was nothing there" look
+ * identical on a screen otherwise.
+ */
+export interface ForgottenCorrections {
+  readonly forgotten: number;
+}

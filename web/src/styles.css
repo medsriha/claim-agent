@@ -941,6 +941,17 @@ p {
   border-top: 1px solid var(--sb-line);
 }
 
+/* The warning above a control that throws history away. Set in the notice colour rather than
+   the muted one: it is the only thing on this screen that destroys something. */
+.policy-note {
+  max-width: 68ch;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--sb-flag-tint);
+  border-radius: var(--sb-radius-small);
+  color: var(--sb-flag);
+}
+
 /* --- The past claims that resemble this one ------------------------------ */
 
 .similar-list {

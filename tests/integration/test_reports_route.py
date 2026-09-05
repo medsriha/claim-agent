@@ -33,10 +33,12 @@ from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.schemas import (
     ClaimedProductProposal,
     ClaimSplit,
+    DamagedItem,
     EvidenceJudgement,
     InvestigationConclusion,
     RevisedClaimReport,
     RevisionConclusion,
+    SettledProduct,
 )
 from claim_agent.api.deps import get_models
 from claim_agent.app import create_app
@@ -980,3 +982,100 @@ async def test_what_the_representative_said_reaches_the_fresh_investigation(
     assert [correction.summary for correction in remembered] == [
         "Both 24oz multi-surface bottles were damaged."
     ]
+
+
+# --- Naming a product, without redoing the whole claim (FR-1a.4) -------------
+
+
+def a_directed_approval() -> RevisionConclusion:
+    """What the product's own pass concludes once the representative has directed a payment."""
+    return RevisionConclusion(
+        evidence=(
+            EvidenceJudgement(
+                kind=EvidenceKind.DAMAGED_PRODUCT_PHOTO,
+                state=EvidenceState.PRESENT,
+                observed="The bottle is split down one side.",
+                attachment_id="ATT-CASE-1002-01",
+            ),
+        ),
+        damaged_items=(DamagedItem(product_name=MULTI_SURFACE, quantity=2, sku="A00300"),),
+        recommendation=Recommendation.APPROVE,
+        reasoning="The representative confirmed the product and directed the refund.",
+        recommended_amount_usd="25.98",
+        amount_reasoning="Both 24oz bottles are a total loss at 12.99 each.",
+        representative_directed_outcome=True,
+        changed=("Approved the two multi-surface bottles, as you directed.",),
+        reply_to_representative="Done — the refund is drafted for both bottles.",
+        email_subject="About your damaged shipment",
+        email_body="We have approved your claim for the damaged multi-surface cleaner.",
+    )
+
+
+async def test_naming_a_product_produces_a_priced_report_without_redoing_the_claim(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+) -> None:
+    """FR-1a.4: a representative who answers the question should not wait for the whole claim.
+
+    Investigating the claim again re-reads every image, re-splits it, and on a claim nobody
+    could split very often fails to split it a second time — leaving the representative who
+    just answered that exact question with nothing. Naming the product costs one pass.
+    """
+    store.record(a_clarification_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative="Taken as read: the 24oz multi surface cleaner.",
+            settled_products=(SettledProduct(name=MULTI_SURFACE, quantity=2, sku="A00300"),),
+        )
+    )
+    a_scripted_reply.append(a_directed_approval())
+
+    body = (
+        await client.post(
+            "/reports/RPT-CASE-1002/send-back",
+            json={
+                "feedback": (
+                    "CleanBoss Multi Surface Cleaner 24oz is the one. "
+                    "Generate a refund for the product"
+                )
+            },
+        )
+    ).json()
+
+    assert "cannot" not in body["revisions"][-1]["reply"]
+    produced = (await client.get("/cases/CASE-1002/reports")).json()["reports"]
+    approved = [report for report in produced if report["product_name"] == MULTI_SURFACE]
+    assert len(approved) == 1
+    assert approved[0]["recommendation"] == "approve"
+    assert approved[0]["amount_usd"] == "25.98"
+    assert "$25.98" in approved[0]["drafted_email"]["body"]
+
+
+async def test_a_directed_payment_says_on_the_report_what_it_set_aside(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+) -> None:
+    """NFR-5: a payment a representative directed and one the evidence earned must differ."""
+    store.record(a_clarification_report())
+    a_scripted_reply.append(
+        RevisedClaimReport(
+            reply_to_representative="Taken as read.",
+            settled_products=(SettledProduct(name=MULTI_SURFACE, quantity=2, sku="A00300"),),
+        )
+    )
+    a_scripted_reply.append(a_directed_approval())
+
+    await client.post(
+        "/reports/RPT-CASE-1002/send-back",
+        json={"feedback": "The multi surface cleaner. Refund it."},
+    )
+
+    produced = (await client.get("/cases/CASE-1002/reports")).json()["reports"]
+    approved = next(r for r in produced if r["product_name"] == MULTI_SURFACE)
+    outcome = approved["content"]["outcome"]
+    assert outcome["directed_by_representative"] is True
+    assert "evidence_incomplete" in outcome["waived"]

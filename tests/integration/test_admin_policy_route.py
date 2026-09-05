@@ -13,12 +13,17 @@ that limit below eight turns it away. Both numbers come from REQUIREMENTS.md.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 import respx
 from httpx import AsyncClient
 from tests.fixtures.shipbob import CASE_1001, ORDER_1001, SHIPMENT_1001, mock_shipbob
 
+from claim_agent.domain.models import MerchantCorrection
 from claim_agent.policy import Policy
+from claim_agent.settings import Settings
+from claim_agent.storage.merchant_memory import MerchantMemory
 
 pytestmark = pytest.mark.integration
 
@@ -185,3 +190,35 @@ async def test_reset_puts_the_startup_thresholds_back(
 
     screened = await client.post("/cases/CASE-1001/preflight")
     assert screened.json()["verdict"] == "proceed"
+
+
+# --- Forgetting what representatives corrected (a demonstration control) -----
+
+
+async def test_an_operator_can_empty_the_merchant_corrections(
+    client: AsyncClient, settings: Settings
+) -> None:
+    """FR-3.8: a demonstration sometimes has to start from a system that remembers nothing."""
+    memory = MerchantMemory(settings.database_path)
+    memory.record_correction(
+        MerchantCorrection(
+            user_id="334430",
+            case_id="CASE-1001",
+            summary="The two-pack was claimed, not the single bottle.",
+            recorded_at=datetime(2026, 3, 21, tzinfo=UTC),
+        )
+    )
+
+    response = await client.post("/admin/corrections/forget")
+
+    assert response.status_code == 200
+    assert response.json() == {"forgotten": 1}
+    assert memory.corrections_for("334430") == ()
+
+
+async def test_forgetting_when_there_is_nothing_to_forget_says_so(client: AsyncClient) -> None:
+    """Zero and one look identical on a screen otherwise, and only one needs saying."""
+    response = await client.post("/admin/corrections/forget")
+
+    assert response.status_code == 200
+    assert response.json() == {"forgotten": 0}

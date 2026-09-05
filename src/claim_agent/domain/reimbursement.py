@@ -340,3 +340,23 @@ def _to_cents(value: Decimal) -> Decimal:
     cheaper for no reason anyone could explain.
     """
     return value.quantize(CENTS, rounding=ROUND_HALF_UP)
+
+
+def nothing_priced_yet() -> AmountDerivation:
+    """A figure of nothing, for a product no investigation has reached yet.
+
+    Used where a claim line has just been created from what a representative said, so the run
+    about to look into it is handed an honest starting point rather than a figure somebody
+    might read as having been worked out. Nothing is priced, and the limit has nothing to
+    apply to.
+    """
+    return AmountDerivation(
+        components=(),
+        items_total_usd=Decimal("0.00"),
+        proposed_usd=Decimal("0.00"),
+        amount_usd=Decimal("0.00"),
+        cap_usd=Decimal("0.00"),
+        cap_applied=False,
+        reasoning="",
+        priced_from=None,
+    )
