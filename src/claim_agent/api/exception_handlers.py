@@ -1,5 +1,3 @@
-"""Translate exceptions into a single, consistent error response shape."""
-
 from __future__ import annotations
 
 from fastapi import FastAPI, Request

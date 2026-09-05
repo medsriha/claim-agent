@@ -1,5 +1,3 @@
-"""Request-scoped logging context."""
-
 from __future__ import annotations
 
 from uuid import uuid4
