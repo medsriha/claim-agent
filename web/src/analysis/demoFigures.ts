@@ -21,7 +21,7 @@
  *
  * That also means they can be made again rather than edited:
  *
- *     make analysis-figures
+ *     uv run python -m tools.seed_analysis_history --figures web/src/analysis/demoFigures.json
  *
  * To change what the screen shows, change the invented history or the arithmetic and run that.
  * Correcting a number in the data file by hand would break the agreement between the value a

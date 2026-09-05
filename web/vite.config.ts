@@ -9,7 +9,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-/** Where the claims service is listening. `make run` serves it here. */
+/** Where the claims service is listening. `uv run uvicorn claim_agent.app:app --reload` serves it here. */
 const CLAIMS_SERVICE = "http://127.0.0.1:8000";
 
 export default defineConfig({

@@ -23,13 +23,14 @@ WORKDIR /app
 
 # Dependencies first, on their own layer. Editing a source file then rebuilds in
 # seconds instead of resolving and downloading everything again.
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-install-project
 
 # The development group comes too, and deliberately. The stand-in serves the very same
 # sample records the tests use, and reading them pulls in a test library — so an image
 # without the development dependencies has a claims service but nothing for it to read.
 # It also means the suite can be run in the container, against exactly what ships in it.
+COPY README.md ./
 COPY src/ src/
 COPY tools/ tools/
 COPY tests/ tests/

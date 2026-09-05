@@ -19,7 +19,7 @@ The two endpoints that would send an email to a merchant or move money are delib
 absent. Nothing in this system may reach them without a person approving first (FR-1.2),
 and a stand-in that answered them would be a way to find that out the hard way.
 
-Run it with `make mock`, which serves it on port 8080 — the address
+Run it with `uv run uvicorn tools.shipbob_mock:app --port 8080` — the address
 `SHIPBOB_BASE_URL` already points at by default.
 """
 
