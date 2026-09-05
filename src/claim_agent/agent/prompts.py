@@ -291,6 +291,13 @@ Keep ambiguity and reasoning to one or two short sentences, with no headings and
 analysis. Put each concrete merchant ask once in requested_details; the email must request all
 of them, but the report fields must not repeat the list.
 
+Everything else a reviewer needs goes in concerns, one short item apiece. The email tells the
+merchant what to send; concerns tell the representative what you found — what each image turned
+out to show, where two documents disagree, what you could not establish and why. Name the image,
+product or document each item is about, so the representative can go and look at it. A
+representative reading only the ambiguity sentence and the email should learn nothing from them
+that concerns left out.
+
 Three of the four kinds of evidence — invoice, customer_confirmation and outer_packaging_photo
 — describe the whole parcel rather than any one product. They are settled here, once, and every
 product's investigation is handed the same answer, so they are worth looking at while you are

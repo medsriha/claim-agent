@@ -16,26 +16,19 @@ export function StructuredReport({ report }: { report: Report }): React.JSX.Elem
     return <InvestigationContent content={report.content} />;
   }
   if (report.content.kind === "clarification") {
-    return (
-      <ClarificationContent
-        content={report.content}
-        recommendation={report.recommendation}
-      />
-    );
+    return <ClarificationContent content={report.content} />;
   }
   return <ScreeningContent content={report.content} />;
 }
 
 function ClarificationContent({
   content,
-  recommendation,
 }: {
   content: ClarificationReportContent;
-  recommendation: Report["recommendation"];
 }): React.JSX.Element {
   return (
     <div className="structured-report">
-      <FindingsAndNextSteps finding={content.ambiguity} recommendation={recommendation} />
+      <Findings finding={content.ambiguity} concerns={content.concerns} />
 
       {content.candidate_lines.length > 0 && (
         <details className="line-details">
@@ -81,23 +74,10 @@ function InvestigationContent({
         </p>
       )}
 
-      <FindingsAndNextSteps
+      <Findings
         finding={content.finding_summary ?? outcome.explanation}
-        recommendation={outcome.recommendation}
+        concerns={concerns}
       />
-
-      {concerns.length > 0 && (
-        <details className="line-details">
-          <summary className="line-details-summary">
-            Concerns ({String(concerns.length)})
-          </summary>
-          <ul className="line-list">
-            {concerns.map((concern) => (
-              <li key={concern}>{concern}</li>
-            ))}
-          </ul>
-        </details>
-      )}
 
       <ReportContext
         context={content.context}
@@ -144,37 +124,27 @@ function InvestigationContent({
   );
 }
 
-function FindingsAndNextSteps({
+/** What the investigation found: its summary, then each thing it wants looked at. */
+function Findings({
   finding,
-  recommendation,
+  concerns,
 }: {
   finding: string;
-  recommendation: Report["recommendation"];
+  concerns: readonly string[];
 }): React.JSX.Element {
   return (
     <section className="line-priority">
-      <h4 className="line-section">Findings and next steps</h4>
+      <h4 className="line-section">Findings</h4>
       <p className="line-key-finding">{finding}</p>
-      <p className="line-next-step">
-        <strong>Next:</strong> {nextStepFor(recommendation)}
-      </p>
+      {concerns.length > 0 && (
+        <ul className="line-findings">
+          {concerns.map((concern) => (
+            <li key={concern}>{concern}</li>
+          ))}
+        </ul>
+      )}
     </section>
   );
-}
-
-function nextStepFor(recommendation: Report["recommendation"]): string {
-  switch (recommendation) {
-    case "approve":
-      return "Review the recommendation and amount, then send the approval email if they are correct.";
-    case "approve_high_value":
-      return "Take a second look at what the damaged goods cost, then send the approval email if the recommendation and amount are correct.";
-    case "request_info":
-      return "Send the drafted email, then resume the review when the merchant provides the missing or corrected information.";
-    case "request_rep_clarification":
-      return "Resolve the internal uncertainty before deciding whether the merchant needs to be contacted.";
-    default:
-      return "Review the findings and decide how the claim should proceed.";
-  }
 }
 
 function AttachmentGallery({

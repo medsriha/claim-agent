@@ -1664,6 +1664,19 @@ stage that sends an approved email does not exist yet, so an approval stops at b
   next action, approved amount or immediate request, and a short reason. Complete
   supporting detail remains one click away in labelled sections rather than inside a nested
   scrolling document.
+- **The findings section shows the summary and then what was found, and offers no advice.** The
+  short reason is one sentence, which was too little on its own: on a claim stopped because its
+  products could not be separated, everything specific the investigation had noticed went into
+  the merchant email and the representative was left with the sentence. So each finding is now
+  listed under it, one per line — what an image turned out to show, where two documents disagree,
+  what could not be established. These are deliberately *not* the things the email asks the
+  merchant for: the email is the ask, this list is what the representative would otherwise have
+  to work out by opening the images themselves.
+  The screen used to end the section with a line telling the representative what to do next —
+  "send the drafted email, then resume the review" and three others like it. Those sentences were
+  the screen's own, not the service's, and they said nothing the recommendation badge above them
+  did not already say. They are gone. What to do about a claim is the representative's call, and
+  a demo screen restating the obvious in its own voice is the thing this project tries not to do.
 - **What the merchant said was wrong is read out of their own description**, using the reader
   built for exactly that alongside this. It is what they said, never checked, and the report does
   not weigh it — it is kept because it is one of the few things about a claim known before

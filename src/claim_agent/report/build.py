@@ -165,7 +165,11 @@ def _claim_clarification(
     recommendation = Recommendation.REQUEST_REP_CLARIFICATION
     drafted_email = None
     report_details: tuple[str, ...] = ()
-    concerns = (ambiguity, *investigation.claim_concerns)
+    # The ambiguity sentence is shown on its own, so it is not repeated here. What
+    # belongs in this list is everything the merchant email does not say: what each
+    # image turned out to be, where two documents disagree, what could not be settled.
+    found = triage.split.concerns if triage.split is not None else ()
+    concerns = (*found, *investigation.claim_concerns)
 
     if requested_details and triage.split is not None:
         try:
@@ -181,7 +185,7 @@ def _claim_clarification(
                 "claim_split_email_refused",
                 case_id=screening.case_id,
             )
-            concerns = (ambiguity, refused.message, *investigation.claim_concerns)
+            concerns = (*found, refused.message, *investigation.claim_concerns)
         else:
             recommendation = Recommendation.REQUEST_INFO
             report_details = requested_details

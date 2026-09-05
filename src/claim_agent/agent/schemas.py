@@ -106,6 +106,16 @@ class ClaimSplit(_WithoutSubjectiveConfidence):
             "requested_details is empty."
         ),
     )
+    concerns: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "One short item per thing a reviewer needs to know that the merchant email "
+            "does not tell them: what the evidence showed, what conflicts with what, and "
+            "what you could not establish. Name the image, product or document each one "
+            "is about. Do not repeat requested_details — the email already asks for those "
+            "— and do not write a headed mini-report."
+        ),
+    )
     reasoning: str = Field(description="One or two short sentences explaining the split.")
 
 
