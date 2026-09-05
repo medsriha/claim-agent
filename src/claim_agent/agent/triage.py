@@ -12,7 +12,7 @@ products — it says things like "1 order affected" — so which products are me
 only be established by reading their account and looking at the photographs. That is
 one pass of the investigation over the whole claim.
 
-**Nothing here decides which images to look at.** The pass is given the four tools
+**Nothing here decides which images to look at.** The pass is given the read-and-reasoning tools
 and the question, and it chooses: a claim whose description already names a product
 may cost one photograph, a claim with none costs none at all (FR-1.1). There is
 deliberately no loop in this file that classifies every attachment in turn before the
@@ -227,7 +227,7 @@ async def triage_claim(
 ) -> ClaimTriage:
     """Work out which products a claim is for, and settle its shared evidence (FR-1a.1).
 
-    One pass of the investigation over the whole claim. It is handed the four tools
+    One pass of the investigation over the whole claim. It is handed the read-and-reasoning tools
     and the question, and it decides for itself which photographs are worth looking
     at (FR-1.1); nothing here looks at one on its own account.
 

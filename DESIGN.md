@@ -133,12 +133,12 @@ hands back, per product, what the evidence showed, what it recommends, how the a
 arrived at, and a draft email. **It reports all of that while it happens** rather than going
 quiet and answering at the end.
 
-The investigation has eight tools, all of which only read or work something out. Four of them —
-working out what currency the money is in, checking that a photographed document adds up, reading
-the facts buried in the claim's own description, and comparing ShipBob's prices with the
-customer's receipt — **answer no requirement**, and were added after reading ShipBob's sample data
-turned up four ways a recommendation could be quietly wrong. See "Four tools that came from
-reading ShipBob's data, not the requirements".
+The investigation has eleven tools, all of which only read or work something out. Four are the
+original investigation primitives. Seven are deterministic cross-checks: currency, document
+arithmetic, case-description facts, price comparison, evidence sufficiency, product matching, and
+the remedy the merchant requested. Those seven began as findings from the sample data and are now
+part of the tool surface specified by FR-1.2. They add checks, not authority: sending and paying
+remain structurally unavailable to the agent. See "Additional tools prompted by ShipBob's data".
 
 **The screen shows all of it.** A representative picks a claim and watches the quick checks,
 then the similar past claims, then the investigation reporting each thing it does as it does
@@ -1692,15 +1692,14 @@ On the screen: `web/src/components/ReportCard.tsx` draws and acts on one report,
 
 ---
 
-### Four tools that came from reading ShipBob's data, not the requirements
+### Additional tools prompted by ShipBob's data
 
-The four sections that follow are different from every other feature in this document, and the
-difference matters more than the features do.
+The sections that follow began differently from the features that were present in the original
+requirements, and that origin is worth preserving.
 
-Everything else here was built because REQUIREMENTS.md asked for it, and each section names the
-requirement it satisfies. **These four answer no requirement at all.** They came from reading
-ShipBob's sample claims and their attachments closely and finding four ways this system could hand
-a representative a confident recommendation that was quietly wrong:
+The first four cross-checks came from reading ShipBob's sample claims and their attachments closely
+and finding four ways this system could hand a representative a confident recommendation that was
+quietly wrong:
 
 - ShipBob's records never say what currency a price is in, and the limit on a reimbursement is a
   dollar figure. One sample claim ships by Royal Mail on a British tracking number, its evidence
@@ -1713,13 +1712,15 @@ a representative a confident recommendation that was quietly wrong:
 - What ShipBob says a shipment was worth and what the customer's receipt says they paid disagree
   on **all four** sample claims that have evidence — once by sixty dollars.
 
-Because nobody specified them, everything about them is our reading rather than ShipBob's rule.
-The exchange rates are invented. The thresholds are placeholders. And the question each of them
-raises — is a claim priced from ShipBob's catalogue or from what the customer paid? — is a product
-decision nobody has made, so none of these tools makes it. They report, and a person decides.
+Three more cross-checks followed: whether the evidence is sufficient, which order line a claimed
+product could be, and which remedy the merchant actually requested. FR-1.2 now explicitly lists
+all eleven tools, so these seven are no longer outside the requirements. Their detailed policy is
+still provisional: the exchange rates and thresholds are placeholders, and questions such as
+whether a claim is priced from ShipBob's catalogue or from what the customer paid remain product
+decisions. The tools report what they find; a person still decides.
 
-They are tracked nowhere but here. TODO.md lists REQUIREMENTS.md ids and nothing else, and these
-have no id to list.
+They are tracked under FR-1.2 as one bounded, read-only tool surface. Their individual design
+sections remain here because each cross-check has different limitations and failure modes.
 
 ---
 
@@ -2159,10 +2160,10 @@ or a future tool, to weigh — it does not decide anything on its own.
   that merely start with the same one or two letters are not mistaken for the same code.
 - **Ties are never broken by any rule at all**, not even a coin flip dressed up as a tiebreaker.
   That is what FR-1.13 already asks for elsewhere in this system, applied here too.
-- **Still undecided:** exactly where in the investigation this gets called from, and how a
-  representative sees the result on screen. This module only answers "which lines could this be";
-  wiring it into a tool the investigation can call, and into the report a rep reads, is separate
-  work.
+- **It is available to the investigation as `match_damaged_product`.** The model chooses when to
+  call it, and the call is retained in the run ledger. A dedicated report field for its candidates
+  is still separate work; today a representative sees the effect through the investigation's
+  resulting findings and concerns.
 
 **When things go wrong** — There is no failure path as such: an order with no lines, or a claimed
 product that matches nothing at all, both come back as an empty list of candidates, which is a real
@@ -2220,13 +2221,10 @@ a representative to check against their own reading of the same claim.
   free text will miss politeness, sarcasm, and anything phrased indirectly. The model that already
   read this text out of an image is better at understanding what somebody is asking for than a fixed
   list of phrases ever will be.
-- **We are recommending this stay a rep-facing cross-check, not a tool the investigation calls
-  mid-run.** Feeding a shallow keyword signal back into the model's own reasoning risks anchoring it
-  on a wrong reading of text the model has already looked at once, more carefully. Where it earns
-  its keep is on the report a representative reads afterwards: a plain, checkable "here is exactly
-  the word that made this look like a refund request", sitting beside the model's own account of the
-  same claim, not instead of it. Whoever wires this in should treat that placement as a real design
-  decision, not a default.
+- **It is exposed as the read-only `read_requested_remedy` tool.** The result is a second opinion
+  on the model's reading, not a replacement for it. The anchoring risk remains: a shallow keyword
+  signal can pull the model toward the wrong interpretation of text it already read more carefully,
+  so keeping this tool in the surface is a provisional design choice worth testing.
 - **Only the first occurrence of "replace" in the whole message is read.** A message asking about
   two different replacements will read as one, and needs a person regardless of what this says.
 - **Unclear is a first-class, correct outcome**, not an error state — a message that never mentions
@@ -2238,9 +2236,9 @@ message is flagged as such, so a representative knows the reading might be incom
 
 **Not ready for production** — The keyword lists are short and built from the two cases that
 motivated this feature; a merchant using a word for "refund" or "replace" not on these lists will
-read as unclear, indistinguishable from a merchant who genuinely did not ask for anything. There is
-also an open question this fragment is not answering on its own behalf: whether this belongs in the
-investigation's tools at all, given the risk of anchoring described above.
+read as unclear, indistinguishable from a merchant who genuinely did not ask for anything. Whether
+this tool should remain in the investigation surface still needs evidence from real use, given the
+anchoring risk described above.
 
 **Where the code is** — `src/claim_agent/domain/remedy.py`, `tests/unit/test_domain_remedy.py`.
 
@@ -2302,9 +2300,9 @@ and every mixture in between all produce an ordinary, if different, result. Noth
 network or can raise.
 
 **Not ready for production** — The exact wording of each request is fixed in code rather than
-reviewed by anyone at ShipBob, and a representative cannot yet edit it before it goes out. Nothing
-yet calls this from the investigation or shows its output on a screen — it exists as a building
-block for both.
+reviewed by anyone at ShipBob. The investigation can call it as `check_evidence_is_enough`, but its
+structured result has no dedicated report section; a representative sees only the findings and
+requests that survive into the final report.
 
 **Where the code is** — `src/claim_agent/domain/evidence_sufficiency.py`,
 `tests/unit/test_domain_evidence_sufficiency.py`.
@@ -2386,25 +2384,24 @@ finds in production.
 
 ### Not implemented
 
-- **Four of the eight investigation tools answer no requirement.** Currency, the document
-  arithmetic check, the case-description reader and the price comparison all came from reading
-  ShipBob's sample data rather than from REQUIREMENTS.md. Nobody at ShipBob has agreed that any of
-  them is the right behaviour, and they are tracked in this document only — TODO.md holds
-  requirement ids and these have none. If ShipBob disagrees with any of them, the tool is wrong,
-  not the requirement.
+- **Seven of the eleven investigation tools began as findings from the sample data.** FR-1.2 now
+  specifies them, so the code and requirements agree on the tool surface. Their detailed rules are
+  still provisional: nobody at ShipBob has signed off on the exchange rates, matching thresholds,
+  document comparisons, or remedy vocabulary. If those policies change, the tools need revising
+  without widening the agent's read-only authority.
 - **The exchange rates are invented and nothing refreshes them.** They sit in the claim settings
   with the date they were written beside them. A rate a year old will quietly mis-measure every
   non-dollar claim against the limit, and the only warning anyone gets is that printed date.
 - **Nothing decides which price is authoritative.** ShipBob's catalogue price and the customer's
   receipt disagree on every sample claim, and the system reports both and picks neither. Until
   somebody decides, a representative has to choose on every claim where the two differ.
-- **Six more tools from the same review were specified but not built.** Checking whether a case is
-  even answerable (one sample case is `Closed`, another is `Waiting on Client` with no
+- **Five more checks from the same review are not connected end to end.** Checking whether a case
+  is even answerable (one sample case is `Closed`, another is `Waiting on Client` with no
   attachments); reading a date that could be two dates; spotting the same photograph attached to
-  two different claims; finding other claims on the same shipment or merchant; proving a document
-  in a photograph belongs to this claim at all; and matching a damaged product to an invoice line
-  when the names differ. Each is a real gap visible in the sample data. The claim settings they
-  would read are already in place; nothing reads them yet.
+  two different claims; finding other claims on the same shipment or merchant; and proving a
+  document in a photograph belongs to this claim at all. Each is a real gap visible in the sample
+  data. Matching a damaged product when names differ used to be on this list and is now one of the
+  eleven tools in FR-1.2.
 - **The currency of a claim is a tool the model may or may not call.** It should be worked out
   before the investigation starts, the way precedent already is, so that two runs of the same claim
   cannot differ purely in whether the model thought to check. As it stands, they can.
@@ -2412,7 +2409,10 @@ finds in production.
 - **Anything behind a report being sent back.** A representative can say what is wrong and the
   report is parked with their words kept, and then nothing happens: the stage that would rework a
   report around what they said is not built. A report sent back waits for somebody to approve it
-  instead. It is the one action on the screen that leads nowhere.
+  instead. It is the one action on the screen that leads nowhere. FR-R.7 is settled for when this
+  is built: amount-related feedback lets the agent propose a new figure with reasoning, and the
+  same deterministic caps used on the first pass are applied again; unrelated feedback leaves the
+  existing amount unchanged.
 
 - **Any sign-in on approving a report.** Anyone who can reach the service can approve a claim, and
   the record cannot say who did — it has a space for the name and leaves it empty on purpose,

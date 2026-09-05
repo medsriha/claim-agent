@@ -218,12 +218,12 @@ still unticked below.
     which FR-1.16 forbids — so the graph's limit is derived from the step allowance and
     kept deliberately looser. A test proves the step allowance is what trips.
 
-- [x] FR-1.2 — Read and reasoning tools only: list attachments, inspect an image,
-  generate an invoice, compute an amount.
+- [x] FR-1.2 — Eleven read and reasoning tools: the four original investigation primitives and
+  seven deterministic cross-checks over claim data.
   - **Conclusion:** structural, not an instruction. One function assembles the tools, and
-    tests assert the names are exactly those four, that no agent module can even import
-    the package where sending and paying will live, and that the only ShipBob client the
-    agent holds has no method that writes.
+    tests assert the names are exactly the eleven specified in REQUIREMENTS.md, that no agent
+    module can even import the package where sending and paying will live, and that the only
+    ShipBob client the agent holds has no method that writes.
   - **Be aware:** the case and shipment are bound when the tools are built, so the agent
     cannot ask to see another case's images or price an unrelated shipment.
 
@@ -445,7 +445,9 @@ claim stopped by screening. Asking for screening alone still keeps nothing.
 - [ ] FR-R.4
 - [ ] FR-R.5
 - [ ] FR-R.6
-- [ ] FR-R.7
+- [ ] FR-R.7 — Revision is not built. The requirement now follows FR-1.21: feedback about the
+  amount lets the agent propose a new exact figure with reasoning, and code reapplies the same
+  caps; unrelated feedback carries the existing amount forward unchanged.
 - [ ] FR-R.8
 - [ ] FR-R.9
 - [ ] FR-R.10
@@ -677,8 +679,8 @@ should be asked, not answered here.
 - [x] NFR-2 — Every model answer is a form with named fields, and one that does not fit is
   refused rather than patched up.
   - **Conclusion:** the conclusion of each pass is a separate structured call rather than a
-    fifth "submit" tool, deliberately: FR-1.2 enumerates exactly four tools, and a separate
-    call is what guarantees the answer conforms.
+    twelfth "submit" tool, deliberately: FR-1.2 enumerates eleven read and reasoning tools, and a
+    separate call is what guarantees the answer conforms.
   - **Be aware:** a malformed answer is not re-asked. The identical question asked the
     identical way is the least likely thing to come back differently, so the product goes
     to a person instead. A single reshaped retry would recover some of those — see DESIGN.md.

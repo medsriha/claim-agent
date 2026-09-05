@@ -1,4 +1,4 @@
-"""The four tools an investigation has — what each answers, and every way each fails.
+"""The tools an investigation has — what each answers, and every way each fails.
 
 Nothing here reaches the network and nothing here needs a key. ShipBob and the image
 storage are both answered by a stand-in running in the same process, and the model
@@ -6,7 +6,7 @@ answers from a script the test writes beforehand.
 
 Four of these tests are not about behaviour at all. They are the structural guarantee
 FR-1.2 asks for, written down as something that fails the build: the investigation's
-tool surface is exactly four read and reasoning tools, none of them is named for an
+tool surface is exactly the eleven read and reasoning tools in FR-1.2, none is named for an
 action that changes anything, nothing in the agent package can even reach the code that
 sends and pays, and the one ShipBob client an investigation holds cannot write either.
 An instruction telling a model not to send an email is worth nothing; a system with no
@@ -293,7 +293,7 @@ def test_no_tool_is_named_for_something_that_changes_anything(
 ) -> None:
     """FR-1.2: the agent has no ability to send an email or pay anybody.
 
-    A name is not a guarantee on its own — the guarantee is that the four tools above are
+    A name is not a guarantee on its own — the guarantee is that the tools above are
     the whole surface — but a tool called `send_email` appearing here would be the first
     sign that somebody had reached for one.
     """

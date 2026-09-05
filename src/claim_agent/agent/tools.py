@@ -6,7 +6,9 @@ shipment, and ask ShipBob's own arithmetic whether the products it believes were
 damaged could be priced at all. It can also work out what currency the claim's money
 is in, check whether a document a merchant sent adds up, read the facts written into
 the claim's own description, and compare ShipBob's prices with the customer's
-receipt. This file is the whole list (FR-1.2).
+receipt. Three further cross-checks decide whether the evidence is sufficient, find
+possible order-line matches for a damaged product, and read which remedy the merchant
+asked for. This file is the whole list (FR-1.2).
 
 **There is no tool here that emails a merchant or pays one, and that absence is the
 guarantee.** Not a rule the model is asked to follow — a rule it cannot break,
@@ -17,15 +19,12 @@ tool that changes anything at ShipBob, that is the requirement you would be
 deleting. Adding another *reading* tool is allowed and has happened; adding a
 writing one is not.
 
-**The last four tools answer no requirement, and that is worth knowing before you
-rely on them.** They came out of reading ShipBob's sample data and finding four ways
-a confident recommendation could be quietly wrong: money that is not in dollars
-measured against a dollar limit, a total on a photograph that does not add up, facts
-in the claim's own prose that contradict ShipBob's records, and ShipBob's price
-disagreeing with what the customer actually paid. Every one of those happens in the
-sample data. None of them is mentioned in REQUIREMENTS.md, so the thresholds they
-read are placeholders and the behaviour is our reading rather than ShipBob's rule.
-DESIGN.md records each one under its own heading.
+**Seven tools were added after the original four, and their policy is still worth
+examining before relying on them.** They came out of reading ShipBob's sample data:
+currency, document arithmetic, case facts, price comparison, evidence sufficiency,
+product matching, and requested remedy. FR-1.2 now names the full eleven-tool surface,
+but the thresholds and detailed behaviour behind the added cross-checks remain our
+reading rather than signed-off ShipBob policy. DESIGN.md records each limitation.
 
 **A tool never raises into the investigation (NFR-4).** Every failure this system
 knows how to have — ShipBob unreachable, an image that will not download, a model
@@ -137,12 +136,11 @@ TOOL_NAMES: Final = (
 actually requires, and a test checks it by name and by import graph rather than by
 counting: no tool here sends, pays, submits, or changes anything at ShipBob.
 
-The first four are the original surface. The last four were added after reading ShipBob's
-sample data closely and finding four ways a confident recommendation could be quietly
-wrong — money in the wrong currency, a total on a photograph that does not add up, facts
-buried in the case's own prose that contradict ShipBob's records, and ShipBob's price
-disagreeing with what the customer actually paid. **No requirement asks for any of those
-four**; DESIGN.md records that, and what it means.
+The first four are the original surface. The remaining seven were added after reading
+ShipBob's sample data closely: currency, document arithmetic, case facts, price comparison,
+evidence sufficiency, product matching, and requested remedy. FR-1.2 now names the complete
+surface. DESIGN.md records where the added tools came from and which of their detailed policy
+choices still need ShipBob sign-off.
 """
 
 
@@ -265,7 +263,7 @@ class ToolOutcome(BaseModel):
     them back out of text.
 
     Attributes:
-        tool: Which of the four tools produced this.
+        tool: Which investigation tool produced this.
         succeeded: Whether the tool did what it set out to do. Note what this is
             *not*: an image that turns out to be too blurry to use is a successful
             call, because finding that out is exactly what was asked for. This is
@@ -686,7 +684,7 @@ class ComputeReimbursementArguments(BaseModel):
 
 @dataclass(frozen=True)
 class _ToolContext:
-    """Everything the four tools need, handed in when the run is built.
+    """Everything the investigation tools need, handed in when the run is built.
 
     Nothing in this file reaches for a client, a model or a policy of its own. That is
     what lets a test hand in a ShipBob that answers from memory and a model that
@@ -847,7 +845,7 @@ def investigation_tools(
     ]
 
 
-# --- The four tools ---------------------------------------------------------
+# --- Tool implementations --------------------------------------------------
 
 
 async def _list_images(context: _ToolContext) -> tuple[str, AttachmentListing]:

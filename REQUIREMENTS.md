@@ -336,8 +336,24 @@ as a case with six. This autonomy is over *how it investigates*, not over what h
 the claim.
 
 **FR-1.2 — Operate with read and reasoning tools only.**
-The agent's available tools are: list a case's attachments, inspect an image and answer a
-question about it, generate an invoice for a shipment, and compute a reimbursement amount.
+The agent's complete tool surface is eleven read or reasoning tools:
+
+1. List a case's attachments.
+2. Inspect an image and answer a question about it.
+3. Generate an invoice for a shipment.
+4. Check a proposed reimbursement amount against the invoice and reimbursement cap.
+5. Establish the claim's currency and convert an amount to dollars where possible.
+6. Check whether the line items and totals read from a document agree with each other.
+7. Read structured facts from the case description and compare them with ShipBob's records.
+8. Compare prices read from the merchant's document with ShipBob's invoice prices.
+9. Check whether the gathered evidence is sufficient and identify exactly what is missing.
+10. Match a claimed damaged product to possible order lines without breaking an ambiguous tie.
+11. Classify the remedy the merchant requested, such as reimbursement or replacement.
+
+The first four are the original investigation primitives. The remaining seven are deterministic
+cross-checks added after the sample claims exposed ways a plausible recommendation could still be
+wrong or incomplete. They do not widen the agent's authority: every tool either reads existing
+claim data or reasons over data already gathered.
 
 **The agent has no ability to send email or submit a reimbursement.** Those tools are not
 in its surface at all. This is a structural guarantee rather than an instruction the model
@@ -739,10 +755,16 @@ one thing must not have to re-check everything else.
 Revision adds no capabilities. The agent still cannot send email or submit a reimbursement
 in either mode; those remain in Layer 3, behind approval.
 
-**FR-R.7 — Never compute the amount itself.**
-If the recommendation or the damaged items change, the amount is recomputed by the same
-deterministic function used on the first pass. A revision cannot introduce a figure the
-code did not produce.
+**FR-R.7 — Reconsider the amount through the same controlled path as the first pass.**
+If the feedback bears on the damage, the damaged items, or the amount, the agent may propose a
+revised figure and must give its reasoning for that figure, just as it does during the initial
+investigation (FR-1.21). The figure is read as exact money and deterministic code reapplies the
+per-line and claim-level reimbursement caps before it reaches the revised report or email.
+
+If the feedback does not bear on the amount, the existing figure carries forward unchanged
+(FR-R.5). A revision cannot bypass a cap, place its uncapped proposal in merchant wording, or use a
+different amount process from the first pass. Code adds only the capped figure to the regenerated
+email (FR-R.11).
 
 **FR-R.8 — Not override deterministic rules.**
 Feedback cannot make an ineligible claim eligible, exceed the cap, or bypass a required
