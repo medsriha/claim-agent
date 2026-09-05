@@ -1,39 +1,3 @@
-"""Put a rep's past correction into merchant memory, so the demo has one to show.
-
-**Everything this writes is invented.** The running system does now record a rep's
-corrections — sending a report back stores their words, and approving after changing the
-figure stores the difference (FR-R.14, FR-C.2) — so this tool is no longer the only way to
-fill the panel. It stays because a fresh machine still starts with an empty store, and
-because a demonstration sometimes needs history to exist before it begins rather than being
-made during it.
-
-**Which means what it writes can no longer be told apart from a real correction on screen.**
-Both are rows in the same store, put there through the same method, and nothing marks either.
-Anyone demonstrating this should say which they are looking at, or run `--clear` first and
-make a real one instead — CASE-9005 exists so that they can (FR-C.8).
-
-It writes one fixed correction rather than a different one each run: the merchant, the case
-number and the wording were all chosen by hand and never change, so that two people
-demonstrating the system see the same history and a screenshot still matches the screen a
-month later. The database is not in version control, so nothing carries the row between
-machines — a fresh clone shows an empty panel until somebody runs this.
-
-**It is a development tool.** It writes through the same store the service reads, so what
-appears on screen went in the way a real correction would. Nothing in `src/` can reach it,
-and production never runs it.
-
-    uv run python -m tools.seed_merchant_memory           # add it, if it is not there
-    uv run python -m tools.seed_merchant_memory --clear   # take it back out
-
-`--clear` matters as much as the writing does: fabricated history on screen is
-indistinguishable from the real thing, so there has to be an obvious way to undo it.
-
-**This file has an expiry date, and it is later than it looks.** TODO.md's FR-C.8 note sets
-the condition: not when the real write exists, but when a rep can decide a claim *and* the
-demo data holds a second case for a merchant who already has a decided one. Until all three
-are true, a real correction would be written and no later claim would ever see it.
-"""
-
 from __future__ import annotations
 
 import argparse

@@ -1,28 +1,3 @@
-"""A stand-in for the ShipBob API, so the system has something to read on a laptop.
-
-Screening a claim reads three records over the network: the support case, the parcel and
-the order (FR-0.1). Investigating one reads two more: the images the merchant uploaded to
-the case, and an invoice pricing what the parcel contained (FR-1.4, FR-1.18). Tests
-intercept all five reads inside the process, which is why the test suite has never needed
-a server. A person clicking through the screen is not a test — the reads are real — so
-without something answering them, every claim fails as "ShipBob could not be reached".
-
-This is that something. It answers the same five addresses the real ShipBob does, from the
-same sample records the tests use, so the screen and the tests can never disagree about
-what CASE-1001 looks like.
-
-**It is a development tool.** It holds nine claims, has no security of any kind, and
-implements none of ShipBob's API beyond the five reads this system makes. Nothing in
-`src/` can reach it, and production never runs it.
-
-The two endpoints that would send an email to a merchant or move money are deliberately
-absent. Nothing in this system may reach them without a person approving first (FR-1.2),
-and a stand-in that answered them would be a way to find that out the hard way.
-
-Run it with `uv run uvicorn tools.shipbob_mock:app --port 8080` — the address
-`SHIPBOB_BASE_URL` already points at by default.
-"""
-
 from __future__ import annotations
 
 import asyncio

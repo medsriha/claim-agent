@@ -1,17 +1,3 @@
-"""Turning the figures into what the screen draws.
-
-Everything a person reads on the analysis screen is written here: the titles, the sentences under
-the charts, the words in the tiles, and the already-written-out version of every number. That is
-deliberate. The screen is meant to add labels and nothing else, so anything resembling a sentence
-has to come from the service, and this is the service's mouth.
-
-It is also where every number becomes two things: the value a chart uses to place a mark, and the
-text a person reads. Nothing downstream turns one into the other.
-
-Nothing here decides anything about a claim, and nothing here does arithmetic on money — the
-amounts arrive already worked out and are only written out with a currency sign in front.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
