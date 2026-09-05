@@ -1,9 +1,3 @@
-"""Emptying every store at once, so a demonstration starts from nothing (UI-47).
-
-Everything works against a database file in a throwaway directory, so the suite never writes
-into the project and no two tests can see each other's data.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path

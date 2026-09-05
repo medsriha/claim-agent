@@ -1,5 +1,3 @@
-"""What a representative may do to a report, and the record it leaves (FR-2.8, FR-2.9, FR-C.1)."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

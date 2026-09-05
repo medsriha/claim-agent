@@ -1,14 +1,3 @@
-"""Reading a case's images and pricing a shipment — and what happens when it goes wrong.
-
-Every request here is answered by a stand-in ShipBob running in the same process, so
-nothing reaches the network and the whole file runs in about a second.
-
-Two answers matter more than the happy path and are tested hardest. A case with no
-attachments is an ordinary reply that must not be reported as a failure (FR-1.6). A
-shipment ShipBob will not price is a settled answer that must not be reported as an
-outage, and must not be asked about twice (FR-1.18).
-"""
-
 from __future__ import annotations
 
 import json

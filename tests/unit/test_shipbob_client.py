@@ -1,9 +1,3 @@
-"""Reading a case, a shipment and an order from ShipBob — and what happens when it goes wrong.
-
-Every request here is answered by a stand-in ShipBob running in the same process, so
-nothing reaches the network and the whole file runs in about a second.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

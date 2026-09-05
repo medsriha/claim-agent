@@ -1,5 +1,3 @@
-"""Keeping the reports a representative decides from, and fetching them back (FR-2.9b, FR-R.13)."""
-
 from __future__ import annotations
 
 import sqlite3
