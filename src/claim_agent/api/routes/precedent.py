@@ -1,25 +1,3 @@
-"""Asking over HTTP which past claims resemble a claim in hand (FR-S.4, FR-S.5).
-
-The investigation is handed its precedent automatically, before it starts work, and
-never asks for it (FR-S.6). These addresses are for everybody else: a support
-representative who wants to see how claims like this one have gone, a screen that
-shows those claims beside a report, and anyone checking whether the record of past
-claims holds what they think it holds.
-
-**Nothing here judges a claim.** It searches what was already investigated and
-answers with what it found, together with the reasons each record was thought
-alike, so a representative can disagree with a comparison rather than take it on
-trust (FR-S.3).
-
-**Finding nothing and being unable to look are different answers, and both come
-back as successes.** An empty result with `was_read` true means the store was read
-and holds nothing much like this claim, which is the ordinary answer for an unusual
-one. An empty result with `was_read` false means the store could not be read at
-all. Reporting the second as the first would tell a representative there is no
-comparable history when nobody actually looked, so the reply always says which
-happened (FR-S.13).
-"""
-
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation

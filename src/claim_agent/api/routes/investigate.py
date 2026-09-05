@@ -1,26 +1,3 @@
-"""Investigating a claim over HTTP, narrated as it happens.
-
-An investigation takes a while. It screens the claim, reads photographs one at a
-time, looks up how comparable claims were decided, works out which products were
-damaged, and only then reaches a recommendation. Answering that in one reply at
-the end means a representative watches a blank screen for most of a minute with no
-idea whether anything is happening or whether it has quietly failed.
-
-So this streams. Each thing the investigation does is sent as it happens, and the
-finished report and its drafted email follow at the end, on the same connection. The screen shows the work rather than a plausible imitation of it —
-which matters, because the screen used to invent the pacing itself, and DESIGN.md
-recorded that as the largest gap between what it showed and what the system did.
-
-**A stopped claim never reaches the agent.** Screening runs first, and a claim it
-turns away costs three cheap reads and no AI at all (NFR-8). Its explanation comes
-back on the same stream, so a caller has one thing to consume either way.
-
-**Nothing here decides anything.** Every recommendation is a proposal, every email
-is a draft, and neither this route nor anything it can reach is able to send an
-email or move money — those live behind a representative's approval, in a package
-the investigation cannot import (FR-1.2, FR-3.1).
-"""
-
 from __future__ import annotations
 
 import asyncio

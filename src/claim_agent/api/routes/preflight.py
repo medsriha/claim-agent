@@ -1,18 +1,3 @@
-"""Screening one claim over HTTP, before anything expensive happens.
-
-This is the way in to the pre-flight screen: the cheap look a damaged-in-transit
-claim gets before any AI reads a photograph. A caller names a case and gets back
-one of two answers — the claim can be investigated, or it cannot be processed at
-all and here is why, with the write-up and the merchant email a support rep has to
-approve (FR-0.3, FR-0.4).
-
-Both answers are successes. Being turned away is a correct outcome of screening,
-not a failure of the request, so a stopped claim comes back with the same status as
-one allowed through. Only a genuine failure — a case ShipBob does not have, or a
-ShipBob that cannot be reached — comes back as an error, and the shape of those
-errors is already settled elsewhere, so nothing here handles them.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

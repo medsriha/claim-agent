@@ -1,30 +1,3 @@
-"""Reading the reports a representative decides from, and acting on one.
-
-Everything an investigation established used to live only in the reply to the request that asked
-for it. These routes are the other half: a claim's reports can be fetched back, read one at a
-time, approved, or sent back with a note (FR-2.8, FR-2.9b, FR-R.13).
-
-**Sending one back is a conversation, not a filing cabinet.** Whatever a representative types is
-recorded, remembered against the merchant, and then given to the agent, which answers them
-directly and reworks whatever the message bears on. The result is the next version of the
-report, awaiting review like any other (FR-R.1 to FR-R.14).
-
-**Every message gets an answer, whatever the report is.** What the agent may *change* differs —
-a stopped claim's verdict is not open to it — but no message is turned away by this route with
-wording of its own. Which path a message takes is decided in `claim_agent.report.conversation`,
-which is also where the reply comes from.
-
-**Nothing here sends anything or moves any money.** Approving records that a person accepted a
-recommendation. The stage that would act on that acceptance does not exist, so an approval today
-stops at being written down — which is exactly the separation FR-C.1 asks for, and what lets a
-decision survive a send that later fails (FR-3.1, FR-3.6). The agent that does the reworking
-holds only the investigation's read-only tools (FR-R.6).
-
-**No money passes through a number.** A figure a representative chooses arrives as text and is
-read into an exact decimal, the same way a price does when past claims are searched. A JSON
-number would become a floating point value on the way in, where cents drift (FR-1.21).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
