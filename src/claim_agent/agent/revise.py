@@ -534,6 +534,20 @@ async def rework_claim_report(
             ),
         )
 
+    if answered.representative_directed_payment:
+        # They said to pay, but not what. Nothing can be priced, so the report asks them
+        # which product — and keeps the approval draft they can adjust while it waits,
+        # rather than pushing back with nothing in hand (FR-2.8).
+        return ClaimRevision(
+            **said.model_dump(exclude={"needs_reply"}),
+            needs_reply=True,
+            recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
+            ambiguity=answered.ambiguity,
+            email=_the_merchant_email(
+                answered, contact_email=case_record.case.contact_email, existing=None
+            ),
+        )
+
     if not _anything_to_change(answered):
         # The agent answered without changing the report — a question, or a request to
         # investigate instead. Filling in what the model left blank would drop a merchant
@@ -561,8 +575,8 @@ async def rework_claim_report(
         ambiguity=answered.ambiguity,
         requested_details=answered.requested_details,
         # Nothing goes to a merchant who is not being asked for anything. A report that asks a
-        # representative to resolve something carries no merchant wording, here as everywhere
-        # else (FR-2.7).
+        # representative to resolve something carries no merchant wording (FR-2.7), except
+        # the approval draft kept for a payment they directed, handled above.
         email=email if asks_the_merchant else None,
         settled=answered.settled_products,
         reinvestigate=answered.needs_fresh_investigation,

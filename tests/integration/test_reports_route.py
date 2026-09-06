@@ -1360,3 +1360,28 @@ async def test_approving_an_investigated_report_costs_one_invoice_read(
     assert round_["reinvestigated"] is False
     assert round_["changed"] == ["Approved the collagen as you directed."]
     assert round_["reply"].startswith("Approving it as you directed.")
+
+
+async def test_a_directed_payment_nobody_can_price_asks_for_the_figure_and_keeps_the_draft(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    shipbob: respx.Router,
+    case_1002: None,
+) -> None:
+    """The agent asks rather than pushes back, and the email waits on the report with it."""
+    store.record(a_clarification_report())
+    shipbob.post("/invoices/generate").respond(422, json={"error": "invoice_unavailable"})
+    a_scripted_reply.append(an_approval_as_directed())
+
+    body = await send_feedback(
+        client, "RPT-CASE-1002", "The multi surface cleaner is the one. Approve the refund."
+    )
+
+    assert body["recommendation"] == "request_rep_clarification"
+    assert body["amount_usd"] is None
+    assert body["drafted_email"]["subject"] == "Your damage claim has been approved"
+    assert "Approved amount" not in body["drafted_email"]["body"]
+    round_ = body["revisions"][-1]
+    assert round_["needs_reply"] is True
+    assert "Tell me the amount" in round_["reply"]

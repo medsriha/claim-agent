@@ -36,7 +36,9 @@ class Recommendation(StrEnum):
     specific — the outcome whenever a piece of evidence is missing or unusable (FR-1.6).
     `REQUEST_REP_CLARIFICATION` asks the representative to resolve something incorrect,
     ambiguous, or insufficiently reliable. It is where uncertainty and internal failures
-    end up (FR-1.15, FR-1.16, NFR-4), and it never produces a merchant email.
+    end up (FR-1.15, FR-1.16, NFR-4). It produces no merchant email of its own; the one
+    exception is a payment a representative directed that could not be priced, which
+    keeps its approval draft for them to finish.
 
     **The high-value approval is code's to choose and never the agent's.** FR-C.7 is
     explicit that a rule about expensive claims has to be a rule: a model asked to be

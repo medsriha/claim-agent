@@ -214,13 +214,27 @@ def test_a_merchant_facing_investigation_action_needs_an_email(
         a_report(recommendation=recommendation, amount_usd=amount, drafted_email=None)
 
 
-def test_a_rep_clarification_action_cannot_carry_an_email() -> None:
-    """Ambiguous or incorrect claims stay with the representative and generate no email."""
-    with pytest.raises(ValidationError, match="must not carry an email"):
-        a_report(
-            recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
-            amount_usd=None,
-        )
+def test_a_rep_clarification_action_may_keep_a_draft_for_the_representative() -> None:
+    """A payment a representative directed but nobody could price keeps its approval draft.
+
+    The claim stays with the representative, and the draft stays on the report so they can
+    adjust it on their screen and answer with the figure rather than start from nothing.
+    """
+    kept = a_report(recommendation=Recommendation.REQUEST_REP_CLARIFICATION, amount_usd=None)
+
+    assert kept.drafted_email is not None
+    assert kept.amount_usd is None
+
+
+def test_a_rep_clarification_action_needs_no_email() -> None:
+    """The ordinary clarification request still carries nothing for the merchant."""
+    asked = a_report(
+        recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
+        amount_usd=None,
+        drafted_email=None,
+    )
+
+    assert asked.drafted_email is None
 
 
 def test_a_merchant_information_report_must_name_the_details_needed() -> None:

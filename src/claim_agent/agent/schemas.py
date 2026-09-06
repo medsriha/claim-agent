@@ -305,9 +305,10 @@ class RevisionConclusion(InvestigationConclusion, _RepliesToTheRepresentative):
         description=(
             "True when the representative told you what to do about this claim and you are "
             "carrying out that instruction rather than recommending something of your own — "
-            "'approve it', 'pay the two bottles', 'refund it'. Set it only alongside the "
-            "recommendation and amount they asked for. If you cannot work out the amount or "
-            "which product they mean, leave it false and ask them instead."
+            "'approve it', 'pay the two bottles', 'refund it'. Set it whenever they have told "
+            "you to pay, with the recommendation and amount they asked for. If you cannot "
+            "work out the amount or which product they mean, still set it and still write "
+            "the approval email; ask them the one thing you need in your reply."
         ),
     )
 
@@ -377,7 +378,8 @@ class RevisedClaimReport(_RepliesToTheRepresentative):
             "settled_products naming what to pay for, and write the approval email in "
             "email_subject and email_body with no figure in it. Code prices those products "
             "from the invoice, adds the figure, and nothing is investigated again. If you "
-            "cannot tell which product they mean, leave this false and ask them instead."
+            "cannot tell which product they mean, still set this and still write the email; "
+            "ask them which product in your reply and leave settled_products empty."
         ),
     )
     directed_amount_usd: str | None = Field(

@@ -125,12 +125,25 @@ async def test_a_figure_that_cannot_be_read_falls_back_to_the_invoice() -> None:
 
 
 async def test_nothing_payable_asks_the_representative_instead_of_paying_nothing() -> None:
-    """An instruction cannot conjure a figure: no invoice, no report figure, no email."""
+    """An instruction cannot conjure a figure: no invoice and no report figure means asking."""
     findings = await paid(invoice=None)
 
     assert findings.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert findings.drafted_email is None
     assert "Tell me the amount" in what_pricing_produced(findings)
+
+
+async def test_asking_for_the_figure_still_keeps_the_email_for_the_representative() -> None:
+    """The draft is written even without the figure, so the rep adjusts it rather than waits.
+
+    It carries no amount line: the figure is added when they approve at one.
+    """
+    findings = await paid(invoice=None)
+
+    email = findings.drafted_email
+    assert email is not None
+    assert email.subject == "Your damage claim has been approved"
+    assert "Approved amount" not in email.body
+    assert "$" not in email.body
 
 
 # --- The email --------------------------------------------------------------
@@ -361,17 +374,36 @@ async def test_naming_a_product_and_saying_pay_it_carries_the_instruction_out() 
     assert revision.reworked
 
 
-async def test_an_instruction_to_pay_with_no_product_named_is_not_carried_out() -> None:
-    """Nothing can be priced without a product, so the answer falls back to asking."""
+async def test_an_instruction_to_pay_with_no_product_named_asks_and_keeps_the_draft() -> None:
+    """Nothing can be priced without a product, so the agent asks — and still writes the email."""
     revision = await rework_the_clarification(
         RevisedClaimReport(
             reply_to_representative="Which of the two products do you mean?",
             representative_directed_payment=True,
-            needs_more_from_representative=True,
+            email_subject="Your damage claim has been approved",
+            email_body="We have approved your claim for the damaged product.",
         )
     )
 
     assert revision.directed is None
+    assert revision.needs_reply
+    assert revision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    assert revision.email is not None
+    assert revision.email.to == CASE.contact_email
+    assert revision.email.subject == "Your damage claim has been approved"
+    assert revision.reworked
+
+
+async def test_an_instruction_to_pay_with_no_product_and_no_wording_only_asks() -> None:
+    """Without wording there is nothing to keep, and the question still goes to the rep."""
+    revision = await rework_the_clarification(
+        RevisedClaimReport(
+            reply_to_representative="Which of the two products do you mean?",
+            representative_directed_payment=True,
+        )
+    )
+
+    assert revision.email is None
     assert revision.needs_reply
 
 
@@ -399,3 +431,5 @@ def test_the_claim_wording_tells_the_agent_that_paying_is_not_investigating() ->
     assert "WHEN THEY TELL YOU TO PAY" in wording
     assert "Nothing is investigated again" in wording
     assert "representative_directed_payment" in wording
+    assert "do not push back and do not decline" in wording
+    assert "still write the approval email" in wording

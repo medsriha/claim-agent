@@ -250,10 +250,10 @@ class Report(BaseModel):
             if self.amount_usd is not None:
                 raise ValueError("A clarification request cannot carry an approved amount.")
 
-        if self.recommendation is Recommendation.REQUEST_REP_CLARIFICATION:
-            if self.drafted_email is not None:
-                raise ValueError("A representative clarification request must not carry an email.")
-        elif (
+        # A representative clarification request usually carries no email, but it may: a
+        # payment a representative directed that could not be priced keeps its approval
+        # draft, so they can finish it on their screen rather than start from nothing.
+        if (
             self.recommendation
             in (
                 Recommendation.APPROVE,

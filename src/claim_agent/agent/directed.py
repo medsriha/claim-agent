@@ -144,16 +144,16 @@ async def approve_as_directed(
     )
     conclusion = _the_conclusion(lines, directed=directed, amount=amount)
 
-    drafted = None
-    refused: tuple[str, ...] = ()
-    if decision.recommendation.is_approval:
-        drafted, refused = _the_approval_email(
-            conclusion,
-            lines=lines,
-            recommendation=decision.recommendation,
-            amount=amount,
-            contact_email=contact_email,
-        )
+    # The email is written whether or not a figure could be found. Where it could not, the
+    # report asks the representative for one and keeps the draft, so they adjust wording
+    # on their screen and answer with the figure rather than start again from nothing.
+    drafted, refused = _the_approval_email(
+        conclusion,
+        lines=lines,
+        recommendation=decision.recommendation,
+        amount=amount,
+        contact_email=contact_email,
+    )
 
     findings = ClaimFindings(
         lines=tuple(lines),
@@ -200,7 +200,8 @@ def what_pricing_produced(findings: ClaimFindings) -> str:
         )
     return (
         "Nothing on this claim could be priced from the invoice, so there is no figure to "
-        "approve. Tell me the amount to pay and I will approve it at that."
+        "approve yet. Tell me the amount to pay and I will approve it at that; the approval "
+        "email is drafted above for you to adjust."
     )
 
 
@@ -316,7 +317,9 @@ def _the_approval_email(
     A directed payment must not fail for want of an email: the representative has decided,
     and the email is the one thing left between that decision and the merchant. So where the
     model wrote no wording, or wrote a figure into it, the report says so as a concern and
-    a short deterministic email is used instead. The figure is added by code either way.
+    a short deterministic email is used instead. The figure is added by code, and only
+    when there is one: a draft kept while the representative is asked for the figure has
+    no amount line, and gains one when they approve at a figure.
     """
     try:
         return (

@@ -769,6 +769,26 @@ async def test_a_directed_approval_with_nothing_payable_asks_instead_of_paying_n
     assert result.findings.outcome.recommendation is not Recommendation.APPROVE
 
 
+async def test_a_directed_approval_that_cannot_be_paid_keeps_its_draft_for_the_rep() -> None:
+    """The agent asks for the figure rather than pushing back, and the email waits with it."""
+    result = await rework(
+        a_run_that_concludes(
+            a_rework(
+                recommended_amount_usd=None,
+                amount_reasoning=None,
+                representative_directed_outcome=True,
+            )
+        ),
+        feedback="Just approve it.",
+    )
+
+    assert result.findings is not None
+    assert result.findings.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+    email = result.findings.drafted_email
+    assert email is not None
+    assert "Approved amount" not in email.body
+
+
 async def test_an_ordinary_rework_is_still_held_to_every_rule() -> None:
     """FR-1.6: nothing changes for a rework the representative did not direct."""
     result = await rework(

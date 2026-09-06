@@ -230,9 +230,14 @@ def settle_conclusion(
         directed_by_representative=directed_by_representative,
     )
 
-    if decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION:
+    if (
+        decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
+        and not directed_by_representative
+    ):
         # This action is entirely internal. No merchant wording is generated or surfaced
-        # while the representative still has to resolve what is wrong or ambiguous.
+        # while the representative still has to resolve what is wrong or ambiguous. The
+        # one exception is a payment they directed that could not be paid: the draft is
+        # kept, with no figure, so they can finish it rather than start from nothing.
         drafted = None
     else:
         try:
@@ -244,6 +249,22 @@ def settle_conclusion(
                 requested_details=requested_details,
             )
         except ModelOutputRejectedError as refused:
+            if decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION:
+                # The claim was already going to a person; the draft was a courtesy, and
+                # its absence is worth a concern rather than a change of outcome.
+                return ClaimFindings(
+                    lines=tuple(lines),
+                    evidence=evidence,
+                    assessments=assessments,
+                    outcome=decision,
+                    amount=amount,
+                    concerns=_also(concerns, refused.message),
+                    drafted_email=None,
+                    ledger=outcome.ledger,
+                    budget=outcome.budget,
+                    conclusion=conclusion,
+                    requested_details=(),
+                )
             # Unsafe or incomplete merchant wording becomes a clarification request. The
             # report keeps the investigation's conclusion and explains why no email was made.
             logger.warning(
