@@ -4,7 +4,12 @@ import re
 from collections.abc import Sequence
 from decimal import ROUND_HALF_UP
 
-from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, ClaimSplit, InvestigationConclusion
+from claim_agent.agent.schemas import (
+    AMOUNT_PLACEHOLDER,
+    ClaimSplit,
+    InvestigationConclusion,
+    RevisionPlan,
+)
 from claim_agent.domain.evidence import EvidenceFinding, EvidenceKind, gaps_the_merchant_can_fill
 from claim_agent.domain.models import DraftedEmail
 from claim_agent.domain.outcome import Recommendation
@@ -146,7 +151,7 @@ _REQUEST_WORD_ALIASES = {
 }
 
 # A structured agent answer that carries merchant email wording.
-EmailWording = InvestigationConclusion | ClaimSplit
+EmailWording = InvestigationConclusion | ClaimSplit | RevisionPlan
 
 
 def finish_email(

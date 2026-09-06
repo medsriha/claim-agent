@@ -7,6 +7,7 @@ from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, ConfigDict
 
 from claim_agent.agent.budget import RunBudget
+from claim_agent.agent.email import finish_email
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
 from claim_agent.agent.investigate import ClaimFindings, settle_conclusion
@@ -18,6 +19,7 @@ from claim_agent.agent.prompts import (
     EarlierExchange,
     build_claim_revision_messages,
     build_revision_messages,
+    build_revision_plan_messages,
     build_screening_revision_messages,
 )
 from claim_agent.agent.run import invoice_for_claim
@@ -26,6 +28,8 @@ from claim_agent.agent.schemas import (
     EvidenceJudgement,
     RevisedClaimReport,
     RevisionConclusion,
+    RevisionMode,
+    RevisionPlan,
     SettledProduct,
 )
 from claim_agent.agent.tools import investigation_tools
@@ -71,6 +75,7 @@ class ReportUnderReview(BaseModel):
     evidence: tuple[EvidenceFinding, ...] = ()
     assessments: tuple[Assessment, ...] = ()
     concerns: tuple[str, ...] = ()
+    requested_details: tuple[str, ...] = ()
     drafted_email: DraftedEmail | None = None
     conversation: tuple[EarlierExchange, ...] = ()
 
@@ -89,6 +94,21 @@ class Reply(BaseModel):
     def reworked(self) -> bool:
         """Whether anything about the report actually changed."""
         return False
+
+
+class AnswerRevision(Reply):
+    """A reply that records the conversation without changing report material."""
+
+
+class EmailRevision(Reply):
+    """A merchant-email change that leaves every claim finding untouched."""
+
+    email: DraftedEmail
+
+    @property
+    def reworked(self) -> bool:
+        """An email is decision material on the report, so replacing it is a rework."""
+        return True
 
 
 class ClaimFindingsRevision(Reply):
@@ -121,6 +141,69 @@ class ClaimRevision(Reply):
             or self.email is not None
             or bool(self.requested_details)
         )
+
+
+async def plan_report_reply(
+    *,
+    under_review: ReportUnderReview,
+    feedback: str,
+    structured: StructuredModel,
+    events: EventStream,
+) -> AnswerRevision | EmailRevision | None:
+    """Answer cheaply when the stored report suffices; return none when evidence must be reworked."""
+    await events.emit(
+        EventKind.THINKING,
+        "Checking whether this message requires another evidence review.",
+    )
+    try:
+        plan = await structured.ask(
+            RevisionPlan,
+            build_revision_plan_messages(
+                claim_lines=under_review.lines,
+                recommendation=under_review.recommendation,
+                amount=under_review.amount,
+                evidence=under_review.evidence,
+                assessments=under_review.assessments,
+                concerns=under_review.concerns,
+                drafted_email=under_review.drafted_email,
+                feedback=feedback,
+                conversation=under_review.conversation,
+            ),
+        )
+    except ClaimAgentError as failure:
+        return AnswerRevision(reply=f"{failure.message} {_COULD_NOT_REWORK}")
+
+    if plan.mode is RevisionMode.REWORK_REPORT:
+        await events.emit(
+            EventKind.THINKING,
+            "The message changes the report, so its evidence will be reviewed.",
+        )
+        return None
+
+    common = {
+        "reply": plan.reply_to_representative,
+        "left_unchanged": plan.left_unchanged,
+        "needs_reply": plan.needs_more_from_representative,
+    }
+    if plan.mode is RevisionMode.ANSWER_ONLY:
+        return AnswerRevision(**common)
+
+    current_email = under_review.drafted_email
+    try:
+        email = finish_email(
+            plan,
+            recommendation=under_review.recommendation,
+            amount=under_review.amount,
+            contact_email=current_email.to if current_email is not None else None,
+            requested_details=under_review.requested_details,
+        )
+    except ClaimAgentError as failure:
+        return AnswerRevision(reply=f"{failure.message} {_COULD_NOT_REWORK}")
+    return EmailRevision(
+        **common,
+        changed=plan.changed or ("Rewrote the merchant email as requested.",),
+        email=email,
+    )
 
 
 async def rework_claim_findings(

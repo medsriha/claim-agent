@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from claim_agent.agent.email import finish_email
 from claim_agent.agent.investigate import ClaimFindings
-from claim_agent.agent.revise import ClaimFindingsRevision, ClaimRevision
+from claim_agent.agent.revise import (
+    AnswerRevision,
+    ClaimFindingsRevision,
+    ClaimRevision,
+    EmailRevision,
+)
 from claim_agent.agent.run import ClaimInvestigation
 from claim_agent.domain.case_facts import read_case_facts
 from claim_agent.domain.decision import DecisionStage
@@ -259,7 +264,7 @@ def report_for_the_claim(
 
 def build_revised_report(
     report: Report,
-    revision: ClaimFindingsRevision | ClaimRevision,
+    revision: ClaimFindingsRevision | ClaimRevision | EmailRevision | AnswerRevision,
     *,
     feedback: str,
     at: UtcDatetime,
@@ -313,8 +318,14 @@ def build_revised_report(
         "created_at": at,
     }
 
+    if isinstance(revision, EmailRevision):
+        return report.model_copy(update={**carried_forward, "drafted_email": revision.email})
+
     if isinstance(revision, ClaimRevision):
         return _a_claim_level_version(report, revision, carried_forward=carried_forward)
+
+    if isinstance(revision, AnswerRevision):
+        return report.model_copy(update=carried_forward)
 
     reworked = revision.findings
     if reworked is None:

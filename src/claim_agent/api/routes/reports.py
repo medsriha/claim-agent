@@ -224,11 +224,11 @@ async def send_report_back(
         sending_back: What is wrong or missing, in the representative's own words.
         reports: Where reports and any changed version are kept.
         decisions: Where what a representative decided is recorded (FR-C.1).
-        shipbob: Reads the case, its parcel and its order again, so the rework is built from
-            ShipBob's records rather than from a copy stored months ago.
-        evidence: Reads the claim's images and prices the shipment.
-        fetcher: Downloads an image so a model can look at it.
-        models: A way to build the models, asked for only once there is a rework to run.
+        shipbob: Reads the case, parcel and order when the message changes report findings.
+        evidence: Reads images and prices the shipment only for a full findings rework.
+        fetcher: Downloads an image only when a full findings rework needs to inspect it.
+        models: Builds the inexpensive stored-report router and, only when needed, the full
+            evidence-rework agent.
         memory: What a representative has corrected for this merchant, which this adds to.
         precedent_store: The closed claims this service has handled, so a reconsidered figure
             is judged the way comparable claims actually were (FR-R.7, FR-S.6).
