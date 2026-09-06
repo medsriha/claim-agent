@@ -25,8 +25,7 @@ export const PAGE_WORDS = {
    * fact into a sentence, and an empty box would read as a page that broke.
    */
   noSimilarClaims:
-    "No past claim resembles this one closely enough to be worth showing. That is ordinary, " +
-    "and it is not the same as this being the first claim of its kind.",
+    "No past claim resembles this one closely enough to be worth showing",
 
   /**
    * Shown when the past claims could not be looked up at all.

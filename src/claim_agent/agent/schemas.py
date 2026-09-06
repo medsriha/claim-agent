@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from enum import StrEnum
+from typing import Self
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from claim_agent.domain.assessment import AssessmentName
 from claim_agent.domain.evidence import EvidenceKind, EvidenceState
@@ -373,3 +376,49 @@ class RevisedClaimReport(_RepliesToTheRepresentative):
             "which is far quicker and answers them directly."
         ),
     )
+
+
+class RevisionMode(StrEnum):
+    """The least expensive sufficient way to answer a representative's message."""
+
+    ANSWER_ONLY = "answer_only"
+    EMAIL_ONLY = "email_only"
+    REWORK_REPORT = "rework_report"
+
+
+class RevisionPlan(_RepliesToTheRepresentative):
+    """A quick decision about whether an investigated report needs more investigation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: RevisionMode = Field(
+        description=(
+            "answer_only when the existing report already answers the question; email_only when "
+            "only merchant wording must change; rework_report when findings, products, amount, "
+            "recommendation, or requested evidence must be reconsidered."
+        )
+    )
+    email_subject: str | None = Field(
+        default=None,
+        description=(
+            "The complete replacement merchant-email subject for email_only. Null otherwise."
+        ),
+    )
+    email_body: str | None = Field(
+        default=None,
+        description=(
+            "The complete replacement merchant-email body for email_only, without any amount. "
+            "Null otherwise."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _email_belongs_only_to_an_email_change(self) -> Self:
+        has_both = self.email_subject is not None and self.email_body is not None
+        if self.mode is RevisionMode.EMAIL_ONLY and not has_both:
+            raise ValueError("An email-only answer must provide both the subject and body.")
+        if self.mode is not RevisionMode.EMAIL_ONLY and (
+            self.email_subject is not None or self.email_body is not None
+        ):
+            raise ValueError("Only an email-only answer may provide merchant email wording.")
+        return self

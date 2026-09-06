@@ -4,15 +4,18 @@ from collections.abc import Sequence
 
 from langchain_core.language_models import BaseChatModel
 
-from claim_agent.agent.events import EventStream
+from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.precedent_context import precedent_for_claim
 from claim_agent.agent.prompts import EarlierExchange
 from claim_agent.agent.revise import (
+    AnswerRevision,
     ClaimFindingsRevision,
     ClaimRevision,
+    EmailRevision,
     ReportUnderReview,
+    plan_report_reply,
     rework_claim_findings,
     rework_claim_report,
     rework_screening_report,
@@ -80,6 +83,7 @@ async def answer_the_representative(
     precedent_store: PrecedentStore,
     policy: Policy,
     threads: PassThreads | None = None,
+    events: EventStream | None = None,
 ) -> Report:
     """Give a representative's message to the agent, and write down what came back.
 
@@ -88,9 +92,9 @@ async def answer_the_representative(
         feedback: What they said, in their own words, kept exactly as written.
         at: When this is happening. Handed in rather than read from a clock, so the same
             message writes the same version twice (NFR-1).
-        shipbob: Reads the case, its parcel and its order again.
-        evidence: Reads the claim's images and prices the shipment.
-        fetcher: Downloads an image so a model can look at it.
+        shipbob: Reads the case, parcel and order only when the message changes findings.
+        evidence: Reads images and prices the shipment only for a full findings rework.
+        fetcher: Downloads an image only when a full findings rework needs to inspect it.
         models: A way to build the models, asked for only once there is something to answer.
         memory: What a representative has corrected for this merchant, read again when a claim
             is investigated afresh.
@@ -103,15 +107,11 @@ async def answer_the_representative(
     Returns:
         The next version of the report. Never raises for anything that can happen to a claim.
     """
-    try:
-        record = await gather_case_record(parked.case_id, shipbob)
-    except ClaimAgentError as failure:
-        logger.warning(
-            "reply_could_not_read_the_case",
-            case_id=parked.case_id,
-            failure=type(failure).__name__,
-        )
-        return _only_a_reply(parked, _COULD_NOT_READ_THE_CLAIM, feedback=feedback, at=at)
+    active_events = events if events is not None else EventStream()
+    await active_events.emit(
+        EventKind.REVISION_STARTED,
+        "Reviewing the representative's message.",
+    )
 
     try:
         chat, structured = models()
@@ -122,6 +122,26 @@ async def answer_the_representative(
             failure=type(failure).__name__,
         )
         return _only_a_reply(parked, _NO_MODEL, feedback=feedback, at=at)
+
+    if isinstance(parked.content, InvestigationReportContent):
+        planned = await plan_report_reply(
+            under_review=_report_under_review(parked),
+            feedback=feedback,
+            structured=structured,
+            events=active_events,
+        )
+        if planned is not None:
+            return build_revised_report(parked, planned, feedback=feedback, at=at)
+
+    try:
+        record = await gather_case_record(parked.case_id, shipbob)
+    except ClaimAgentError as failure:
+        logger.warning(
+            "reply_could_not_read_the_case",
+            case_id=parked.case_id,
+            failure=type(failure).__name__,
+        )
+        return _only_a_reply(parked, _COULD_NOT_READ_THE_CLAIM, feedback=feedback, at=at)
 
     answered = await _ask_the_agent(
         parked,
@@ -134,6 +154,7 @@ async def answer_the_representative(
         precedent_store=precedent_store,
         policy=policy,
         threads=threads,
+        events=active_events,
     )
 
     if isinstance(answered, ClaimRevision) and answered.settled:
@@ -150,6 +171,7 @@ async def answer_the_representative(
             precedent_store=precedent_store,
             policy=policy,
             threads=threads,
+            events=active_events,
         )
 
     if isinstance(answered, ClaimRevision) and answered.reinvestigate:
@@ -167,6 +189,7 @@ async def answer_the_representative(
             precedent_store=precedent_store,
             policy=policy,
             threads=threads,
+            events=active_events,
         )
 
     return build_revised_report(parked, answered, feedback=feedback, at=at)
@@ -184,7 +207,8 @@ async def _ask_the_agent(
     precedent_store: PrecedentStore,
     policy: Policy,
     threads: PassThreads | None,
-) -> ClaimFindingsRevision | ClaimRevision:
+    events: EventStream,
+) -> ClaimFindingsRevision | ClaimRevision | EmailRevision | AnswerRevision:
     """Put the message to the agent, in the shape this kind of report calls for.
 
     The three shapes are genuinely different questions, which is why they are three prompts
@@ -200,25 +224,14 @@ async def _ask_the_agent(
 
     if isinstance(content, InvestigationReportContent):
         return await rework_claim_findings(
-            under_review=ReportUnderReview(
-                lines=content.lines,
-                context=content.context,
-                attachments=content.attachments,
-                recommendation=content.outcome.recommendation,
-                amount=content.amount,
-                evidence=content.evidence,
-                assessments=content.assessments,
-                concerns=content.concerns,
-                drafted_email=parked.drafted_email,
-                conversation=what_has_been_said(parked),
-            ),
+            under_review=_report_under_review(parked),
             feedback=feedback,
             record=record,
             evidence_client=evidence,
             fetcher=fetcher,
             chat=chat,
             structured=structured,
-            events=EventStream(),
+            events=events,
             policy=policy,
             precedent=precedent_for_claim(
                 store=precedent_store,
@@ -251,7 +264,7 @@ async def _ask_the_agent(
             feedback=feedback,
             conversation=what_has_been_said(parked),
             structured=structured,
-            events=EventStream(),
+            events=events,
         )
 
     return await rework_screening_report(
@@ -262,7 +275,27 @@ async def _ask_the_agent(
         feedback=feedback,
         conversation=what_has_been_said(parked),
         structured=structured,
-        events=EventStream(),
+        events=events,
+    )
+
+
+def _report_under_review(report: Report) -> ReportUnderReview:
+    """Read an investigated report into the shape used by both planning and full rework."""
+    content = report.content
+    if not isinstance(content, InvestigationReportContent):
+        raise TypeError("Only an investigated report has findings to rework.")
+    return ReportUnderReview(
+        lines=content.lines,
+        context=content.context,
+        attachments=content.attachments,
+        recommendation=content.outcome.recommendation,
+        amount=content.amount,
+        evidence=content.evidence,
+        assessments=content.assessments,
+        concerns=content.concerns,
+        requested_details=content.requested_details,
+        drafted_email=report.drafted_email,
+        conversation=what_has_been_said(report),
     )
 
 
@@ -280,6 +313,7 @@ async def _look_into_what_they_settled(
     precedent_store: PrecedentStore,
     policy: Policy,
     threads: PassThreads | None,
+    events: EventStream,
 ) -> Report:
     """Look into the products a representative just named, and nothing else (FR-1a.4).
 
@@ -315,7 +349,7 @@ async def _look_into_what_they_settled(
         fetcher=fetcher,
         chat=chat,
         structured=structured,
-        events=EventStream(),
+        events=events,
         policy=policy,
         precedent=precedent_for_claim(
             store=precedent_store, case=record.case, lines=lines, policy=policy
@@ -409,6 +443,7 @@ async def _investigate_the_claim_again(
     precedent_store: PrecedentStore,
     policy: Policy,
     threads: PassThreads | None,
+    events: EventStream,
 ) -> Report:
     """Investigate the claim again, because the representative asked for it.
 
@@ -456,7 +491,7 @@ async def _investigate_the_claim_again(
         fetcher=fetcher,
         chat=chat,
         structured=structured,
-        events=EventStream(),
+        events=events,
         policy=policy,
         precedent_store=precedent_store,
         threads=threads,
@@ -557,7 +592,7 @@ def _only_a_reply(parked: Report, said: str, *, feedback: str, at: UtcDatetime) 
     the representative is told why, so they can send it back again or decide on it as it
     stands (NFR-4).
     """
-    return build_revised_report(parked, ClaimRevision(reply=said), feedback=feedback, at=at)
+    return build_revised_report(parked, AnswerRevision(reply=said), feedback=feedback, at=at)
 
 
 def what_has_been_said(report: Report) -> tuple[EarlierExchange, ...]:

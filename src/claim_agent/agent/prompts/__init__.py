@@ -34,6 +34,7 @@ from claim_agent.agent.prompts.wording import (
     IMAGE_CLASSIFICATION_PROMPT,
     INVESTIGATION_PROMPT,
     PROMPT_VERSION,
+    REVISION_PLAN_PROMPT,
     REVISION_PROMPT,
     REVISION_TURN_PROMPT,
     SCREENING_REVISION_PROMPT,
@@ -55,6 +56,7 @@ __all__ = [
     "IMAGE_CLASSIFICATION_PROMPT",
     "INVESTIGATION_PROMPT",
     "PROMPT_VERSION",
+    "REVISION_PLAN_PROMPT",
     "REVISION_PROMPT",
     "REVISION_TURN_PROMPT",
     "SCREENING_REVISION_PROMPT",
@@ -65,6 +67,7 @@ __all__ = [
     "build_image_classification_messages",
     "build_investigation_messages",
     "build_revision_messages",
+    "build_revision_plan_messages",
     "build_revision_turn_messages",
     "build_screening_revision_messages",
     "build_triage_messages",
@@ -180,6 +183,38 @@ def build_revision_messages(
         render_feedback(feedback),
     ]
     return messages("\n\n".join(sections))
+
+
+def build_revision_plan_messages(
+    *,
+    claim_lines: Sequence[ClaimLine],
+    recommendation: Recommendation,
+    amount: AmountDerivation,
+    evidence: Sequence[EvidenceFinding],
+    assessments: Sequence[Assessment],
+    concerns: Sequence[str],
+    drafted_email: DraftedEmail | None,
+    feedback: str,
+    conversation: Sequence[EarlierExchange] = (),
+) -> list[BaseMessage]:
+    """Ask whether a reply needs expensive evidence work, using only the stored report."""
+    sections = [
+        render_claim_lines(claim_lines),
+        render_report_as_it_stands(
+            recommendation=recommendation,
+            amount=amount,
+            evidence=evidence,
+            assessments=assessments,
+            concerns=concerns,
+            drafted_email=drafted_email,
+        ),
+        *render_conversation(conversation),
+        render_feedback(feedback),
+    ]
+    return [
+        SystemMessage(content=REVISION_PLAN_PROMPT),
+        HumanMessage(content="\n\n".join(sections)),
+    ]
 
 
 def build_revision_turn_messages(

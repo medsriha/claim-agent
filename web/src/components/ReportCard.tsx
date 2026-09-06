@@ -1,7 +1,7 @@
 /** One structured report a representative reads and decides on. */
 import { useState } from "react";
 
-import { approveReport, sendReportBack } from "../api/reportsClient";
+import { approveReport, readReport, sendReportBack } from "../api/reportsClient";
 import { ApiFailure } from "../api/failure";
 import type { DraftedEmail, Report, ReportReview } from "../api/types";
 import { formatMoney, humanise } from "../display";
@@ -29,6 +29,7 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState<Busy>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [reworkProgress, setReworkProgress] = useState<string | null>(null);
 
   const settled = current.state === "approved";
   const email = current.drafted_email;
@@ -59,6 +60,46 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
           : "This screen ran into a problem of its own.",
       );
     } finally {
+      setBusy(null);
+    }
+  };
+
+  const rework = async (): Promise<void> => {
+    const sent = feedback.trim();
+    if (sent === "") {
+      return;
+    }
+    setBusy("reworking");
+    setProblem(null);
+    setReworkProgress("Sending your message to the agent.");
+    try {
+      const result = await sendReportBack(current.report_id, sent, (event) => {
+        setReworkProgress(event.summary);
+      });
+      if (result.report_version === null) {
+        setCurrent((existing) => ({
+          ...existing,
+          decisions_taken: existing.decisions_taken + 1,
+          revisions: [...existing.revisions, result.revision],
+        }));
+      } else {
+        const answered = await readReport(result.report_id, result.report_version);
+        setCurrent(answered);
+        setSubject(answered.drafted_email?.subject ?? "");
+        setBody(answered.drafted_email?.body ?? "");
+        setAmount(answered.amount_usd ?? "");
+        setWhy("");
+      }
+      setFeedback("");
+      setFeedbackOpen(false);
+    } catch (error: unknown) {
+      setProblem(
+        error instanceof ApiFailure
+          ? error.message
+          : "This screen ran into a problem of its own.",
+      );
+    } finally {
+      setReworkProgress(null);
       setBusy(null);
     }
   };
@@ -156,6 +197,11 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
                   }}
                 />
               </label>
+              {busy === "reworking" && reworkProgress !== null && (
+                <p className="report-note" role="status">
+                  {reworkProgress}
+                </p>
+              )}
               <div className="report-feedback-buttons">
                 <button
                   type="button"
@@ -172,11 +218,7 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
                   type="button"
                   className="button-primary"
                   disabled={busy !== null || feedback.trim() === ""}
-                  onClick={() =>
-                    void act("reworking", () =>
-                      sendReportBack(current.report_id, feedback.trim()),
-                    )
-                  }
+                  onClick={() => void rework()}
                 >
                   {busy === "reworking" ? <Spinner /> : null}
                   Send feedback
