@@ -405,6 +405,11 @@ def _a_claim_level_version(
     if not isinstance(content, ClarificationReportContent) or not revision.reworked:
         return report.model_copy(update=carried_forward)
 
+    if revision.directed is not None:
+        # The settled products are priced and written up by the caller, who folds those
+        # findings in over this version. There is nothing claim-level to change here.
+        return report.model_copy(update=carried_forward)
+
     return report.model_copy(
         update={
             **carried_forward,

@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from langchain_core.messages import AIMessage
 from tests.fakes.model import scripted
-from tests.fixtures.attachments import ATTACHMENTS_1002, INVOICE_342578703
+from tests.fixtures.attachments import ATTACHMENTS_1002, INVOICE_342578703, invoice_from_order
 from tests.fixtures.shipbob import (
     CASE_1001,
     CASE_1002,
@@ -44,7 +44,12 @@ from claim_agent.api.deps import get_models
 from claim_agent.app import create_app
 from claim_agent.domain.evidence import EvidenceKind, EvidenceState
 from claim_agent.domain.outcome import Recommendation
-from claim_agent.report.models import ClarificationReportContent, Report, ReportState
+from claim_agent.report.models import (
+    ClarificationReportContent,
+    InvestigationReportContent,
+    Report,
+    ReportState,
+)
 from claim_agent.settings import Settings
 from claim_agent.storage.decision_store import DecisionStore
 from claim_agent.storage.merchant_memory import MerchantMemory
@@ -1206,3 +1211,152 @@ async def test_a_directed_payment_says_on_the_report_what_it_set_aside(
     outcome = approved["content"]["outcome"]
     assert outcome["directed_by_representative"] is True
     assert "evidence_incomplete" in outcome["waived"]
+
+
+# --- Approving as directed, without investigating again (FR-2.8) --------------
+
+
+def a_report_asking_the_merchant() -> Report:
+    """The collagen's report as it stands when it went back to the merchant for a photograph."""
+    asking = a_report()
+    content = asking.content
+    assert isinstance(content, InvestigationReportContent)
+    return asking.model_copy(
+        update={
+            "recommendation": Recommendation.REQUEST_INFO,
+            "amount_usd": None,
+            "content": content.model_copy(
+                update={
+                    "outcome": content.outcome.model_copy(
+                        update={"recommendation": Recommendation.REQUEST_INFO}
+                    ),
+                    "requested_details": ("a clear photograph showing the full product label",),
+                }
+            ),
+        }
+    )
+
+
+def an_approval_as_directed(**overrides: Any) -> RevisedClaimReport:
+    """What the agent reads off "it is the multi surface cleaner; approve the refund"."""
+    fields: dict[str, Any] = {
+        "reply_to_representative": "Taken as read: the multi surface cleaner. Pricing it now.",
+        "settled_products": (SettledProduct(name=MULTI_SURFACE, quantity=2, sku="A00300"),),
+        "representative_directed_payment": True,
+        "email_subject": "Your damage claim has been approved",
+        "email_body": "We have approved your claim for the damaged multi surface cleaner.",
+    }
+    fields.update(overrides)
+    return RevisedClaimReport.model_validate(fields)
+
+
+@pytest.fixture
+def invoice_1002(shipbob: respx.Router) -> None:
+    """Price CASE-1002's shipment from its own order, since that is what pays the claim."""
+    shipbob.post("/invoices/generate").respond(
+        200, json=invoice_from_order(ORDER_1002, shipment_id="344745459")
+    )
+
+
+async def test_an_instruction_to_pay_a_named_product_is_priced_and_not_investigated(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    shipbob: respx.Router,
+    case_1002: None,
+    invoice_1002: None,
+) -> None:
+    """A representative who has decided should not wait for the system to agree with them.
+
+    The claim is priced from the invoice and the approval email is finished with the figure.
+    No image is read, no tool is called, and no second model answer is needed.
+    """
+    store.record(a_clarification_report())
+    a_scripted_reply.append(an_approval_as_directed())
+
+    response = await client.post(
+        "/reports/RPT-CASE-1002/send-back",
+        headers={"Accept": "text/event-stream"},
+        json={"feedback": "The multi surface cleaner is the one. Approve the refund."},
+    )
+
+    messages = read_stream(response.text)
+    progress_kinds = {payload["kind"] for name, payload in messages if name == "progress"}
+    assert progress_kinds.isdisjoint({"tool_called", "image_classified", "attachments_listed"})
+    assert not any("/attachments" in str(call.request.url) for call in shipbob.calls)
+
+    (approved,) = (await client.get("/cases/CASE-1002/reports")).json()["reports"]
+    assert approved["version"] == 2
+    assert approved["product_names"] == [MULTI_SURFACE]
+    assert approved["recommendation"] == "approve"
+    assert approved["amount_usd"] == "25.98"
+    assert "Approved amount: $25.98" in approved["drafted_email"]["body"]
+    assert approved["content"]["outcome"]["directed_by_representative"] is True
+    round_ = approved["revisions"][-1]
+    assert round_["reworked"] is True
+    assert round_["reinvestigated"] is False
+    assert "$25.98" in round_["reply"]
+    assert "cannot" not in round_["reply"]
+
+
+async def test_a_figure_the_representative_named_is_what_a_named_product_is_paid(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    case_1002: None,
+    invoice_1002: None,
+) -> None:
+    store.record(a_clarification_report())
+    a_scripted_reply.append(an_approval_as_directed(directed_amount_usd="20.00"))
+
+    body = await send_feedback(
+        client, "RPT-CASE-1002", "The multi surface cleaner. Refund twenty dollars."
+    )
+
+    assert body["amount_usd"] == "20.00"
+    assert "Approved amount: $20.00" in body["drafted_email"]["body"]
+
+
+async def test_approving_an_investigated_report_costs_one_invoice_read(
+    client: AsyncClient,
+    store: ReportStore,
+    a_scripted_reply: list[Any],
+    shipbob: respx.Router,
+) -> None:
+    """ "Approve the refund" on a report that asked for more is an approval, not a rework."""
+    store.record(a_report_asking_the_merchant())
+    a_scripted_reply.append(
+        RevisionPlan(
+            mode=RevisionMode.APPROVE_AS_DIRECTED,
+            reply_to_representative="Approving it as you directed.",
+            changed=("Approved the collagen as you directed.",),
+            left_unchanged=("Every finding about the evidence.",),
+            email_subject="Your damage claim has been approved",
+            email_body="We have approved your claim for the damaged collagen.",
+        )
+    )
+
+    response = await client.post(
+        "/reports/RPT-CASE-1001/send-back",
+        headers={"Accept": "text/event-stream"},
+        json={"feedback": "Approve the refund."},
+    )
+
+    messages = read_stream(response.text)
+    progress_kinds = {payload["kind"] for name, payload in messages if name == "progress"}
+    assert progress_kinds.isdisjoint({"tool_called", "image_classified"})
+    assert [str(call.request.url.path) for call in shipbob.calls].count("/invoices/generate") == 1
+    assert not any("/attachments" in str(call.request.url) for call in shipbob.calls)
+
+    report = (await client.get("/reports/RPT-CASE-1001")).json()
+    assert report["version"] == 2
+    assert report["recommendation"] == "approve"
+    assert report["amount_usd"] == "52.00"
+    assert "Approved amount: $52.00" in report["drafted_email"]["body"]
+    assert report["content"]["outcome"]["directed_by_representative"] is True
+    assert report["content"]["evidence"] == a_report().content.model_dump(mode="json")["evidence"]
+    round_ = report["revisions"][-1]
+    assert round_["reworked"] is True
+    assert round_["reinvestigated"] is False
+    assert round_["changed"] == ["Approved the collagen as you directed."]
+    assert round_["reply"].startswith("Approving it as you directed.")

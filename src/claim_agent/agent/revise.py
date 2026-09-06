@@ -7,6 +7,7 @@ from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, ConfigDict
 
 from claim_agent.agent.budget import RunBudget
+from claim_agent.agent.directed import DirectedPayment
 from claim_agent.agent.email import finish_email
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
@@ -114,6 +115,17 @@ class EmailRevision(Reply):
         return True
 
 
+class DirectedApproval(Reply):
+    """The representative told the agent to approve the report as it stands (FR-2.8).
+
+    Nothing on the report changes here. The caller prices its products from the invoice
+    and finishes the approval email with what is carried in `directed`; this is the reply
+    and the instruction, kept together so the words the agent said reach the report.
+    """
+
+    directed: DirectedPayment
+
+
 class ClaimFindingsRevision(Reply):
     """A reworked report for an investigated claim (FR-R.9)."""
 
@@ -134,15 +146,22 @@ class ClaimRevision(Reply):
     email: DraftedEmail | None = None
     settled: tuple[SettledProduct, ...] = ()
     reinvestigate: bool = False
+    directed: DirectedPayment | None = None
+    """The instruction to pay the settled products, when the representative gave one."""
 
     @property
     def reworked(self) -> bool:
-        """Whether anything about the report actually changed."""
+        """Whether anything about the report actually changed.
+
+        A directed payment counts: the report stops asking and starts recommending, once
+        the settled products have been priced.
+        """
         return (
             self.recommendation is not None
             or self.ambiguity is not None
             or self.email is not None
             or bool(self.requested_details)
+            or self.directed is not None
         )
 
 
@@ -152,8 +171,13 @@ async def plan_report_reply(
     feedback: str,
     structured: StructuredModel,
     events: EventStream,
-) -> AnswerRevision | EmailRevision | None:
-    """Answer cheaply when the stored report suffices; return none when evidence must be reworked."""
+) -> AnswerRevision | EmailRevision | DirectedApproval | None:
+    """Answer cheaply when the stored report suffices; return none when evidence must be reworked.
+
+    A `DirectedApproval` means the representative told the agent to approve the claim as it
+    stands. Nothing about the evidence needs looking at again for that: the caller prices the
+    report's products and drafts the email, with the wording carried here (FR-2.8).
+    """
     await events.emit(
         EventKind.THINKING,
         "Checking whether this message requires another evidence review.",
@@ -190,6 +214,22 @@ async def plan_report_reply(
     }
     if plan.mode is RevisionMode.ANSWER_ONLY:
         return AnswerRevision(**common)
+
+    if plan.mode is RevisionMode.APPROVE_AS_DIRECTED:
+        await events.emit(
+            EventKind.THINKING,
+            "The representative directed payment, so the claim will be priced from the "
+            "invoice without another review of the evidence.",
+        )
+        return DirectedApproval(
+            **common,
+            changed=plan.changed,
+            directed=DirectedPayment(
+                email_subject=plan.email_subject,
+                email_body=plan.email_body,
+                amount_usd=plan.directed_amount_usd,
+            ),
+        )
 
     current_email = under_review.drafted_email
     try:
@@ -479,6 +519,20 @@ async def rework_claim_report(
         left_unchanged=answered.left_unchanged,
         needs_reply=answered.needs_more_from_representative,
     )
+
+    if answered.representative_directed_payment and answered.settled_products:
+        # The representative named what to pay for and said to pay it. The email fields
+        # hold the approval wording rather than a request, so nothing below applies: the
+        # caller prices the products and finishes that email with the figure (FR-2.8).
+        return ClaimRevision(
+            **said.model_dump(),
+            settled=answered.settled_products,
+            directed=DirectedPayment(
+                email_subject=answered.email_subject,
+                email_body=answered.email_body,
+                amount_usd=answered.directed_amount_usd,
+            ),
+        )
 
     if not _anything_to_change(answered):
         # The agent answered without changing the report — a question, or a request to

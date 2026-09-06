@@ -142,6 +142,8 @@ sequenceDiagram
         P-->>R: reply, same version
     else email only
         P-->>R: rewritten email through the finisher, new version
+    else approve as directed
+        P-->>R: products priced from the invoice, rules waived, email finished, new approved version
     else rework
         P->>T: still held?
         alt yes
@@ -154,8 +156,15 @@ sequenceDiagram
 ```
 
 A note that names the damaged products on an unsettled claim triggers one targeted
-investigation of those products. Every round of conversation is rendered into the next
-prompt, so a later note cannot undo an earlier correction.
+investigation of those products. A note that tells the agent to approve, pay or refund
+runs no agent pass at all, on either kind of report (`agent/directed.py`): the products
+are priced from the invoice, every rule that would have withheld the payment is recorded
+as waived, and the approval email is finished with the checked figure. The figure is the
+one the representative named, else the investigation's own figure, else what the products
+cost on the invoice; the model's only contribution is the email wording. The
+representative has decided, and investigating again would only make them wait for the
+system to agree with them. Every round of conversation is rendered into the next prompt,
+so a later note cannot undo an earlier correction.
 
 ## 7. Decisions and tradeoffs
 
@@ -203,9 +212,11 @@ Grouped by what a reviewer would ask about. Each item names the mechanism, not j
   `tools/seed_precedents.py` writes fictional closed claims; the system prompt tells the model
   every past claim was "closed by a ShipBob representative". In the demo that statement is
   false. Approvals do not write to the store, so nothing real ever replaces the fiction.
-- **The waiver is triggered by interpretation.** On a rework the model decides whether the
-  note *directed* an approval and sets `representative_directed_outcome`; code then sets aside
-  every withholding rule. A note that quotes a merchant ("they say just pay it") can be read as
+- **The waiver is triggered by interpretation.** On a send-back the model decides whether the
+  note *directed* an approval (`approve_as_directed` on the plan, `representative_directed_payment`
+  on a clarification answer, `representative_directed_outcome` on a rework); code then sets
+  aside every withholding rule and, on the directed path, prices the claim without looking
+  at any evidence. A note that quotes a merchant ("they say just pay it") can be read as
   direction. The approval is labelled as directed, so a reviewer can see it, but the label is
   the model's reading of free text.
 

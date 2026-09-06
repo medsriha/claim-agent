@@ -363,9 +363,30 @@ class RevisedClaimReport(_RepliesToTheRepresentative):
         description=(
             "The products the representative has just told you this claim is for. Fill this in "
             "whenever they name one, however briefly — 'the 24oz multi surface cleaner is the "
-            "one' settles it. Each becomes a claim line, and the claim is then investigated "
-            "with all of them in hand. Empty when they have not said which products were "
+            "one' settles it. Each becomes a claim line. Without an instruction to pay, the "
+            "claim is then investigated with all of them in hand; with one, they are priced "
+            "from the invoice instead. Empty when they have not said which products were "
             "damaged."
+        ),
+    )
+    representative_directed_payment: bool = Field(
+        default=False,
+        description=(
+            "True when the representative told you to pay, approve or refund this claim — "
+            "'approve the refund', 'pay it', 'refund the two bottles'. Set it only alongside "
+            "settled_products naming what to pay for, and write the approval email in "
+            "email_subject and email_body with no figure in it. Code prices those products "
+            "from the invoice, adds the figure, and nothing is investigated again. If you "
+            "cannot tell which product they mean, leave this false and ask them instead."
+        ),
+    )
+    directed_amount_usd: str | None = Field(
+        default=None,
+        description=(
+            "The figure the representative named, if they named one, in dollars written as "
+            "digits with at most two decimal places and no currency symbol — for example "
+            "31.20. Null when they named none; the products are then priced from the "
+            "invoice. Only alongside representative_directed_payment."
         ),
     )
     needs_fresh_investigation: bool = Field(
@@ -377,13 +398,28 @@ class RevisedClaimReport(_RepliesToTheRepresentative):
         ),
     )
 
+    @model_validator(mode="after")
+    def _a_figure_belongs_only_to_a_directed_payment(self) -> Self:
+        if self.directed_amount_usd is not None and not self.representative_directed_payment:
+            raise ValueError(
+                "A figure may only be named alongside an instruction from the representative "
+                "to pay."
+            )
+        return self
+
 
 class RevisionMode(StrEnum):
     """The least expensive sufficient way to answer a representative's message."""
 
     ANSWER_ONLY = "answer_only"
     EMAIL_ONLY = "email_only"
+    APPROVE_AS_DIRECTED = "approve_as_directed"
     REWORK_REPORT = "rework_report"
+
+    @property
+    def carries_an_email(self) -> bool:
+        """Whether an answer in this mode has to come with merchant email wording."""
+        return self in (RevisionMode.EMAIL_ONLY, RevisionMode.APPROVE_AS_DIRECTED)
 
 
 class RevisionPlan(_RepliesToTheRepresentative):
@@ -394,31 +430,53 @@ class RevisionPlan(_RepliesToTheRepresentative):
     mode: RevisionMode = Field(
         description=(
             "answer_only when the existing report already answers the question; email_only when "
-            "only merchant wording must change; rework_report when findings, products, amount, "
-            "recommendation, or requested evidence must be reconsidered."
+            "only merchant wording must change; approve_as_directed when the representative "
+            "tells you to approve, pay or refund the claim as it stands; rework_report when "
+            "findings, products, amount, recommendation, or requested evidence must be "
+            "reconsidered."
         )
     )
     email_subject: str | None = Field(
         default=None,
         description=(
-            "The complete replacement merchant-email subject for email_only. Null otherwise."
+            "The complete merchant-email subject for email_only or approve_as_directed. Null "
+            "otherwise."
         ),
     )
     email_body: str | None = Field(
         default=None,
         description=(
-            "The complete replacement merchant-email body for email_only, without any amount. "
-            "Null otherwise."
+            "The complete merchant-email body for email_only or approve_as_directed, without "
+            "any amount. Null otherwise."
+        ),
+    )
+    directed_amount_usd: str | None = Field(
+        default=None,
+        description=(
+            "For approve_as_directed only: the figure the representative named, if they named "
+            "one, in dollars written as digits with at most two decimal places and no currency "
+            "symbol. Null when they named none, and null in every other mode."
         ),
     )
 
     @model_validator(mode="after")
-    def _email_belongs_only_to_an_email_change(self) -> Self:
+    def _email_belongs_only_to_an_answer_that_needs_one(self) -> Self:
         has_both = self.email_subject is not None and self.email_body is not None
-        if self.mode is RevisionMode.EMAIL_ONLY and not has_both:
-            raise ValueError("An email-only answer must provide both the subject and body.")
-        if self.mode is not RevisionMode.EMAIL_ONLY and (
+        if self.mode.carries_an_email and not has_both:
+            raise ValueError(
+                "An email-only or approve-as-directed answer must provide both the subject "
+                "and body."
+            )
+        if not self.mode.carries_an_email and (
             self.email_subject is not None or self.email_body is not None
         ):
-            raise ValueError("Only an email-only answer may provide merchant email wording.")
+            raise ValueError(
+                "Only an email-only or approve-as-directed answer may provide merchant email "
+                "wording."
+            )
+        if (
+            self.directed_amount_usd is not None
+            and self.mode is not RevisionMode.APPROVE_AS_DIRECTED
+        ):
+            raise ValueError("Only an approve-as-directed answer may name a figure.")
         return self

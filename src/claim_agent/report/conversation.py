@@ -4,15 +4,19 @@ from collections.abc import Sequence
 
 from langchain_core.language_models import BaseChatModel
 
+from claim_agent.agent.directed import DirectedPayment, approve_as_directed, what_pricing_produced
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
+from claim_agent.agent.investigate import ClaimFindings, model_name
 from claim_agent.agent.llm import StructuredModel
+from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.precedent_context import precedent_for_claim
 from claim_agent.agent.prompts import EarlierExchange
 from claim_agent.agent.revise import (
     AnswerRevision,
     ClaimFindingsRevision,
     ClaimRevision,
+    DirectedApproval,
     EmailRevision,
     ReportUnderReview,
     plan_report_reply,
@@ -20,7 +24,7 @@ from claim_agent.agent.revise import (
     rework_claim_report,
     rework_screening_report,
 )
-from claim_agent.agent.run import investigate_claim
+from claim_agent.agent.run import investigate_claim, invoice_for_claim
 from claim_agent.agent.threads import PassThreads
 from claim_agent.api.deps import ModelsFor
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, build_claim_lines
@@ -123,6 +127,7 @@ async def answer_the_representative(
         )
         return _only_a_reply(parked, _NO_MODEL, feedback=feedback, at=at)
 
+    directed_approval: DirectedApproval | None = None
     if isinstance(parked.content, InvestigationReportContent):
         planned = await plan_report_reply(
             under_review=_report_under_review(parked),
@@ -130,7 +135,9 @@ async def answer_the_representative(
             structured=structured,
             events=active_events,
         )
-        if planned is not None:
+        if isinstance(planned, DirectedApproval):
+            directed_approval = planned
+        elif planned is not None:
             return build_revised_report(parked, planned, feedback=feedback, at=at)
 
     try:
@@ -142,6 +149,19 @@ async def answer_the_representative(
             failure=type(failure).__name__,
         )
         return _only_a_reply(parked, _COULD_NOT_READ_THE_CLAIM, feedback=feedback, at=at)
+
+    if directed_approval is not None:
+        return await _pay_the_report_as_directed(
+            parked,
+            directed_approval,
+            feedback=feedback,
+            at=at,
+            record=record,
+            evidence=evidence,
+            chat=chat,
+            policy=policy,
+            events=active_events,
+        )
 
     answered = await _ask_the_agent(
         parked,
@@ -156,6 +176,20 @@ async def answer_the_representative(
         threads=threads,
         events=active_events,
     )
+
+    if isinstance(answered, ClaimRevision) and answered.settled and answered.directed is not None:
+        return await _pay_what_they_settled(
+            parked,
+            answered,
+            answered.directed,
+            feedback=feedback,
+            at=at,
+            record=record,
+            evidence=evidence,
+            chat=chat,
+            policy=policy,
+            events=active_events,
+        )
 
     if isinstance(answered, ClaimRevision) and answered.settled:
         return await _look_into_what_they_settled(
@@ -394,6 +428,152 @@ async def _look_into_what_they_settled(
     )
 
 
+async def _pay_the_report_as_directed(
+    parked: Report,
+    planned: DirectedApproval,
+    *,
+    feedback: str,
+    at: UtcDatetime,
+    record: CaseRecord,
+    evidence: EvidenceClient,
+    chat: BaseChatModel,
+    policy: Policy,
+    events: EventStream,
+) -> Report:
+    """Approve an investigated report because the representative said to (FR-2.8).
+
+    **This is what an approval should cost: one invoice read.** The report already names its
+    products and holds everything the investigation established; the representative has read
+    it and decided. Investigating it again to confirm what they said would make them wait for
+    the system to agree with them, and the findings it came back with would be theirs anyway.
+
+    So the products are priced from the invoice, every finding is carried forward as it
+    was, and the approval email is finished with the figure. The rules that would have
+    withheld the payment are recorded as waived on the report, not silently dropped.
+    """
+    content = parked.content
+    if not isinstance(content, InvestigationReportContent):
+        raise TypeError("Only an investigated report can be approved as it stands.")
+
+    paid = await approve_as_directed(
+        lines=content.lines,
+        directed=planned.directed,
+        invoice=await invoice_for_claim(record=record, evidence=evidence, cache=ObservationCache()),
+        policy=policy,
+        contact_email=record.case.contact_email,
+        model=model_name(chat),
+        events=events,
+        evidence=content.evidence,
+        assessments=content.assessments,
+        concerns=content.concerns,
+        earlier_amount=content.amount,
+    )
+    logger.info(
+        "report_paid_as_directed",
+        case_id=parked.case_id,
+        products=len(content.lines),
+        recommendation=paid.outcome.recommendation.value,
+    )
+    return build_revised_report(
+        parked,
+        ClaimFindingsRevision(
+            findings=paid.model_copy(update={"thread_id": content.thread_id}),
+            reply=_also(planned.reply, what_pricing_produced(paid)),
+            changed=planned.changed or _what_a_directed_payment_changed(paid),
+            left_unchanged=planned.left_unchanged,
+            needs_reply=planned.needs_reply or not paid.outcome.recommendation.is_approval,
+        ),
+        feedback=feedback,
+        at=at,
+    )
+
+
+async def _pay_what_they_settled(
+    parked: Report,
+    answered: ClaimRevision,
+    directed: DirectedPayment,
+    *,
+    feedback: str,
+    at: UtcDatetime,
+    record: CaseRecord,
+    evidence: EvidenceClient,
+    chat: BaseChatModel,
+    policy: Policy,
+    events: EventStream,
+) -> Report:
+    """Pay the products a representative just named, because they said to (FR-1a.4, FR-2.8).
+
+    A representative who names the product *and* says to pay it has settled everything the
+    clarification report was waiting on. Looking into the product anyway — reading its
+    photographs, judging it — would only be the system checking their answer, and on a
+    claim nobody could split it is the slow route to a report that says what they said.
+
+    So their answer is turned straight into claim lines, priced from the invoice, and
+    written up as an approved report with the email finished. Nothing about the evidence
+    is established, and the report says so plainly rather than pretending otherwise.
+    """
+    lines = build_claim_lines(
+        parked.case_id,
+        tuple(
+            ClaimedProduct(name=product.name, quantity=product.quantity, sku=product.sku)
+            for product in answered.settled
+        ),
+        record.order,
+    )
+
+    paid = await approve_as_directed(
+        lines=lines,
+        directed=directed,
+        invoice=await invoice_for_claim(record=record, evidence=evidence, cache=ObservationCache()),
+        policy=policy,
+        contact_email=record.case.contact_email,
+        model=model_name(chat),
+        events=events,
+        concerns=(answered.ambiguity,) if answered.ambiguity else (),
+    )
+    logger.info(
+        "settled_products_paid_as_directed",
+        case_id=parked.case_id,
+        named=len(lines),
+        recommendation=paid.outcome.recommendation.value,
+    )
+
+    built = report_for_the_claim(
+        findings=paid,
+        case=record.case,
+        carrier=record.shipment.carrier if record.shipment is not None else None,
+        context=_context_of(parked),
+        attachments=_attachments_of(parked),
+        at=at,
+    )
+    return _findings_became_the_next_version(
+        parked,
+        built,
+        answered.model_copy(
+            update={
+                "reply": _also(answered.reply, what_pricing_produced(paid)),
+                "changed": answered.changed or _what_a_directed_payment_changed(paid),
+                "needs_reply": answered.needs_reply or not paid.outcome.recommendation.is_approval,
+            }
+        ),
+        feedback=feedback,
+        at=at,
+        reinvestigated=False,
+    )
+
+
+def _what_a_directed_payment_changed(paid: ClaimFindings) -> tuple[str, ...]:
+    """Say what a directed payment did to the report, one item each (FR-R.10)."""
+    if not paid.outcome.recommendation.is_approval:
+        return ()
+    named = ", ".join(line.product_name for line in paid.lines)
+    return (
+        f"Approved {named} at ${paid.amount.amount_usd} as you directed, priced from the "
+        "invoice rather than investigated again.",
+        "Finished the approval email with that figure.",
+    )
+
+
 def _nothing_established_yet(
     lines: Sequence[ClaimLine], parked: Report, *, ambiguity: str | None
 ) -> ReportUnderReview:
@@ -519,6 +699,7 @@ def _findings_became_the_next_version(
     *,
     feedback: str,
     at: UtcDatetime,
+    reinvestigated: bool = True,
 ) -> Report:
     """Make freshly investigated findings the next version of the report they replace.
 
@@ -541,7 +722,9 @@ def _findings_became_the_next_version(
     because a stopped claim is never investigated, and it is refused rather than trusted to
     stay that way.
     """
-    revised = build_revised_report(parked, revision, feedback=feedback, at=at, reinvestigated=True)
+    revised = build_revised_report(
+        parked, revision, feedback=feedback, at=at, reinvestigated=reinvestigated
+    )
     if isinstance(parked.content, ScreeningReportContent):
         logger.error("fresh_findings_withheld_from_a_stopped_claim", report_id=parked.report_id)
         return revised
