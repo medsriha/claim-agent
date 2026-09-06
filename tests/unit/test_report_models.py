@@ -394,8 +394,15 @@ def test_the_rounds_of_a_conversation_have_to_be_numbered_in_order() -> None:
 
 def test_a_round_cannot_answer_a_version_that_did_not_exist_yet() -> None:
     """FR-R.13: a note is written on a version the representative was actually looking at."""
-    with pytest.raises(ValidationError, match="came before"):
-        a_report(version=2, revisions=(a_turn(from_version=2),))
+    with pytest.raises(ValidationError, match="this version"):
+        a_report(version=2, revisions=(a_turn(from_version=3),))
+
+
+def test_a_question_only_round_can_be_recorded_on_the_current_version() -> None:
+    """A conversation does not create a report version when none of its findings changed."""
+    report = a_report(version=1, revisions=(a_turn(from_version=1, reworked=False),))
+
+    assert report.revisions[0].from_version == report.version
 
 
 def test_a_round_says_whether_the_report_was_actually_reworked() -> None:

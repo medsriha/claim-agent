@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import respx
@@ -78,6 +79,33 @@ async def client(app: FastAPI) -> Any:
     """An HTTP client bound to that application, no network involved."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http
+
+
+def read_stream(body: str) -> list[tuple[str, dict[str, Any]]]:
+    """Read the named, JSON-valued messages from one server-sent-event response."""
+    messages: list[tuple[str, dict[str, Any]]] = []
+    for block in body.split("\n\n"):
+        lines = [line for line in block.splitlines() if line]
+        if not lines:
+            continue
+        name = next((line[7:] for line in lines if line.startswith("event: ")), "")
+        data = next((line[6:] for line in lines if line.startswith("data: ")), "")
+        messages.append((name, json.loads(data)))
+    return messages
+
+
+async def send_feedback(client: AsyncClient, report_id: str, feedback: str) -> dict[str, Any]:
+    """Send one note through the stream, then read the report state it left behind."""
+    response = await client.post(
+        f"/reports/{report_id}/send-back",
+        headers={"Accept": "text/event-stream"},
+        json={"feedback": feedback},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    messages = read_stream(response.text)
+    assert [name for name, _ in messages][-2:] == ["result", "done"]
+    return cast(dict[str, Any], (await client.get(f"/reports/{report_id}")).json())
 
 
 def a_claim_of_two_products(**overrides: Any) -> Report:
@@ -327,12 +355,9 @@ async def test_sending_a_report_back_records_the_note_in_the_reps_own_words(
     """
     store.record(a_report())
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1001/send-back",
-            json={"feedback": "The packaging photo is the box, not the product."},
-        )
-    ).json()
+    body = await send_feedback(
+        client, "RPT-CASE-1001", "The packaging photo is the box, not the product."
+    )
 
     assert body["reviews"][-1]["rep_words"] == ("The packaging photo is the box, not the product.")
     assert decisions.count() == 1
@@ -344,18 +369,15 @@ async def test_a_note_the_agent_could_not_answer_still_leaves_a_report_to_act_on
     """NFR-4: a rework that could not run must never cost a rep the work they were deciding on.
 
     ShipBob is unreachable from this test process, so the rework never starts. What comes
-    back is the next version with every finding unchanged and a sentence saying why.
+    back is recorded on the current version with every finding unchanged and a sentence saying
+    why.
     """
     before = a_report()
     store.record(before)
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1001/send-back", json={"feedback": "Look at the box again."}
-        )
-    ).json()
+    body = await send_feedback(client, "RPT-CASE-1001", "Look at the box again.")
 
-    assert body["version"] == before.version + 1
+    assert body["version"] == before.version
     assert body["state"] == "awaiting_review"
     assert body["recommendation"] == before.recommendation
     assert body["revisions"][-1]["reworked"] is False
@@ -455,11 +477,7 @@ async def test_fr_r_8_a_stopped_claim_gets_an_answer_and_keeps_its_verdict(
         )
     )
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1004/send-back", json={"feedback": "Sixty days is too strict."}
-        )
-    ).json()
+    body = await send_feedback(client, "RPT-CASE-1004", "Sixty days is too strict.")
 
     assert decisions.count() == 1
     assert "73 days after delivery" in body["revisions"][-1]["reply"]
@@ -481,11 +499,7 @@ async def test_a_stopped_claims_merchant_email_can_still_be_reworded(
         )
     )
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1004/send-back", json={"feedback": "That email reads harshly."}
-        )
-    ).json()
+    body = await send_feedback(client, "RPT-CASE-1004", "That email reads harshly.")
 
     assert body["drafted_email"]["body"].startswith("We are sorry")
     assert body["content"] == a_screening_report().content.model_dump(mode="json")
@@ -618,17 +632,37 @@ async def test_fr_r_1_a_note_gets_the_report_reworked_and_handed_back(
     store.record(a_report())
     a_scripted_reply.append(a_reworked_answer())
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1001/send-back",
-            json={"feedback": "The packaging photo is the box, not the product."},
-        )
-    ).json()
+    body = await send_feedback(
+        client, "RPT-CASE-1001", "The packaging photo is the box, not the product."
+    )
 
     assert body["version"] == 2
     assert body["state"] == "awaiting_review"
     assert body["recommendation"] == "request_info"
     assert body["amount_usd"] is None
+
+
+async def test_feedback_streams_progress_and_only_returns_a_report_reference(
+    client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
+) -> None:
+    """The feedback response stays small; changed report data is fetched only if wanted."""
+    store.record(a_report())
+    a_scripted_reply.append(a_reworked_answer())
+
+    response = await client.post(
+        "/reports/RPT-CASE-1001/send-back",
+        headers={"Accept": "text/event-stream"},
+        json={"feedback": "The packaging photo is the box, not the product."},
+    )
+
+    messages = read_stream(response.text)
+    assert next(name for name, _ in messages) == "progress"
+    assert [name for name, _ in messages][-2:] == ["result", "done"]
+    result = next(payload for name, payload in messages if name == "result")
+    assert set(result) == {"report_id", "report_version", "revision"}
+    assert result["report_version"] == 2
+    assert "content" not in result
+    assert "reply" in result["revision"]
 
 
 async def test_fr_r_10_the_reworked_report_says_what_changed_and_what_did_not(
@@ -638,12 +672,9 @@ async def test_fr_r_10_the_reworked_report_says_what_changed_and_what_did_not(
     store.record(a_report())
     a_scripted_reply.append(a_reworked_answer())
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1001/send-back",
-            json={"feedback": "The packaging photo is the box, not the product."},
-        )
-    ).json()
+    body = await send_feedback(
+        client, "RPT-CASE-1001", "The packaging photo is the box, not the product."
+    )
 
     turn = body["revisions"][-1]
     assert turn["reworked"] is True
@@ -660,12 +691,9 @@ async def test_fr_r_11_the_merchant_email_is_rewritten_to_match(
     store.record(a_report())
     a_scripted_reply.append(a_reworked_answer())
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1001/send-back",
-            json={"feedback": "The packaging photo is the box, not the product."},
-        )
-    ).json()
+    body = await send_feedback(
+        client, "RPT-CASE-1001", "The packaging photo is the box, not the product."
+    )
 
     assert "outer shipping box" in body["drafted_email"]["body"]
     assert body["drafted_email"]["is_draft"] is True
@@ -703,14 +731,12 @@ async def test_fr_r_12_a_second_note_carries_the_first_one_into_the_rework(
     await client.post(
         "/reports/RPT-CASE-1001/send-back", json={"feedback": "The packaging photo is wrong."}
     )
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1001/send-back",
-            json={"feedback": "Ask for the invoice again while you are there."},
-        )
-    ).json()
+    body = await send_feedback(
+        client, "RPT-CASE-1001", "Ask for the invoice again while you are there."
+    )
 
-    assert body["version"] == 3
+    # The second answer adds to the conversation but does not alter the report data again.
+    assert body["version"] == 2
     assert [turn["feedback"] for turn in body["revisions"]] == [
         "The packaging photo is wrong.",
         "Ask for the invoice again while you are there.",
@@ -795,12 +821,7 @@ async def test_fr_r_1_a_claim_that_names_no_product_still_answers_the_representa
         )
     )
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1002/send-back",
-            json={"feedback": "Both 24oz bottles were damaged."},
-        )
-    ).json()
+    body = await send_feedback(client, "RPT-CASE-1002", "Both 24oz bottles were damaged.")
 
     assert body["version"] == 2
     assert "Both 24oz bottles, then" in body["revisions"][-1]["reply"]
@@ -829,12 +850,11 @@ async def test_a_claim_that_names_no_product_can_never_be_given_an_amount(
         )
     )
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1002/send-back",
-            json={"feedback": "approve the refund for the two bottles and generate an email"},
-        )
-    ).json()
+    body = await send_feedback(
+        client,
+        "RPT-CASE-1002",
+        "approve the refund for the two bottles and generate an email",
+    )
 
     assert body["amount_usd"] is None
     assert body["recommendation"] != "approve"
@@ -858,13 +878,16 @@ async def test_an_answer_that_changes_nothing_leaves_the_report_exactly_as_it_wa
         RevisedClaimReport(reply_to_representative="Yes, both photographs are of the same box.")
     )
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1002/send-back",
-            json={"feedback": "Are the two photos the same box?"},
-        )
-    ).json()
+    response = await client.post(
+        "/reports/RPT-CASE-1002/send-back",
+        headers={"Accept": "text/event-stream"},
+        json={"feedback": "Are the two photos the same box?"},
+    )
+    result = next(payload for name, payload in read_stream(response.text) if name == "result")
+    body = (await client.get("/reports/RPT-CASE-1002")).json()
 
+    assert result["report_version"] is None
+    assert len(store.versions_of("RPT-CASE-1002")) == 1
     assert body["content"] == before.content.model_dump(mode="json")
     assert body["drafted_email"] == (
         before.drafted_email.model_dump(mode="json") if before.drafted_email else None
@@ -936,12 +959,9 @@ async def test_a_representative_settling_the_split_gets_the_claim_investigated_a
     a_scripted_reply.append(a_settled_split())
     a_scripted_reply.append(an_investigated_line())
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1002/send-back",
-            json={"feedback": "Both 24oz multi-surface bottles were damaged."},
-        )
-    ).json()
+    body = await send_feedback(
+        client, "RPT-CASE-1002", "Both 24oz multi-surface bottles were damaged."
+    )
 
     assert body["revisions"][-1]["reinvestigated"] is True
     (produced,) = (await client.get("/cases/CASE-1002/reports")).json()["reports"]
@@ -1062,17 +1082,11 @@ async def test_naming_a_product_produces_a_priced_report_without_redoing_the_cla
     )
     a_scripted_reply.append(a_directed_approval())
 
-    body = (
-        await client.post(
-            "/reports/RPT-CASE-1002/send-back",
-            json={
-                "feedback": (
-                    "CleanBoss Multi Surface Cleaner 24oz is the one. "
-                    "Generate a refund for the product"
-                )
-            },
-        )
-    ).json()
+    body = await send_feedback(
+        client,
+        "RPT-CASE-1002",
+        "CleanBoss Multi Surface Cleaner 24oz is the one. Generate a refund for the product",
+    )
 
     assert "cannot" not in body["revisions"][-1]["reply"]
     (approved,) = (await client.get("/cases/CASE-1002/reports")).json()["reports"]

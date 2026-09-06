@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from langchain_core.language_models import BaseChatModel
 
-from claim_agent.agent.events import EventStream
+from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.precedent_context import precedent_for_claim
@@ -78,6 +78,7 @@ async def answer_the_representative(
     memory: MerchantMemory,
     precedent_store: PrecedentStore,
     policy: Policy,
+    events: EventStream | None = None,
 ) -> Report:
     """Give a representative's message to the agent, and write down what came back.
 
@@ -98,6 +99,12 @@ async def answer_the_representative(
     Returns:
         The next version of the report. Never raises for anything that can happen to a claim.
     """
+    active_events = events if events is not None else EventStream()
+    await active_events.emit(
+        EventKind.REVISION_STARTED,
+        "Reviewing the representative's message.",
+    )
+
     try:
         record = await gather_case_record(parked.case_id, shipbob)
     except ClaimAgentError as failure:
@@ -128,6 +135,7 @@ async def answer_the_representative(
         structured=structured,
         precedent_store=precedent_store,
         policy=policy,
+        events=active_events,
     )
 
     if isinstance(answered, ClaimRevision) and answered.settled:
@@ -143,6 +151,7 @@ async def answer_the_representative(
             structured=structured,
             precedent_store=precedent_store,
             policy=policy,
+            events=active_events,
         )
 
     if isinstance(answered, ClaimRevision) and answered.reinvestigate:
@@ -159,6 +168,7 @@ async def answer_the_representative(
             memory=memory,
             precedent_store=precedent_store,
             policy=policy,
+            events=active_events,
         )
 
     return build_revised_report(parked, answered, feedback=feedback, at=at)
@@ -175,6 +185,7 @@ async def _ask_the_agent(
     structured: StructuredModel,
     precedent_store: PrecedentStore,
     policy: Policy,
+    events: EventStream,
 ) -> ClaimFindingsRevision | ClaimRevision:
     """Put the message to the agent, in the shape this kind of report calls for.
 
@@ -209,7 +220,7 @@ async def _ask_the_agent(
             fetcher=fetcher,
             chat=chat,
             structured=structured,
-            events=EventStream(),
+            events=events,
             policy=policy,
             precedent=precedent_for_claim(
                 store=precedent_store,
@@ -240,7 +251,7 @@ async def _ask_the_agent(
             feedback=feedback,
             conversation=what_has_been_said(parked),
             structured=structured,
-            events=EventStream(),
+            events=events,
         )
 
     return await rework_screening_report(
@@ -251,7 +262,7 @@ async def _ask_the_agent(
         feedback=feedback,
         conversation=what_has_been_said(parked),
         structured=structured,
-        events=EventStream(),
+        events=events,
     )
 
 
@@ -268,6 +279,7 @@ async def _look_into_what_they_settled(
     structured: StructuredModel,
     precedent_store: PrecedentStore,
     policy: Policy,
+    events: EventStream,
 ) -> Report:
     """Look into the products a representative just named, and nothing else (FR-1a.4).
 
@@ -303,7 +315,7 @@ async def _look_into_what_they_settled(
         fetcher=fetcher,
         chat=chat,
         structured=structured,
-        events=EventStream(),
+        events=events,
         policy=policy,
         precedent=precedent_for_claim(
             store=precedent_store, case=record.case, lines=lines, policy=policy
@@ -393,6 +405,7 @@ async def _investigate_the_claim_again(
     memory: MerchantMemory,
     precedent_store: PrecedentStore,
     policy: Policy,
+    events: EventStream,
 ) -> Report:
     """Investigate the claim again, because the representative asked for it.
 
@@ -440,7 +453,7 @@ async def _investigate_the_claim_again(
         fetcher=fetcher,
         chat=chat,
         structured=structured,
-        events=EventStream(),
+        events=events,
         policy=policy,
         precedent_store=precedent_store,
     )

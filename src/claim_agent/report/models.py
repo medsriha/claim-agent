@@ -117,9 +117,9 @@ class RevisionTurn(BaseModel):
     first. Together they are the record of how a decision was reached and where a person
     intervened.
 
-    There is exactly one turn per version after the first, because every note produces a new
-    version — including a note whose rework did not happen, whose turn says so and whose
-    findings are the previous ones unchanged.
+    A turn that changes the report produces a new version. A question answered without changing
+    the report is recorded on the current version instead, because a conversation is worth
+    keeping but is not itself a new telling of the findings.
 
     Fields:
         turn: Which round this is, counting from 1.
@@ -315,8 +315,8 @@ class Report(BaseModel):
             # rather than a surprising one.
             if turn.turn != position:
                 raise ValueError("The rounds of a conversation must be numbered in order.")
-            if not 1 <= turn.from_version < self.version:
-                raise ValueError("A round must answer a version of this report that came before.")
+            if not 1 <= turn.from_version <= self.version:
+                raise ValueError("A round must answer this version of the report or one before it.")
         return self
 
 

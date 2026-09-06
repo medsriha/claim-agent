@@ -24,6 +24,7 @@ class EventKind(StrEnum):
     TOOL_CALLED = "tool_called"
     THINKING = "thinking"
     INVESTIGATION_FINISHED = "investigation_finished"
+    REVISION_STARTED = "revision_started"
     REPORT_READY = "report_ready"
     FAILED = "failed"
 

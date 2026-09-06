@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from claim_agent.agent.events import EventStream, RunEvent
 from claim_agent.api.deps import (
     DecisionStoreDep,
     EvidenceClientDep,
@@ -20,18 +26,22 @@ from claim_agent.api.deps import (
 from claim_agent.domain.correction import correction_from
 from claim_agent.domain.models import MerchantCorrection
 from claim_agent.domain.outcome import Recommendation
-from claim_agent.errors import InvalidRequestError, NotFoundError, StorageError
+from claim_agent.errors import ClaimAgentError, InvalidRequestError, NotFoundError, StorageError
 from claim_agent.observability import get_logger
 from claim_agent.report.conversation import answer_the_representative
 from claim_agent.report.models import ClaimView, EmailWording, Report
 from claim_agent.report.review import ReviewOutcome, approve, send_back
 from claim_agent.storage.decision_store import DecisionStore
 from claim_agent.storage.merchant_memory import MerchantMemory
+from claim_agent.storage.precedent_store import PrecedentStore
 from claim_agent.storage.report_store import ReportStore
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["reports"])
+
+STREAM_MEDIA_TYPE = "text/event-stream"
+_QUEUE_LIMIT = 256
 
 
 class Approval(BaseModel):
@@ -168,7 +178,11 @@ async def approve_report(
     return approved
 
 
-@router.post("/reports/{report_id}/send-back", summary="Send a report back with feedback")
+@router.post(
+    "/reports/{report_id}/send-back",
+    summary="Send a report back with feedback",
+    response_class=StreamingResponse,
+)
 async def send_report_back(
     report_id: str,
     sending_back: SendBack,
@@ -181,15 +195,15 @@ async def send_report_back(
     memory: MerchantMemoryDep,
     precedent_store: PrecedentStoreDep,
     policy: PolicyDep,
-) -> Report:
+) -> StreamingResponse:
     """Send a report back with a note, and get it reworked around that note (FR-2.8, FR-R.1).
 
     Three things happen, in this order, and the order matters. What the representative said is
     recorded as a decision, so it survives whatever follows (FR-C.1). It is remembered against
     the merchant, so their next claim starts knowing about it — and so a claim investigated
-    again reads it as context (FR-R.14, FR-0.5). Then the agent is given the message and
-    answers, and what comes back is filed as the next version, awaiting review like any other
-    (FR-R.9, FR-R.13).
+    again reads it as context (FR-R.14, FR-0.5). Then the agent is given the message and answers.
+    Changed decision material is filed as the next version; an answer alone stays on the current
+    version (FR-R.9, FR-R.13).
 
     **Every message is answered.** There is no report this route refuses to pass a message on
     about. What the agent may change differs by report — a claim the quick checks stopped keeps
@@ -199,8 +213,8 @@ async def send_report_back(
     for or asks for one outright. That writes a report per damaged product beside this one; the
     reply says so, and the claim's reports are where they appear (FR-1a.4, FR-2.9b).
 
-    **The representative waits while that happens.** Answering takes a model call or several,
-    and this answers in one piece rather than narrating itself.
+    Answering takes a model call or several, so progress and the eventual reply are streamed as
+    server-sent events rather than making the representative wait in silence.
 
     **Nothing here sends anything or moves any money**, in either direction. The agent holds
     the investigation's read-only tools and no others (FR-R.6, FR-3.1).
@@ -208,7 +222,7 @@ async def send_report_back(
     Args:
         report_id: Which report.
         sending_back: What is wrong or missing, in the representative's own words.
-        reports: Where reports are kept, and where the new version goes.
+        reports: Where reports and any changed version are kept.
         decisions: Where what a representative decided is recorded (FR-C.1).
         shipbob: Reads the case, its parcel and its order again, so the rework is built from
             ShipBob's records rather than from a copy stored months ago.
@@ -221,30 +235,118 @@ async def send_report_back(
         policy: The thresholds the rework is judged by (FR-0.7).
 
     Returns:
-        The next version of the report, carrying what was said about it, what the agent said
-        back, and what it changed. **An answer that changed nothing still produces a version**
-        — with the previous findings unchanged and the reply on it — because a representative
-        must never be left with an error page instead of the work they were deciding on, and
-        because being answered is worth recording even when nothing moved (NFR-4).
+        A stream of progress messages, one compact `result` carrying the conversation turn and
+        the version of an updated report when one was needed, then `done`. A question whose
+        answer changes no report carries no report version and leaves the current version in
+        place; the conversation is still recorded on it.
 
     Raises:
         NotFoundError: There is no such report.
         ConflictError: The report has already been approved, and an approval is final.
     """
+    asked_at = datetime.now(UTC)
     report = _the_report(reports, report_id)
     outcome = send_back(
         report,
         feedback=sending_back.feedback,
         rep_minutes=sending_back.rep_minutes,
-        at=datetime.now(UTC),
+        at=asked_at,
     )
     parked = _write_down(outcome, reports=reports, decisions=decisions)
     _remember_against_the_merchant(memory, parked, summary=sending_back.feedback)
 
+    return StreamingResponse(
+        _narrate_rework(
+            parked=parked,
+            feedback=sending_back.feedback,
+            at=asked_at,
+            reports=reports,
+            shipbob=shipbob,
+            evidence=evidence,
+            fetcher=fetcher,
+            models=models,
+            memory=memory,
+            precedent_store=precedent_store,
+            policy=policy,
+        ),
+        media_type=STREAM_MEDIA_TYPE,
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def _narrate_rework(
+    *,
+    parked: Report,
+    feedback: str,
+    at: datetime,
+    reports: ReportStore,
+    shipbob: ShipBobClientDep,
+    evidence: EvidenceClientDep,
+    fetcher: ImageFetcherDep,
+    models: ModelsDep,
+    memory: MerchantMemory,
+    precedent_store: PrecedentStore,
+    policy: PolicyDep,
+) -> AsyncIterator[str]:
+    """Stream a representative's answer and only point at a report when it changed."""
+    messages: asyncio.Queue[RunEvent] = asyncio.Queue(maxsize=_QUEUE_LIMIT)
+    events = EventStream(messages.put)
+    answering = asyncio.create_task(
+        _answer_and_record(
+            parked=parked,
+            feedback=feedback,
+            at=at,
+            reports=reports,
+            shipbob=shipbob,
+            evidence=evidence,
+            fetcher=fetcher,
+            models=models,
+            memory=memory,
+            precedent_store=precedent_store,
+            policy=policy,
+            events=events,
+        )
+    )
+
+    async for message in _rework_messages_until_finished(answering, messages):
+        yield message
+
+    try:
+        result = answering.result()
+    except ClaimAgentError as failure:
+        logger.warning(
+            "representative_answer_failed",
+            report_id=parked.report_id,
+            failure=type(failure).__name__,
+        )
+        yield _frame("failed", {"code": failure.code, "message": failure.message})
+        yield _frame("done", {"report_id": parked.report_id})
+        return
+
+    yield _frame("result", result)
+    yield _frame("done", {"report_id": parked.report_id})
+
+
+async def _answer_and_record(
+    *,
+    parked: Report,
+    feedback: str,
+    at: datetime,
+    reports: ReportStore,
+    shipbob: ShipBobClientDep,
+    evidence: EvidenceClientDep,
+    fetcher: ImageFetcherDep,
+    models: ModelsDep,
+    memory: MerchantMemory,
+    precedent_store: PrecedentStore,
+    policy: PolicyDep,
+    events: EventStream,
+) -> dict[str, Any]:
+    """Record the reply, creating a report version only when report content changed."""
     answered = await answer_the_representative(
         parked,
-        feedback=sending_back.feedback,
-        at=datetime.now(UTC),
+        feedback=feedback,
+        at=at,
         shipbob=shipbob,
         evidence=evidence,
         fetcher=fetcher,
@@ -252,17 +354,79 @@ async def send_report_back(
         memory=memory,
         precedent_store=precedent_store,
         policy=policy,
+        events=events,
     )
-    reports.record(answered)
+    revision = answered.revisions[-1]
+    report_changed = _report_changed(parked, answered)
+    if report_changed:
+        stored = answered
+        report_version: int | None = answered.version
+    else:
+        # The exchange belongs to the report, but an answer to a question is not a new telling
+        # of its findings. Replace the current row with its appended conversation and leave its
+        # identity, timestamp and version untouched.
+        stored = answered.model_copy(
+            update={"version": parked.version, "created_at": parked.created_at}
+        )
+        report_version = None
+    reports.record(stored)
 
     logger.info(
         "representative_was_answered",
-        case_id=answered.case_id,
-        report_id=answered.report_id,
-        version=answered.version,
-        reworked=answered.revisions[-1].reworked,
+        case_id=stored.case_id,
+        report_id=stored.report_id,
+        version=stored.version,
+        report_changed=report_changed,
     )
-    return answered
+    return {
+        "report_id": stored.report_id,
+        "report_version": report_version,
+        "revision": revision.model_dump(mode="json"),
+    }
+
+
+def _report_changed(before: Report, after: Report) -> bool:
+    """Whether the agent changed decision material rather than only answering a question."""
+    return any(
+        getattr(before, field) != getattr(after, field)
+        for field in (
+            "product_names",
+            "stage",
+            "recommendation",
+            "amount_usd",
+            "confidence",
+            "carrier",
+            "defect_type",
+            "damage_type",
+            "order_value_usd",
+            "drafted_email",
+            "content",
+        )
+    )
+
+
+async def _rework_messages_until_finished(
+    answering: asyncio.Task[dict[str, Any]], messages: asyncio.Queue[RunEvent]
+) -> AsyncIterator[str]:
+    """Forward progress in order, including events queued as the task finishes."""
+    while True:
+        next_message = asyncio.ensure_future(messages.get())
+        finished, _ = await asyncio.wait(
+            {next_message, answering}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if next_message in finished:
+            yield _frame("progress", next_message.result().model_dump(mode="json"))
+            continue
+
+        next_message.cancel()
+        while not messages.empty():
+            yield _frame("progress", messages.get_nowait().model_dump(mode="json"))
+        return
+
+
+def _frame(name: str, payload: dict[str, Any]) -> str:
+    """Write one named SSE message whose data is compact JSON on one line."""
+    return f"event: {name}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
 
 
 def _remember_against_the_merchant(

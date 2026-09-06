@@ -278,6 +278,7 @@ export type RunEventKind =
   | "tool_called"
   | "thinking"
   | "investigation_finished"
+  | "revision_started"
   | "report_ready"
   | "failed";
 
