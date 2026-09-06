@@ -235,7 +235,6 @@ web/dist/
 .attachment-cache/
 
 # Claude Code dependencies
-ARCHITECTURE.md
 DESIGN.md
 REQUIREMENTS.md
 TODO.md
