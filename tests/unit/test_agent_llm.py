@@ -15,10 +15,10 @@ from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from claim_agent.agent.llm import StructuredModel, build_chat_model, build_structured_model
-from claim_agent.errors import ConfigurationError, UpstreamError
+from claim_agent.errors import ConfigurationError, ModelAnswerDidNotFitError, UpstreamError
 from claim_agent.settings import Settings
 
 
@@ -272,16 +272,35 @@ async def test_a_settled_refusal_is_not_tried_again(failure: Exception) -> None:
 
 
 async def test_an_answer_that_will_not_fit_the_form_is_not_asked_for_again() -> None:
-    """NFR-2: the identical question would produce the identical unusable shape."""
+    """NFR-2: the identical question would produce the identical unusable shape.
+
+    The repair — a changed question naming what was wrong — belongs to the agent loop,
+    which is why the problems travel out on the error rather than being acted on here.
+    """
     stub = stub_with(OutputParserException("not the shape we asked for"), Verdict(damaged=True))
 
-    with pytest.raises(UpstreamError) as raised:
+    with pytest.raises(ModelAnswerDidNotFitError) as raised:
         await StructuredModel(stub, max_attempts=3).ask(Verdict, "Was it damaged?")
 
     assert len(stub.asked) == 1
     assert (
         raised.value.message == "The model's answer did not fit the form it was asked to fill in."
     )
+    assert raised.value.problems == ("The answer could not be read as the form at all.",)
+
+
+async def test_the_problems_with_an_answer_are_named_field_by_field() -> None:
+    """NFR-2: what travels out is the validator's report on our own form, never provider text."""
+    try:
+        Verdict.model_validate({"damaged": "maybe"})
+    except ValidationError as failure:
+        stub = stub_with(failure)
+
+    with pytest.raises(ModelAnswerDidNotFitError) as raised:
+        await StructuredModel(stub, max_attempts=1).ask(Verdict, "Was it damaged?")
+
+    assert len(raised.value.problems) == 1
+    assert raised.value.problems[0].startswith("damaged: ")
 
 
 async def test_an_answer_that_is_not_a_form_at_all_is_refused_rather_than_patched_up() -> None:

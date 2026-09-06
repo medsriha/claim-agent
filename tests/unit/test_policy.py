@@ -18,6 +18,6 @@ def test_values_are_overridable_from_the_environment(
     assert Policy().max_claim_age_days == 30
 
 
-def test_confidence_threshold_is_bounded() -> None:
-    with pytest.raises(ValueError, match="min_assessment_confidence"):
-        Policy(min_assessment_confidence=1.5)
+def test_precedent_similarity_threshold_is_bounded() -> None:
+    with pytest.raises(ValueError, match="min_precedent_similarity"):
+        Policy(min_precedent_similarity=1.5)

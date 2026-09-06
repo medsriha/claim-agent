@@ -7,37 +7,31 @@ from claim_agent.agent.budget import BudgetLimit, RunBudget
 from claim_agent.policy import Policy
 
 
-def budget_of(*, steps: int = 3, images: int = 2, retries: int = 1) -> RunBudget:
+def budget_of(*, steps: int = 3, images: int = 2) -> RunBudget:
     """A fresh budget with small limits, so a test can use one up quickly."""
-    return RunBudget(
-        Policy(
-            max_agent_steps=steps,
-            max_image_analyses_per_run=images,
-            max_tool_retries=retries,
-        )
-    )
+    return RunBudget(Policy(max_agent_steps=steps, max_image_analyses_per_run=images))
 
 
 def test_a_new_budget_has_its_whole_allowance() -> None:
     """FR-1.3: a run starts with room for everything its policy allows."""
-    budget = budget_of(steps=3, images=2, retries=1)
+    budget = budget_of(steps=3, images=2)
 
     assert budget.has_step_left() is True
     assert budget.has_image_analysis_left() is True
-    assert budget.has_retry_left("call-1") is True
     assert budget.limits_reached() == ()
     assert budget.snapshot().steps_used == 0
 
 
 def test_the_limits_come_from_the_policy_and_not_from_this_code() -> None:
-    """FR-0.7, NFR-7: the three bounds are policy values, changeable without a code change."""
-    snapshot = RunBudget(
-        Policy(max_agent_steps=7, max_image_analyses_per_run=4, max_tool_retries=5)
-    ).snapshot()
+    """FR-0.7, NFR-7: the bounds are policy values, changeable without a code change."""
+    budget = RunBudget(
+        Policy(max_agent_steps=7, max_image_analyses_per_run=4, max_tool_calls_per_step=3)
+    )
+    snapshot = budget.snapshot()
 
     assert snapshot.steps_allowed == 7
     assert snapshot.image_analyses_allowed == 4
-    assert snapshot.tool_retries_allowed_per_call == 5
+    assert budget.tool_calls_allowed_per_step == 3
 
 
 def test_a_run_may_take_exactly_as_many_steps_as_it_is_allowed() -> None:
@@ -74,37 +68,6 @@ def test_stepping_one_past_the_limit_is_refused_rather_than_allowed_quietly() ->
 
     # The refused step was not counted, so the record still says what really happened.
     assert budget.snapshot().steps_used == 1
-
-
-def test_each_tool_call_gets_its_own_retries() -> None:
-    """FR-1.3: retries are counted per call, so one flaky read cannot spend another's allowance."""
-    budget = budget_of(retries=1)
-
-    budget.spend_retry("call-1")
-
-    assert budget.has_retry_left("call-1") is False
-    assert budget.has_retry_left("call-2") is True
-
-
-def test_a_tool_call_that_has_used_its_retries_cannot_be_retried_again() -> None:
-    """FR-1.3: bounded retries — the second refusal is loud, not quiet."""
-    budget = budget_of(retries=2)
-
-    budget.spend_retry("call-1")
-    budget.spend_retry("call-1")
-
-    assert budget.has_retry_left("call-1") is False
-    with pytest.raises(RuntimeError, match="retries"):
-        budget.spend_retry("call-1")
-
-
-def test_a_policy_of_no_retries_means_a_failed_tool_call_is_simply_failed() -> None:
-    """FR-1.3: zero is a valid allowance, and the budget does not quietly grant one anyway."""
-    budget = budget_of(retries=0)
-
-    assert budget.has_retry_left("call-1") is False
-    with pytest.raises(RuntimeError, match="retries"):
-        budget.spend_retry("call-1")
 
 
 def test_the_image_ceiling_can_be_reached_while_steps_are_still_left() -> None:
@@ -154,31 +117,27 @@ def test_a_run_that_reaches_both_ceilings_reports_both_in_a_fixed_order() -> Non
 
 def test_the_snapshot_says_what_a_representative_needs_to_see() -> None:
     """NFR-3: "9 of 12 steps used" is answerable from the report, without reading logs."""
-    budget = RunBudget(
-        Policy(max_agent_steps=12, max_image_analyses_per_run=20, max_tool_retries=2)
-    )
+    budget = RunBudget(Policy(max_agent_steps=12, max_image_analyses_per_run=20))
     for _ in range(9):
         budget.spend_step()
     budget.spend_image_analysis()
-    budget.spend_retry("call-1")
+    budget.record_usage(
+        {"input_tokens": 1200, "output_tokens": 80, "input_token_details": {"cache_read": 1000}}
+    )
+    budget.record_usage(None)
 
     snapshot = budget.snapshot()
 
     assert (snapshot.steps_used, snapshot.steps_allowed) == (9, 12)
     assert (snapshot.image_analyses_used, snapshot.image_analyses_allowed) == (1, 20)
-    assert snapshot.tool_retries_used == 1
     assert snapshot.limits_reached == ()
-
-
-def test_the_snapshot_counts_retries_across_the_whole_run() -> None:
-    """NFR-3: the report says how much retrying a run did, without anyone adding it up."""
-    budget = budget_of(retries=2)
-
-    budget.spend_retry("call-1")
-    budget.spend_retry("call-1")
-    budget.spend_retry("call-2")
-
-    assert budget.snapshot().tool_retries_used == 3
+    # NFR-3: what the run cost is on the record, and a call with no usage still counts.
+    assert snapshot.model_calls == 2
+    assert (snapshot.input_tokens, snapshot.output_tokens, snapshot.cache_read_tokens) == (
+        1200,
+        80,
+        1000,
+    )
 
 
 def test_a_snapshot_cannot_be_edited_after_it_is_taken() -> None:
@@ -203,7 +162,7 @@ def test_taking_a_snapshot_does_not_change_the_budget() -> None:
 
 def test_every_run_gets_its_own_budget() -> None:
     """FR-1.3: budgets are per run, so a claim with several lines does not share one."""
-    policy = Policy(max_agent_steps=1, max_image_analyses_per_run=1, max_tool_retries=1)
+    policy = Policy(max_agent_steps=1, max_image_analyses_per_run=1)
 
     first_line = RunBudget(policy)
     second_line = RunBudget(policy)

@@ -19,8 +19,8 @@ from claim_agent.agent.investigate import ClaimFindings, investigate_claim_lines
 from claim_agent.agent.ledger import StepKind
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.observations import ObservationCache
+from claim_agent.agent.prompts import PROMPT_VERSION
 from claim_agent.agent.schemas import (
-    AMOUNT_PLACEHOLDER,
     AssessmentJudgement,
     DamagedItem,
     EvidenceJudgement,
@@ -308,7 +308,6 @@ async def test_a_well_evidenced_product_is_recommended_for_payment_at_the_policy
     assert result.drafted_email.to == "sakukreja@shipbob.com"
     assert result.drafted_email.is_draft is True
     assert "$40.00" in result.drafted_email.body
-    assert AMOUNT_PLACEHOLDER not in result.drafted_email.body
 
 
 async def test_a_recommendation_is_never_presented_as_settled() -> None:
@@ -440,14 +439,15 @@ async def test_a_question_the_run_never_answered_is_not_written_down_as_an_answe
 # --- Uncertainty and exhaustion (FR-1.15, FR-1.16) --------------------------
 
 
-async def test_an_investigation_does_not_report_subjective_confidence() -> None:
-    """Subjective confidence is no longer part of the agent's conclusion or report."""
+async def test_an_investigation_records_which_wording_and_model_produced_it() -> None:
+    """NFR-1, NFR-5: two reports on one claim can be told apart by what asked the question."""
     conclusion = a_conclusion(**an_email_with_no_figure())
 
     result = await investigate(a_run_that_concludes(conclusion))
 
     assert result.outcome.recommendation is Recommendation.APPROVE
-    assert result.confidence is None
+    assert result.prompt_version == PROMPT_VERSION
+    assert result.model == "scripted"
 
 
 async def test_a_run_that_used_up_its_steps_asks_the_rep_with_findings_intact() -> None:
@@ -477,7 +477,6 @@ async def test_a_run_that_used_up_its_steps_asks_the_rep_with_findings_intact() 
     assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.BUDGET_EXHAUSTED in result.outcome.overrides
     assert result.conclusion is None
-    assert result.confidence is None
     assert result.drafted_email is None
     assert BudgetLimit.STEPS in result.budget.limits_reached
     assert [entry.name for entry in result.ledger if entry.kind is StepKind.TOOL_CALL] == [
@@ -734,7 +733,6 @@ async def test_an_approval_withheld_for_missing_evidence_requests_it_without_mon
     assert "additional information" in result.drafted_email.body
     assert "customer who received the parcel" in result.drafted_email.body
     assert "$40.00" not in result.drafted_email.body
-    assert AMOUNT_PLACEHOLDER not in result.drafted_email.body
 
 
 # --- The shared evidence is settled once for the claim (FR-1a.3) ------------
@@ -1088,7 +1086,6 @@ async def test_fr_1_8_to_fr_1_11_all_four_judgements_come_back_with_their_reason
     for name in REQUIRED_ASSESSMENTS:
         judgement = answered[name]
         assert judgement.reasoning.strip(), f"{name} was answered with no reasoning"
-        assert judgement.confidence is None
 
 
 async def test_fr_1_9_a_product_that_cannot_be_identified_is_not_paid_for() -> None:

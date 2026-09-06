@@ -6,9 +6,10 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from claim_agent.domain.assessment import Assessment, Confidence
+from claim_agent.agent.budget import BudgetSnapshot
+from claim_agent.domain.assessment import Assessment
 from claim_agent.domain.claim_line import ClaimLine
-from claim_agent.domain.decision import DecisionStage, Proposal, RepAction
+from claim_agent.domain.decision import Confidence, DecisionStage, Proposal, RepAction
 from claim_agent.domain.evidence import EvidenceFinding
 from claim_agent.domain.models import Attachment, DraftedEmail, TerminalReason, UtcDatetime
 from claim_agent.domain.outcome import OutcomeDecision, Recommendation
@@ -59,6 +60,14 @@ class InvestigationReportContent(BaseModel):
     requested_details: tuple[str, ...] = ()
     finding_summary: str | None = None
     corrections_considered: tuple[str, ...] = ()
+    thread_id: str | None = None
+    """The conversation thread the investigation wrote to, so a rework can continue it (FR-R.2)."""
+    prompt_version: str | None = None
+    """Which edition of the wording produced these findings (NFR-1, NFR-5)."""
+    model: str | None = None
+    """Which model produced them."""
+    budget: BudgetSnapshot | None = None
+    """What the run cost: steps, images, model calls and tokens (NFR-3)."""
 
 
 class ScreeningReportContent(BaseModel):
@@ -195,35 +204,6 @@ class Report(BaseModel):
     revisions: tuple[RevisionTurn, ...] = ()
     created_at: UtcDatetime
 
-    @model_validator(mode="before")
-    @classmethod
-    def _finish_legacy_approval_email(cls, value: object) -> object:
-        """Resolve old stored amount markers from the report's already-capped amount."""
-        if not isinstance(value, dict):
-            return value
-        recommendation = value.get("recommendation")
-        amount = value.get("amount_usd")
-        email_value = value.get("drafted_email")
-        if recommendation not in (
-            Recommendation.APPROVE,
-            Recommendation.APPROVE_HIGH_VALUE,
-        ):
-            return value
-        if amount is None or email_value is None:
-            return value
-
-        email = (
-            email_value
-            if isinstance(email_value, DraftedEmail)
-            else DraftedEmail.model_validate(email_value)
-        )
-        if "{{amount}}" not in email.subject and "{{amount}}" not in email.body:
-            return value
-
-        resolved = dict(value)
-        resolved["drafted_email"] = email.with_approved_amount(Decimal(str(amount)))
-        return resolved
-
     @model_validator(mode="after")
     def _must_be_internally_consistent(self) -> Self:
         """Refuse a report whose metadata and structured content tell different stories."""
@@ -283,10 +263,6 @@ class Report(BaseModel):
             and self.drafted_email is None
         ):
             raise ValueError("An approval or merchant information request needs an email draft.")
-        if self.drafted_email is not None and (
-            "{{amount}}" in self.drafted_email.subject or "{{amount}}" in self.drafted_email.body
-        ):
-            raise ValueError("A finished merchant email cannot contain an amount placeholder.")
         if self.recommendation is Recommendation.REQUEST_INFO:
             requested_details = (
                 self.content.requested_details

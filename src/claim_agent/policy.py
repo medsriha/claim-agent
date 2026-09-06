@@ -81,23 +81,19 @@ class Policy(BaseSettings):
     )
     # The investigation settings below are provisional and deliberately absent from the
     # policy panel until their operational values have been agreed.
-    min_assessment_confidence: float = Field(
-        default=0.7,
-        ge=0.0,
-        le=1.0,
-        description="Below this, request representative clarification rather than approve (FR-1.15). PROVISIONAL.",
-        json_schema_extra=NOT_ON_PANEL,
-    )
     max_agent_steps: int = Field(
         default=12,
         gt=0,
         description="Per-run step budget; exhaustion requests representative clarification (FR-1.3, FR-1.16). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
-    max_tool_retries: int = Field(
-        default=2,
-        ge=0,
-        description="Retries per tool call before failing toward the rep (FR-1.3). PROVISIONAL.",
+    max_tool_calls_per_step: int = Field(
+        default=6,
+        gt=0,
+        description="Most tools one turn of the investigation may ask for at once. The step "
+        "allowance counts turns, and without this a single turn could fan out to any number "
+        "of calls; the ones over the limit are declined and can be asked for next turn "
+        "(FR-1.3). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
     max_image_analyses_per_run: int = Field(

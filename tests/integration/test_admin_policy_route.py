@@ -24,7 +24,7 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
 ) -> None:
     """FR-0.7: the panel is offered the values it is meant to change, and no others.
 
-    The eighteen it is not offered are still policy values, still read by whatever
+    The seventeen it is not offered are still policy values, still read by whatever
     reads them, and still set from the environment — they are simply not changeable
     from a browser while the service runs.
     """
@@ -43,9 +43,8 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
     ]
     assert set(Policy.model_fields) - set(offered) == {
         "min_description_length",
-        "min_assessment_confidence",
         "max_agent_steps",
-        "max_tool_retries",
+        "max_tool_calls_per_step",
         "max_image_analyses_per_run",
         "precedent_results_per_product",
         "min_precedent_similarity",
@@ -68,7 +67,7 @@ async def test_a_threshold_the_panel_does_not_offer_is_refused_over_http(
     client: AsyncClient,
 ) -> None:
     """FR-0.7: the omission is the rule, not just the screen's choice of controls."""
-    response = await client.put("/admin/policy", json={"values": {"max_tool_retries": "5"}})
+    response = await client.put("/admin/policy", json={"values": {"max_agent_steps": "5"}})
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_request"

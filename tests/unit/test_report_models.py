@@ -237,35 +237,6 @@ def test_a_merchant_information_report_must_name_the_details_needed() -> None:
         )
 
 
-def test_an_old_approval_placeholder_is_resolved_from_the_capped_report_amount() -> None:
-    """Older stored drafts remain readable without exposing implementation wording."""
-    raw = a_report().model_dump()
-    raw["drafted_email"] = {
-        "to": "merchant@example.test",
-        "subject": "About your claim",
-        "body": "We approved a refund of {{amount}}.",
-    }
-
-    report = Report.model_validate(raw)
-
-    assert report.drafted_email is not None
-    assert report.drafted_email.body == "We approved a refund of $52.00."
-
-
-def test_a_non_approval_email_cannot_expose_an_amount_placeholder() -> None:
-    """Only an approval has a checked amount that can safely resolve old wording."""
-    with pytest.raises(ValidationError, match="cannot contain an amount placeholder"):
-        a_report(
-            recommendation=Recommendation.REQUEST_INFO,
-            amount_usd=None,
-            drafted_email=DraftedEmail(
-                to="merchant@example.test",
-                subject="About your claim",
-                body="Please send details about {{amount}}.",
-            ),
-        )
-
-
 # --- What the representative settled on (FR-2.1) ------------------------------
 
 

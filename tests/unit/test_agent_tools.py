@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import re
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
@@ -222,7 +223,6 @@ def a_photo_of_damage(**overrides: object) -> ImageObservation:
         "kind": EvidenceKind.DAMAGED_PRODUCT_PHOTO,
         "is_legible": True,
         "problem": None,
-        "confidence": 0.9,
     }
     fields.update(overrides)
     return ImageObservation.model_validate(fields)
@@ -296,7 +296,7 @@ def test_nothing_in_the_agent_can_reach_the_code_that_sends_and_pays() -> None:
     it is filled in, this test is what stops the investigation being handed it.
     """
     package = Path(str(claim_agent.agent.__file__)).parent
-    modules = sorted(package.glob("*.py"))
+    modules = sorted(package.rglob("*.py"))
     assert modules, "no agent modules were found to check"
 
     for module in modules:
@@ -694,7 +694,7 @@ async def test_the_amount_check_never_tells_the_model_what_the_figure_is(
     assert check.items_total_usd == "52.00"
     assert check.capped is False
     # The one rule about money that did not change with FR-1.21.
-    assert "Do not write an amount or placeholder in the email" in said(message)
+    assert "Do not write an amount in the email" in said(message)
 
 
 async def test_the_amount_check_says_when_a_figure_is_over_the_cap(
@@ -901,3 +901,26 @@ async def test_a_call_whose_arguments_do_not_fit_is_answered_rather_than_raised(
 
     assert message.status == "error"
     assert "did not fit this tool's arguments" in said(message)
+
+
+async def test_two_images_inspected_at_once_cannot_both_spend_the_last_analysis(
+    api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
+) -> None:
+    """NFR-8: the allowance is checked and spent in one move, so concurrent calls cannot race it."""
+    serve_the_claim(api)
+    run = build_run(
+        shipbob_http,
+        images_http,
+        model=scripted(a_photo_of_damage(), a_photo_of_damage()),
+        images_allowed=1,
+    )
+
+    first, second = await asyncio.gather(
+        call(run, INSPECT_IMAGE, attachment_id=FIRST_IMAGE),
+        call(run, INSPECT_IMAGE, attachment_id=SECOND_IMAGE),
+    )
+
+    inspections = [first.artifact, second.artifact]
+    assert all(isinstance(one, ImageInspection) for one in inspections)
+    assert sorted(one.succeeded for one in inspections) == [False, True]
+    assert len(run.model.asked) == 1

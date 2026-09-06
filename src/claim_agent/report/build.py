@@ -210,9 +210,7 @@ def report_for_the_claim(
     the products on a claim nobody could split — the second produces exactly the same kind of
     report, so it is written by exactly the same function (FR-1a.4).
 
-    `confidence` is read off the investigation's own conclusion rather than worked out here. It is
-    `None` when the run never reached one, which must not be read as low confidence: nothing was
-    concluded, so there is nothing to be sure about.
+    `confidence` is always `None` for a new report; the field is historical (see decision.py).
     """
     described = read_case_facts(case)
     return Report(
@@ -228,7 +226,7 @@ def report_for_the_claim(
         amount_usd=(
             findings.amount.amount_usd if findings.outcome.recommendation.is_approval else None
         ),
-        confidence=findings.confidence,
+        confidence=None,
         carrier=carrier,
         defect_type=described.defect_type,
         damage_type=described.damage_type,
@@ -252,6 +250,10 @@ def report_for_the_claim(
                 if findings.conclusion is not None
                 else ()
             ),
+            thread_id=findings.thread_id,
+            prompt_version=findings.prompt_version,
+            model=findings.model,
+            budget=findings.budget,
         ),
         created_at=at,
     )
@@ -337,7 +339,6 @@ def build_revised_report(
             "amount_usd": (
                 reworked.amount.amount_usd if reworked.outcome.recommendation.is_approval else None
             ),
-            "confidence": reworked.confidence,
             "drafted_email": reworked.drafted_email,
             "content": content.model_copy(
                 update={
@@ -354,6 +355,10 @@ def build_revised_report(
                         if reworked.conclusion is not None
                         else ()
                     ),
+                    "thread_id": reworked.thread_id or content.thread_id,
+                    "prompt_version": reworked.prompt_version,
+                    "model": reworked.model,
+                    "budget": reworked.budget,
                 }
             ),
         }

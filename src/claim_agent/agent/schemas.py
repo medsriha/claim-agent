@@ -1,29 +1,13 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from claim_agent.domain.assessment import AssessmentName
 from claim_agent.domain.evidence import EvidenceKind, EvidenceState
 from claim_agent.domain.outcome import Recommendation
 
-# The marker used by approval drafts produced under the previous prompt.
-AMOUNT_PLACEHOLDER = "{{amount}}"
 
-
-class _WithoutSubjectiveConfidence(BaseModel):
-    """Accept old stored/test values without advertising confidence to the model."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def _discard_legacy_confidence(cls, value: object) -> object:
-        if not isinstance(value, dict) or "confidence" not in value:
-            return value
-        without_confidence = dict(value)
-        without_confidence.pop("confidence")
-        return without_confidence
-
-
-class ImageObservation(_WithoutSubjectiveConfidence):
+class ImageObservation(BaseModel):
     """What one image turned out to be, and whether it is any use (FR-1.4, FR-1.5)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -46,7 +30,7 @@ class ImageObservation(_WithoutSubjectiveConfidence):
     )
 
 
-class ClaimedProductProposal(_WithoutSubjectiveConfidence):
+class ClaimedProductProposal(BaseModel):
     """One product the investigation believes was damaged (FR-1a.1)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -63,7 +47,7 @@ class ClaimedProductProposal(_WithoutSubjectiveConfidence):
     reasoning: str = Field(description="Why you believe this product was damaged.")
 
 
-class ClaimSplit(_WithoutSubjectiveConfidence):
+class ClaimSplit(BaseModel):
     """Which products a claim is for — the conclusion of the triage pass (FR-1a.1)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -137,7 +121,7 @@ class EvidenceJudgement(BaseModel):
     )
 
 
-class AssessmentJudgement(_WithoutSubjectiveConfidence):
+class AssessmentJudgement(BaseModel):
     """One of the four judgements, with the reasoning that makes it reviewable (FR-2.3)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -160,7 +144,7 @@ class DamagedItem(BaseModel):
     sku: str | None = Field(default=None, description="The product's code, or null.")
 
 
-class InvestigationConclusion(_WithoutSubjectiveConfidence):
+class InvestigationConclusion(BaseModel):
     """The conclusion of one claim's investigation — the model's whole answer (FR-1b.1)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -267,7 +251,7 @@ class InvestigationConclusion(_WithoutSubjectiveConfidence):
         description=(
             "The merchant-facing email wording. "
             "For request_info, name every specific detail the merchant needs to provide. "
-            "For approve, communicate the approval but do not write an amount or placeholder; "
+            "For approve, communicate the approval but do not write an amount; "
             "code adds the capped figure to produce the final wording. Null when the next action is "
             "request_rep_clarification."
         ),

@@ -11,7 +11,7 @@ from claim_agent.agent.email import (
     money_the_model_wrote,
     name_what_is_missing,
 )
-from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, InvestigationConclusion
+from claim_agent.agent.schemas import InvestigationConclusion
 from claim_agent.domain.evidence import REQUIRED_EVIDENCE, EvidenceFinding, EvidenceKind
 from claim_agent.domain.evidence import EvidenceState as State
 from claim_agent.domain.outcome import Recommendation
@@ -71,38 +71,9 @@ def nothing_payable() -> AmountDerivation:
     )
 
 
-def test_the_real_figure_replaces_the_marker_the_model_left() -> None:
-    """FR-1.21: the model says a figure belongs here, and code says which figure it is."""
-    conclusion = a_conclusion(body=f"We will refund {AMOUNT_PLACEHOLDER} for the damaged bottle.")
-
-    email = finish_email(
-        conclusion,
-        recommendation=Recommendation.APPROVE,
-        amount=an_amount("52.00"),
-        contact_email="ops@merchant.example",
-    )
-
-    assert email.body == "We will refund $52.00 for the damaged bottle."
-    assert AMOUNT_PLACEHOLDER not in email.body
-
-
-def test_the_marker_is_replaced_in_the_subject_line_too() -> None:
-    """FR-2.7: the subject is part of the exact wording a merchant would receive."""
-    conclusion = a_conclusion(subject=f"Your claim CASE-1005: {AMOUNT_PLACEHOLDER} approved")
-
-    email = finish_email(
-        conclusion,
-        recommendation=Recommendation.APPROVE,
-        amount=an_amount("52.00"),
-        contact_email="ops@merchant.example",
-    )
-
-    assert email.subject == "Your claim CASE-1005: $52.00 approved"
-
-
-def test_a_figure_is_written_to_the_exact_cent() -> None:
-    """FR-1.21: the figure a merchant reads is the one the arithmetic produced, to the cent."""
-    conclusion = a_conclusion(body=f"We will refund {AMOUNT_PLACEHOLDER}.")
+def test_the_figure_is_added_by_code_after_the_models_wording() -> None:
+    """FR-1.21: the model writes no figure; code appends the checked one, to the cent."""
+    conclusion = a_conclusion(body="We have approved your claim.")
 
     email = finish_email(
         conclusion,
@@ -111,7 +82,7 @@ def test_a_figure_is_written_to_the_exact_cent() -> None:
         contact_email="ops@merchant.example",
     )
 
-    assert email.body == "We will refund $0.10."
+    assert email.body == "We have approved your claim.\n\nApproved amount: $0.10"
 
 
 def test_the_figure_never_passes_through_a_floating_point_number() -> None:
@@ -122,7 +93,7 @@ def test_the_figure_never_passes_through_a_floating_point_number() -> None:
     number first it becomes very slightly less than 1.005 and rounds down to $1.00,
     which is a cent the merchant would never get back.
     """
-    conclusion = a_conclusion(body=f"We will refund {AMOUNT_PLACEHOLDER}.")
+    conclusion = a_conclusion(body="We have approved your claim.")
 
     email = finish_email(
         conclusion,
@@ -131,13 +102,13 @@ def test_the_figure_never_passes_through_a_floating_point_number() -> None:
         contact_email="ops@merchant.example",
     )
 
-    assert email.body == "We will refund $1.01."
+    assert email.body.endswith("Approved amount: $1.01")
     assert f"{1.005:.2f}" == "1.00"
 
 
 def test_an_email_is_still_written_when_the_case_has_no_contact_address() -> None:
     """FR-2.7: the wording is worth having even when there is nobody to send it to yet."""
-    conclusion = a_conclusion(body=f"We will refund {AMOUNT_PLACEHOLDER}.")
+    conclusion = a_conclusion(body="We have approved your claim.")
 
     email = finish_email(
         conclusion,
@@ -147,7 +118,7 @@ def test_an_email_is_still_written_when_the_case_has_no_contact_address() -> Non
     )
 
     assert email.to is None
-    assert email.body == "We will refund $52.00."
+    assert email.body.endswith("Approved amount: $52.00")
 
 
 def test_every_finished_email_is_marked_unsent() -> None:
@@ -155,7 +126,7 @@ def test_every_finished_email_is_marked_unsent() -> None:
     for recommendation in (Recommendation.APPROVE, Recommendation.REQUEST_INFO):
         amount = an_amount("52.00") if recommendation is Recommendation.APPROVE else None
         body = (
-            f"We will refund {AMOUNT_PLACEHOLDER}."
+            "We have approved your claim."
             if recommendation is Recommendation.APPROVE
             else "Please send a photo of the damaged product."
         )
@@ -215,7 +186,6 @@ NUMBERS_THAT_ARE_NOT_MONEY = (
     "The outer box weighs 2 pounds.",
     "The bottle holds 1.5 litres.",
     "50 per cent of the order was unaffected.",
-    f"We will refund {AMOUNT_PLACEHOLDER} for the damaged bottle.",
 )
 
 
@@ -228,12 +198,6 @@ def test_ordinary_numbers_in_a_merchant_email_are_left_alone(written: str) -> No
     correct.
     """
     assert money_the_model_wrote(written) == ()
-
-
-def test_a_currency_symbol_beside_the_marker_counts_as_money() -> None:
-    """FR-1.21: the marker stands for the whole figure, so "${{amount}}" would double the sign."""
-    assert money_the_model_wrote(f"We will refund ${AMOUNT_PLACEHOLDER}.")
-    assert money_the_model_wrote(f"We will refund {AMOUNT_PLACEHOLDER}$.")
 
 
 def test_an_email_carrying_a_figure_the_model_wrote_is_refused() -> None:
@@ -268,7 +232,7 @@ def test_a_figure_in_the_subject_line_is_refused_as_well() -> None:
 
 def test_the_figure_this_file_inserts_is_not_mistaken_for_the_models_own() -> None:
     """FR-1.21: the search reads the model's words, and runs before the real figure goes in."""
-    conclusion = a_conclusion(body=f"We will refund {AMOUNT_PLACEHOLDER}.")
+    conclusion = a_conclusion(body="We have approved your claim.")
 
     email = finish_email(
         conclusion,
@@ -278,7 +242,7 @@ def test_the_figure_this_file_inserts_is_not_mistaken_for_the_models_own() -> No
     )
 
     assert money_the_model_wrote(email.body)
-    assert email.body == "We will refund $52.00."
+    assert email.body == "We have approved your claim.\n\nApproved amount: $52.00"
 
 
 WORDING_THAT_DESCRIBES_THE_EMAIL = (
@@ -330,53 +294,9 @@ def test_an_email_that_calls_itself_a_draft_is_refused() -> None:
     assert refusal.value.details["in_body"] == ["draft"]
 
 
-def test_a_marker_left_where_no_figure_can_go_is_refused() -> None:
-    """FR-1.21: an email reading "we will refund {{amount}}" must never look sendable.
-
-    Nothing is being recommended for payment, so there is no figure to write. Leaving
-    the marker showing would put unfinished wording in front of a rep as though it were
-    ready to go.
-    """
-    conclusion = a_conclusion(
-        body=f"We will refund {AMOUNT_PLACEHOLDER} once we have the photos.",
-        recommendation=Recommendation.REQUEST_INFO,
-    )
-
-    with pytest.raises(ModelOutputRejectedError) as refusal:
-        finish_email(
-            conclusion,
-            recommendation=Recommendation.REQUEST_INFO,
-            amount=None,
-            contact_email="ops@merchant.example",
-            requested_details=("a photo of the outer shipping box",),
-        )
-
-    assert refusal.value.details["recommendation"] == "request_info"
-
-
-def test_a_marker_is_refused_on_a_non_approval_even_when_an_amount_was_worked_out() -> None:
-    """FR-1.21: a figure is only ever written into an email that recommends paying it.
-
-    An amount can be worked out for a line the rules then decline to pay. Filling it in
-    would promise a merchant money nobody is recommending they receive.
-    """
-    conclusion = a_conclusion(
-        body=f"We will refund {AMOUNT_PLACEHOLDER}.",
-        recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
-    )
-
-    with pytest.raises(ModelOutputRejectedError):
-        finish_email(
-            conclusion,
-            recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
-            amount=an_amount("52.00"),
-            contact_email="ops@merchant.example",
-        )
-
-
 def test_an_email_that_recommends_paying_but_has_no_amount_is_refused() -> None:
     """FR-1.21: approval without a worked-out figure has nothing honest to write."""
-    conclusion = a_conclusion(body=f"We will refund {AMOUNT_PLACEHOLDER}.")
+    conclusion = a_conclusion(body="We have approved your claim.")
 
     with pytest.raises(ModelOutputRejectedError):
         finish_email(
@@ -389,7 +309,7 @@ def test_an_email_that_recommends_paying_but_has_no_amount_is_refused() -> None:
 
 def test_an_approval_whose_amount_comes_to_nothing_is_refused() -> None:
     """FR-1.21: a refund of no money is a fault upstream, not an email to send a merchant."""
-    conclusion = a_conclusion(body=f"We will refund {AMOUNT_PLACEHOLDER}.")
+    conclusion = a_conclusion(body="We have approved your claim.")
 
     with pytest.raises(ModelOutputRejectedError):
         finish_email(
@@ -400,7 +320,7 @@ def test_an_approval_whose_amount_comes_to_nothing_is_refused() -> None:
         )
 
 
-def test_the_capped_amount_is_added_when_the_model_writes_no_placeholder() -> None:
+def test_the_capped_amount_is_added_after_the_models_wording() -> None:
     """The model writes approval wording; code adds the exact amount after the cap."""
     conclusion = a_conclusion(body="We have approved your claim and a credit is on its way.")
 
@@ -414,7 +334,6 @@ def test_the_capped_amount_is_added_when_the_model_writes_no_placeholder() -> No
     assert email.body == (
         "We have approved your claim and a credit is on its way.\n\nApproved amount: $52.00"
     )
-    assert AMOUNT_PLACEHOLDER not in email.body
 
 
 def test_a_request_that_needs_no_figure_is_finished_untouched() -> None:
@@ -569,7 +488,7 @@ def test_nothing_is_asked_for_when_all_four_pieces_of_evidence_are_in_hand() -> 
 
 def test_the_same_wording_always_finishes_the_same_way() -> None:
     """NFR-1: nothing here reads a clock or a model, so two runs agree."""
-    conclusion = a_conclusion(body=f"We will refund {AMOUNT_PLACEHOLDER}.")
+    conclusion = a_conclusion(body="We have approved your claim.")
 
     first = finish_email(
         conclusion,

@@ -65,9 +65,8 @@ def test_the_values_left_off_the_panel_are_still_part_of_the_policy() -> None:
     left_off = set(Policy.model_fields) - {value.name for value in view.values}
     assert left_off == {
         "min_description_length",
-        "min_assessment_confidence",
         "max_agent_steps",
-        "max_tool_retries",
+        "max_tool_calls_per_step",
         "max_image_analyses_per_run",
         "precedent_results_per_product",
         "min_precedent_similarity",
@@ -275,11 +274,11 @@ def test_every_refused_value_gets_its_own_complaint() -> None:
     with pytest.raises(InvalidRequestError) as refused:
         revise_policy(
             Policy(),
-            PolicyUpdate(values={"max_agent_steps": "0", "min_assessment_confidence": "3"}),
+            PolicyUpdate(values={"max_agent_steps": "0", "max_image_analyses_per_run": "0"}),
         )
 
     named = {problem["name"] for problem in refused.value.details["values"]}
-    assert named == {"max_agent_steps", "min_assessment_confidence"}
+    assert named == {"max_agent_steps", "max_image_analyses_per_run"}
 
 
 def test_words_can_be_changed_too() -> None:

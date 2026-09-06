@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from decimal import Decimal
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from claim_agent.domain.assessment import Confidence
 from claim_agent.domain.models import UtcDatetime
 from claim_agent.domain.outcome import Recommendation
+
+Confidence = Annotated[float, Field(ge=0.0, le=1.0)]
+"""A self-reported certainty from 0 to 1, kept on decisions and reports for the analysis screen.
+
+Historical: the investigation no longer reports one, so new records carry `None`. The field
+stays because the analysis groups decisions by it where a value exists.
+"""
 
 
 class DecisionStage(StrEnum):

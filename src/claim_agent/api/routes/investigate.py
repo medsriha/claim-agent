@@ -16,6 +16,7 @@ from claim_agent.api.deps import (
     ImageFetcherDep,
     MerchantMemoryDep,
     ModelsDep,
+    PassThreadsDep,
     PolicyDep,
     PrecedentStoreDep,
     ReportStoreDep,
@@ -61,6 +62,7 @@ async def investigate_case(
     precedent_store: PrecedentStoreDep,
     reports: ReportStoreDep,
     policy: PolicyDep,
+    threads: PassThreadsDep,
 ) -> StreamingResponse:
     """Screen a claim, investigate it, and say so as it goes.
 
@@ -118,6 +120,7 @@ async def investigate_case(
             precedent_store=precedent_store,
             reports=reports,
             policy=policy,
+            threads=threads,
         ),
         media_type=STREAM_MEDIA_TYPE,
         headers={
@@ -141,6 +144,7 @@ async def _narrate(
     precedent_store: PrecedentStoreDep,
     reports: ReportStoreDep,
     policy: PolicyDep,
+    threads: PassThreadsDep,
 ) -> AsyncIterator[str]:
     """Do the work and yield each message as it happens.
 
@@ -216,6 +220,7 @@ async def _narrate(
             events=events,
             policy=policy,
             precedent_store=precedent_store,
+            threads=threads,
         )
     )
 

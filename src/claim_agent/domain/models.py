@@ -301,15 +301,15 @@ class DraftedEmail(BaseModel):
         *,
         previous_amount_usd: Decimal | None = None,
     ) -> DraftedEmail:
-        """Return final approval wording containing the exact amount and no placeholder.
+        """Return approval wording carrying the exact figure.
 
-        New model output contains no amount, so the usual path appends one short line.
-        The replacements keep older stored drafts and a rep editing older wording safe.
-        When a rep changes the approved figure, the prior checked figure is replaced too.
+        The model's wording carries no amount, so the figure is appended on its own line.
+        When a representative changes the approved figure, the one already written is
+        replaced so the email never shows two.
         """
         figure = f"${amount_usd.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
-        subject = self.subject.replace("{{amount}}", figure)
-        body = self.body.replace("{{amount}}", figure)
+        subject = self.subject
+        body = self.body
         if previous_amount_usd is not None:
             previous = f"${previous_amount_usd.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
             if previous != figure:

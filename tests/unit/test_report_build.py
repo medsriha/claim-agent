@@ -103,8 +103,6 @@ def a_triage(*products: tuple[str, str]) -> ClaimTriage:
             steps_allowed=12,
             image_analyses_used=0,
             image_analyses_allowed=20,
-            tool_retries_used=0,
-            tool_retries_allowed_per_call=2,
             limits_reached=(),
         ),
     )

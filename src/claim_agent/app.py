@@ -8,6 +8,7 @@ from fastapi import FastAPI
 
 from claim_agent import __version__
 from claim_agent.agent.images import ImageFetcher
+from claim_agent.agent.threads import PassThreads
 from claim_agent.api.exception_handlers import register_exception_handlers
 from claim_agent.api.middleware import RequestContextMiddleware
 from claim_agent.api.routes import (
@@ -110,6 +111,9 @@ def create_app(
     app.state.precedent_store = precedent_store or PrecedentStore(settings.database_path)
     app.state.report_store = report_store or ReportStore(settings.database_path)
     app.state.decision_store = DecisionStore(settings.database_path)
+    # The conversations of every investigation, kept for the life of the process so a
+    # send-back continues the investigation that wrote the report (FR-R.2).
+    app.state.pass_threads = PassThreads()
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)

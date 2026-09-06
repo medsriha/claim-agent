@@ -9,15 +9,17 @@ from pydantic import BaseModel, ConfigDict
 from claim_agent.agent.budget import RunBudget
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.images import ImageFetcher
-from claim_agent.agent.investigate import ClaimFindings, settle_conclusion
+from claim_agent.agent.investigate import ClaimFindings, model_name, settle_conclusion
 from claim_agent.agent.ledger import RunLedger
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.loop import run_agent_pass
 from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.prompts import (
+    PROMPT_VERSION,
     EarlierExchange,
     build_claim_revision_messages,
     build_revision_messages,
+    build_revision_turn_messages,
     build_screening_revision_messages,
 )
 from claim_agent.agent.run import invoice_for_claim
@@ -28,6 +30,7 @@ from claim_agent.agent.schemas import (
     RevisionConclusion,
     SettledProduct,
 )
+from claim_agent.agent.threads import PassThread, PassThreads
 from claim_agent.agent.tools import investigation_tools
 from claim_agent.domain.assessment import Assessment
 from claim_agent.domain.claim_line import ClaimLine
@@ -135,8 +138,23 @@ async def rework_claim_findings(
     events: EventStream,
     policy: Policy,
     precedent: PrecedentSet | None = None,
+    threads: PassThreads | None = None,
+    thread_id: str | None = None,
 ) -> ClaimFindingsRevision:
-    """Rework a claim's report around what a representative said (FR-R.1 to FR-R.11)."""
+    """Rework a claim's report around what a representative said (FR-R.1 to FR-R.11).
+
+    Two ways in, and the first is the one this exists for. When the investigation that
+    wrote the report is still held as a thread, the rework **continues that conversation**:
+    the note is appended after everything the investigation saw and said, and the model
+    answers from its own work — no image is re-read, no tool result is retold (FR-R.2).
+    When the thread is gone — a restart, or a report written before threads existed — the
+    rework rebuilds its context from the report, exactly as it always did, and starts a
+    thread of its own so the next round can continue.
+
+    Args:
+        threads: The registry of conversations, or `None` to keep none.
+        thread_id: The thread the report says it came from, or `None` when it names none.
+    """
     lines = under_review.lines
     # One budget and one record per run, built here rather than taken as arguments, so a
     # rework can never end up sharing an allowance with the investigation that preceded it
@@ -153,8 +171,22 @@ async def rework_claim_findings(
 
     invoice = await invoice_for_claim(record=record, evidence=evidence_client, cache=cache)
 
-    outcome = await run_agent_pass(
-        opening_messages=build_revision_messages(
+    thread, continuing = await _thread_for_the_rework(
+        threads, thread_id=thread_id, case_id=record.case.case_id
+    )
+    if continuing:
+        opening = build_revision_turn_messages(
+            recommendation=under_review.recommendation,
+            amount=under_review.amount,
+            evidence=under_review.evidence,
+            assessments=under_review.assessments,
+            concerns=under_review.concerns,
+            drafted_email=under_review.drafted_email,
+            feedback=feedback,
+            conversation=under_review.conversation,
+        )
+    else:
+        opening = build_revision_messages(
             case=record.case,
             order=record.order,
             attachments=under_review.attachments,
@@ -169,7 +201,10 @@ async def rework_claim_findings(
             feedback=feedback,
             conversation=under_review.conversation,
             precedent=precedent,
-        ),
+        )
+
+    outcome = await run_agent_pass(
+        opening_messages=opening,
         tools=investigation_tools(
             case_id=record.case.case_id,
             shipment_id=record.case.shipment_id,
@@ -192,6 +227,7 @@ async def rework_claim_findings(
         budget=budget,
         ledger=ledger,
         events=events,
+        thread=thread,
     )
 
     if outcome.answer is None:
@@ -210,6 +246,13 @@ async def rework_claim_findings(
         contact_email=record.case.contact_email,
         directed_by_representative=reworked.representative_directed_outcome,
     )
+    investigated = investigated.model_copy(
+        update={
+            "thread_id": thread.thread_id if thread is not None else thread_id,
+            "prompt_version": PROMPT_VERSION,
+            "model": model_name(chat),
+        }
+    )
     logger.info(
         "claim_reworked",
         case_id=record.case.case_id,
@@ -217,6 +260,7 @@ async def rework_claim_findings(
         recommendation=investigated.outcome.recommendation.value,
         changed=len(reworked.changed),
         needs_reply=reworked.needs_more_from_representative,
+        continued_thread=continuing,
     )
     await events.emit(
         EventKind.INVESTIGATION_FINISHED,
@@ -231,6 +275,25 @@ async def rework_claim_findings(
         left_unchanged=reworked.left_unchanged,
         needs_reply=reworked.needs_more_from_representative,
     )
+
+
+async def _thread_for_the_rework(
+    threads: PassThreads | None, *, thread_id: str | None, case_id: str
+) -> tuple[PassThread | None, bool]:
+    """Pick the thread a rework writes to, and say whether it continues an earlier one.
+
+    Continues the report's own thread when the registry still holds it. Otherwise a fresh
+    thread is started for this rework, so that *its* successor can continue it, and the
+    caller is told to rebuild the context from the report. No registry means no thread at
+    all, which is the pass exactly as it was before threads existed.
+    """
+    if threads is None:
+        return None, False
+    if thread_id is not None and await threads.remembers(thread_id):
+        logger.info("rework_continues_thread", case_id=case_id, thread_id=thread_id)
+        return threads.resume(thread_id), True
+    logger.info("rework_rebuilds_context", case_id=case_id, missing_thread=thread_id)
+    return threads.start(case_id), False
 
 
 async def _a_rework_that_did_not_happen(

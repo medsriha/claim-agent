@@ -12,7 +12,6 @@ from claim_agent.domain.assessment import (
     all_answered,
     assessments_by_name,
     failed,
-    lowest_confidence,
 )
 from claim_agent.domain.claim_line import ClaimLine, MatchOutcome
 from claim_agent.domain.evidence import (
@@ -81,8 +80,6 @@ class OverrideReason(StrEnum):
     did not finish looking at the one they sent, is a request they cannot act on —
     the pre-flight screen has one label that makes this mistake already, and
     DESIGN.md records it as a fault rather than a pattern to copy.
-    `NOT_CONFIDENT_ENOUGH` means the overall action confidence or the weakest supporting
-    assessment fell below the threshold in the policy file (FR-1.15).
     `BUDGET_EXHAUSTED` means the run ran out of steps
     before it could finish, and whatever it established is carried forward rather
     than being thrown away (FR-1.16). `PRODUCT_NOT_PRICEABLE` means the damaged
@@ -106,7 +103,6 @@ class OverrideReason(StrEnum):
     MERCHANT_DETAILS_UNSPECIFIED = "merchant_details_unspecified"
     EVIDENCE_UNREADABLE = "evidence_unreadable"
     INVESTIGATION_INCOMPLETE = "investigation_incomplete"
-    NOT_CONFIDENT_ENOUGH = "not_confident_enough"
     BUDGET_EXHAUSTED = "budget_exhausted"
     PRODUCT_NOT_PRICEABLE = "product_not_priceable"
 
@@ -168,7 +164,6 @@ _WITHHELD_RECOMMENDATION: dict[OverrideReason, Recommendation] = {
     OverrideReason.EVIDENCE_INCOMPLETE: Recommendation.REQUEST_INFO,
     OverrideReason.ASSESSMENT_FAILED: Recommendation.REQUEST_REP_CLARIFICATION,
     OverrideReason.MERCHANT_DETAILS_UNSPECIFIED: Recommendation.REQUEST_REP_CLARIFICATION,
-    OverrideReason.NOT_CONFIDENT_ENOUGH: Recommendation.REQUEST_REP_CLARIFICATION,
     OverrideReason.PRODUCT_NOT_PRICEABLE: Recommendation.REQUEST_REP_CLARIFICATION,
 }
 """What each rule leaves in place of the payment it withheld.
@@ -198,7 +193,6 @@ def decide_outcome(
     policy: Policy,
     budget_exhausted: bool = False,
     requested_details: Sequence[str] = (),
-    confidence: float = 1.0,
     directed_by_representative: bool = False,
 ) -> OutcomeDecision:
     """Settle what is recommended for one claim, after the rules have had their say.
@@ -218,9 +212,8 @@ def decide_outcome(
     (FR-1.7, NFR-4).
 
     The rest apply only to a recommendation of payment: evidence that is not all in hand
-    (FR-1.6), a question answered no (FR-1.12), a question never answered at all,
-    confidence under the threshold in the claim policy (FR-1.15), and any damaged product
-    that cannot be tied to one price (FR-1.13, FR-1a.2).
+    (FR-1.6), a question answered no (FR-1.12), a question never answered at all, and any
+    damaged product that cannot be tied to one price (FR-1.13, FR-1a.2).
 
     An approval that survives all of them is looked at once more, and labelled a
     high-value approval when the damaged goods cost more than the high-value figure
@@ -257,14 +250,11 @@ def decide_outcome(
             established as damaged, which is never a reason to pay.
         amount: What a payment would come to, as worked out by code. `None` when no
             amount was worked out at all, which is never a reason to pay.
-        policy: Read for the lowest confidence a payment may be recommended on
-            (FR-0.7, NFR-7).
+        policy: Read for the high-value figure (FR-0.7, NFR-7).
         budget_exhausted: True when the run ran out of steps before it could finish.
         requested_details: Specific additional information the agent says the merchant
             can provide. A request without this or a merchant-fillable evidence gap is
             incomplete and goes to the representative instead.
-        confidence: The agent's confidence in its overall next action. Approval must
-            clear the same threshold as each supporting assessment.
         directed_by_representative: True when a representative told the agent to approve
             this claim and it is carrying out that instruction rather than recommending
             one of its own. **The rules that would have withheld the payment are then
@@ -327,8 +317,6 @@ def decide_outcome(
             assessments=assessments,
             lines=lines,
             amount=amount,
-            policy=policy,
-            confidence=confidence,
         )
         if directed_by_representative and amount is not None and amount.is_payable:
             # A representative told the agent to approve, and there is a figure to
@@ -468,16 +456,14 @@ def _reasons_to_withhold_approval(
     assessments: Sequence[Assessment],
     lines: Sequence[ClaimLine],
     amount: AmountDerivation | None,
-    policy: Policy,
-    confidence: float,
 ) -> list[tuple[OverrideReason, str]]:
     """Collect every rule that forbids the payment the investigation recommended.
 
     Each entry is a reason and one clause saying what happened, in the order the
     requirements set the rules out: evidence first, then the four questions, then
-    confidence, then whether the product can be priced at all. The order settles how the
-    sentence reads and nothing else — no reason is dropped by being last, and the
-    recommendation does not depend on it.
+    whether the product can be priced at all. The order settles how the sentence reads
+    and nothing else — no reason is dropped by being last, and the recommendation does
+    not depend on it.
 
     Returns an empty list when the payment may stand.
     """
@@ -503,13 +489,6 @@ def _reasons_to_withhold_approval(
             )
         )
 
-    assessment_confidence = lowest_confidence(assessments)
-    weakest = (
-        confidence if assessment_confidence is None else min(confidence, assessment_confidence)
-    )
-    if weakest < policy.min_assessment_confidence:
-        withheld.append((OverrideReason.NOT_CONFIDENT_ENOUGH, _confidence_clause(weakest, policy)))
-
     not_priceable = _why_not_priceable(lines, amount)
     if not_priceable is not None:
         withheld.append((OverrideReason.PRODUCT_NOT_PRICEABLE, not_priceable))
@@ -529,22 +508,6 @@ def _evidence_clause(evidence: Sequence[EvidenceFinding]) -> str:
     if not gaps:
         return "the evidence is not all in hand"
     return f"the merchant has still to supply the {_written_list(_in_words(gaps))}"
-
-
-def _confidence_clause(weakest: float | None, policy: Policy) -> str:
-    """Compare the lowest assessment or overall-action confidence with the threshold.
-
-    Both figures are written to two decimal places, so the same claim reads identically
-    every time rather than depending on how a fraction happens to print (NFR-1).
-
-    Neither wording carries a comma of its own. Several of these clauses are read out in
-    one sentence, and a comma inside one of them would look like the next item in the
-    list.
-    """
-    required = f"{policy.min_assessment_confidence:.2f}"
-    if weakest is None:
-        return f"nothing was assessed and so nothing met the {required} confidence needed"
-    return f"its lowest reported confidence was {weakest:.2f} against the {required} needed"
 
 
 def _why_not_priceable(lines: Sequence[ClaimLine], amount: AmountDerivation | None) -> str | None:

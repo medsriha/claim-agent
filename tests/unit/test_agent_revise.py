@@ -13,7 +13,9 @@ from tests.fixtures.shipbob import CASE_1001, ORDER_1001, SHIPMENT_1001
 
 from claim_agent.agent.events import EventStream
 from claim_agent.agent.images import ImageFetcher
+from claim_agent.agent.investigate import ClaimFindings, investigate_claim_lines
 from claim_agent.agent.llm import StructuredModel
+from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.prompts import EarlierExchange
 from claim_agent.agent.revise import (
     ClaimFindingsRevision,
@@ -24,8 +26,10 @@ from claim_agent.agent.schemas import (
     AssessmentJudgement,
     DamagedItem,
     EvidenceJudgement,
+    InvestigationConclusion,
     RevisionConclusion,
 )
+from claim_agent.agent.threads import PassThread, PassThreads
 from claim_agent.agent.tools import LIST_ATTACHMENTS, TOOL_NAMES
 from claim_agent.domain.assessment import REQUIRED_ASSESSMENTS, Assessment, AssessmentName
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, MatchOutcome, build_claim_lines
@@ -225,6 +229,8 @@ async def rework(
     feedback: str = "The amount looks wrong to me.",
     policy: Policy | None = None,
     events: EventStream | None = None,
+    threads: PassThreads | None = None,
+    thread_id: str | None = None,
 ) -> ClaimFindingsRevision:
     """Rework one report, with everything a test does not care about defaulted.
 
@@ -247,7 +253,47 @@ async def rework(
             structured=StructuredModel(model, max_attempts=1),
             events=events if events is not None else EventStream(),
             policy=policy if policy is not None else Policy(),
+            threads=threads,
+            thread_id=thread_id,
         )
+
+
+async def an_investigation_on(thread: PassThread, model: ScriptedModel) -> ClaimFindings:
+    """Investigate the collagen once, keeping the conversation on this thread."""
+    settings = build_settings()
+    async with (
+        httpx.AsyncClient(base_url=SHIPBOB, timeout=1.0) as shipbob_http,
+        httpx.AsyncClient() as images_http,
+    ):
+        return await investigate_claim_lines(
+            lines=(a_claim_for_the_collagen(),),
+            record=RECORD,
+            context=CONTEXT,
+            attachments=IMAGES,
+            invoice=INVOICE,
+            evidence=EvidenceClient(shipbob_http, max_attempts=1),
+            fetcher=ImageFetcher(images_http, settings),
+            chat=model,
+            structured=StructuredModel(model, max_attempts=1),
+            cache=ObservationCache(),
+            events=EventStream(),
+            policy=Policy(),
+            thread=thread,
+        )
+
+
+def a_first_conclusion() -> InvestigationConclusion:
+    """What the first pass concluded, for a thread a rework will continue."""
+    return InvestigationConclusion(
+        evidence=judgements(),
+        assessments=answers(),
+        damaged_items=(DamagedItem(product_name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU),),
+        recommended_amount_usd="40.00",
+        recommendation=Recommendation.APPROVE,
+        reasoning="The photographs show the bottle broken, and it is on the invoice.",
+        email_subject="About your damaged shipment",
+        email_body="We have looked at your claim and approved the damaged collagen.",
+    )
 
 
 def a_run_that_concludes(answer: RevisionConclusion) -> ScriptedModel:
@@ -747,3 +793,59 @@ async def test_the_wording_tells_the_agent_to_do_what_it_is_told() -> None:
     asked = model.asked[0].text
     assert "WHEN THEY TELL YOU TO APPROVE" in asked
     assert "You can be wrong, and they are what corrects you." in asked
+
+
+# --- A rework continues the investigation's own conversation (FR-R.2) --------
+
+
+async def test_fr_r_2_a_rework_continues_the_thread_the_investigation_wrote() -> None:
+    """FR-R.2: the note is answered by the pass that looked at the claim, from its own context."""
+    threads = PassThreads()
+    thread = threads.start(CASE.case_id)
+    first = scripted("I have seen enough.", a_first_conclusion())
+    investigated = await an_investigation_on(thread, first)
+    assert investigated.thread_id == thread.thread_id
+
+    second = a_run_that_concludes(a_rework())
+    result = await rework(second, threads=threads, thread_id=thread.thread_id)
+
+    shown = second.asked[0].text
+    # The first pass's question and remark come first, then the new turn.
+    assert shown.index("THE PRODUCTS YOU ARE ANSWERING FOR") < shown.index("I have seen enough.")
+    assert shown.index("I have seen enough.") < shown.index("THE REPORT AS IT STANDS")
+    assert shown.index("THE REPORT AS IT STANDS") < shown.index("The amount looks wrong to me.")
+    # The claim, the order and the images are not rendered a second time.
+    assert shown.count("WHAT WAS ORDERED") == 1
+    assert shown.count("THE IMAGES ON THIS CLAIM") == 1
+    assert "earlier in this conversation" in shown
+    # The reworked findings still name the thread, so the next round continues it too.
+    assert result.findings is not None
+    assert result.findings.thread_id == thread.thread_id
+
+
+async def test_a_rework_whose_thread_is_gone_rebuilds_its_context_from_the_report() -> None:
+    """A restart loses threads, not the ability to rework: the prose path still stands."""
+    threads = PassThreads()
+    model = a_run_that_concludes(a_rework())
+
+    result = await rework(model, threads=threads, thread_id="a-thread-nobody-holds")
+
+    shown = model.asked[0].text
+    assert "WHAT WAS ORDERED" in shown
+    assert "THE REPORT AS IT STANDS" in shown
+    assert "earlier in this conversation" not in shown
+    # It started a thread of its own, so the round after this one can continue it.
+    assert result.findings is not None
+    assert result.findings.thread_id is not None
+    assert result.findings.thread_id != "a-thread-nobody-holds"
+    assert await threads.remembers(result.findings.thread_id) is True
+
+
+async def test_a_rework_without_a_registry_keeps_no_thread_and_names_none() -> None:
+    """The pass with no registry is the pass as it was before threads existed."""
+    model = a_run_that_concludes(a_rework())
+
+    result = await rework(model)
+
+    assert result.findings is not None
+    assert result.findings.thread_id is None

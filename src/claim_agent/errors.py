@@ -43,6 +43,33 @@ class UpstreamError(ClaimAgentError):
     code = "upstream_unavailable"
 
 
+class ModelAnswerDidNotFitError(UpstreamError):
+    """The model answered, and the answer did not fit the form it was asked to fill in.
+
+    A kind of `UpstreamError`, because from the outside it is one: the caller asked for
+    a form and did not get one. It is its own class because it carries `problems` — the
+    validator's own account of what was wrong, field by field — and the agent loop uses
+    those to ask the model to correct its answer once, rather than throwing away
+    everything a pass established over a formatting slip (NFR-2, NFR-4).
+
+    `problems` are sentences about *our* schema ("recommendation: input should be one
+    of ..."), never the provider's wording, so they are safe to put back in front of
+    the model.
+    """
+
+    code = "model_answer_unusable"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        problems: tuple[str, ...] = (),
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, details=details)
+        self.problems = problems
+
+
 class ConfigurationError(ClaimAgentError):
     """Something this service needs in order to work was never configured.
 

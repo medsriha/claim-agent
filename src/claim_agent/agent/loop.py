@@ -1,22 +1,27 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Generic, TypedDict, TypeVar, cast
+from typing import Annotated, Any, Final, Generic, TypedDict, TypeVar, cast
 
 from langchain_core.exceptions import ModelError
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.messages.tool import ToolCall
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
 from pydantic import BaseModel
 
 from claim_agent.agent.budget import BudgetSnapshot, RunBudget
 from claim_agent.agent.events import EventKind, EventStream
 from claim_agent.agent.ledger import LedgerEntry, RunLedger, StepKind
 from claim_agent.agent.llm import StructuredModel
-from claim_agent.errors import UpstreamError
+from claim_agent.agent.threads import PassThread
+from claim_agent.agent.tools import ToolOutcome
+from claim_agent.errors import ModelAnswerDidNotFitError, UpstreamError
 from claim_agent.observability import get_logger
 
 logger = get_logger(__name__)
@@ -32,6 +37,11 @@ Answer = TypeVar("Answer", bound=BaseModel)
 _MOVES_PER_STEP = 2
 _MOVES_TO_SPARE = 10
 
+# How many times a pass may ask the model to correct a conclusion that did not fit its
+# form. One, because the second try is a changed question — it names what was wrong —
+# and a third identical one is back to asking the same thing twice. Each costs a step.
+_REPAIRS_ALLOWED: Final = 1
+
 
 def _graph_limit(budget: RunBudget) -> int:
     """Work out the graph's own limit, always looser than the step allowance."""
@@ -39,9 +49,14 @@ def _graph_limit(budget: RunBudget) -> int:
 
 
 class _PassState(TypedDict):
-    """What one pass carries between moves."""
+    """What one pass carries between moves, and what a thread keeps between passes.
 
-    messages: list[BaseMessage]
+    `messages` is appended to rather than replaced: a node hands back only what it
+    added, and the graph keeps the whole conversation. That is what lets a later pass
+    on the same thread continue from where this one stopped (FR-R.2).
+    """
+
+    messages: Annotated[list[BaseMessage], add_messages]
     outcome: LoopOutcome[Any] | None
 
 
@@ -71,8 +86,19 @@ async def run_agent_pass(
     budget: RunBudget,
     ledger: RunLedger,
     events: EventStream,
+    thread: PassThread | None = None,
 ) -> LoopOutcome[Answer]:
-    """Run one AI pass: ask, use tools, ask again, then conclude (FR-1.1, FR-1.3)."""
+    """Run one AI pass: ask, use tools, ask again, then conclude (FR-1.1, FR-1.3).
+
+    Args:
+        opening_messages: What the model is shown first. On a fresh thread that is the
+            whole question; on a thread that already holds a conversation it is only the
+            new turn, and the graph puts the earlier conversation in front of it.
+        thread: Where this pass's conversation is kept, or `None` to keep none. A pass
+            given a thread another pass already used continues that conversation, which
+            is how a representative's note is answered by the investigation that
+            produced the report rather than by a retelling of it (FR-R.2).
+    """
     _refuse_a_used_budget(budget)
 
     model = chat.bind_tools(list(tools))
@@ -125,23 +151,49 @@ async def run_agent_pass(
                 )
             }
 
+        budget.record_usage(getattr(reply, "usage_metadata", None))
         await _pass_on_what_the_model_said(reply, events=events)
-        return {"messages": [*state["messages"], reply]}
+        return {"messages": [reply]}
 
     async def act(state: _PassState) -> dict[str, object]:
-        """Carry out whatever the model just asked for, and hand back what came of it."""
-        asked_for = state["messages"][-1]
-        answers: list[BaseMessage] = [
-            await _carry_out(
-                tool_call,
-                tools_by_name=tools_by_name,
-                budget=budget,
-                ledger=ledger,
-                events=events,
+        """Carry out whatever the model just asked for, and hand back what came of it.
+
+        The calls of one turn run at the same time: they are independent of one another,
+        and the per-claim memo already makes two callers asking the same question do the
+        work once. Their answers go back in the order they were asked for, because the
+        model reads them against its own list.
+
+        A turn that asks for more tools than a turn may use gets the first ones carried
+        out and the rest declined in words, each under its own call id — the provider
+        requires an answer to every call, and a declined call answered plainly is one the
+        model can ask for again next turn (FR-1.3).
+        """
+        asked_for = cast(AIMessage, state["messages"][-1])
+        allowed = budget.tool_calls_allowed_per_step
+        carried_out, declined = asked_for.tool_calls[:allowed], asked_for.tool_calls[allowed:]
+        if declined:
+            logger.warning(
+                "agent_turn_asked_for_too_many_tools",
+                asked_for=len(asked_for.tool_calls),
+                allowed=allowed,
             )
-            for tool_call in cast(AIMessage, asked_for).tool_calls
+
+        answers = await asyncio.gather(
+            *(
+                _carry_out(
+                    tool_call,
+                    tools_by_name=tools_by_name,
+                    ledger=ledger,
+                    events=events,
+                )
+                for tool_call in carried_out
+            )
+        )
+        held_back = [
+            _declined(tool_call, asked=len(asked_for.tool_calls), allowed=allowed, ledger=ledger)
+            for tool_call in declined
         ]
-        return {"messages": [*state["messages"], *answers]}
+        return {"messages": [*answers, *held_back]}
 
     async def conclude(state: _PassState) -> dict[str, object]:
         """Ask for the form this pass ends on, once the model has stopped looking."""
@@ -179,9 +231,17 @@ async def run_agent_pass(
     builder.add_edge("act", "think")
     builder.add_edge("conclude", END)
 
-    finished = await builder.compile().ainvoke(
+    # With a thread, the graph writes every move to it and reads whatever an earlier
+    # pass left there first, so the opening messages land after that conversation.
+    # The outcome is reset because it belongs to the pass that produced it.
+    graph = builder.compile(checkpointer=thread.checkpointer if thread is not None else None)
+    config = RunnableConfig(recursion_limit=_graph_limit(budget))
+    if thread is not None:
+        config["configurable"] = {"thread_id": thread.thread_id}
+
+    finished = await graph.ainvoke(
         {"messages": list(opening_messages), "outcome": None},
-        config={"recursion_limit": _graph_limit(budget)},
+        config=config,
     )
 
     outcome = finished["outcome"]
@@ -206,27 +266,70 @@ async def _conclude(
     budget: RunBudget,
     ledger: RunLedger,
 ) -> LoopOutcome[Answer]:
-    """Ask the model to fill in the form this pass ends on (NFR-2)."""
-    closing = [*messages, HumanMessage(content=closing_request)]
-    asked = f"Draw a conclusion for this pass, in the shape of {concludes_with.__name__}."
+    """Ask the model to fill in the form this pass ends on (NFR-2).
 
-    try:
-        answer = await structured.ask(concludes_with, closing)
-    except UpstreamError as exc:
-        # `exc.message` is our own plain sentence, written for a person to read —
-        # not the provider's wording — so it is safe to pass on as the reason.
-        ledger.record(
-            kind=StepKind.REASONING,
-            name=concludes_with.__name__,
-            asked=asked,
-            observed=exc.message,
-            succeeded=False,
-        )
-        logger.warning(
-            "agent_conclusion_unusable",
-            form=concludes_with.__name__,
-        )
-        return _gave_up(exc.message, budget=budget, ledger=ledger)
+    An answer that does not fit the form is not the end of the pass. The validator's own
+    account of what was wrong is put in front of the model and the form is asked for
+    once more — a changed question, not the same one twice. Only when that also fails,
+    or there is no step left to spend on it, does the pass give up, and even then it
+    carries everything it established (FR-1.16, NFR-4).
+    """
+    request = closing_request
+    asked = f"Draw a conclusion for this pass, in the shape of {concludes_with.__name__}."
+    repairs_left = _REPAIRS_ALLOWED
+
+    while True:
+        try:
+            answer = await structured.ask(
+                concludes_with,
+                [*messages, HumanMessage(content=request)],
+                on_usage=budget.record_usage,
+            )
+        except ModelAnswerDidNotFitError as did_not_fit:
+            ledger.record(
+                kind=StepKind.REASONING,
+                name=concludes_with.__name__,
+                asked=asked,
+                observed=_what_did_not_fit(did_not_fit),
+                succeeded=False,
+            )
+            if repairs_left == 0:
+                logger.warning("agent_conclusion_unusable", form=concludes_with.__name__)
+                return _gave_up(
+                    f"{did_not_fit.message} It was asked once to correct it, and the "
+                    "corrected answer did not fit either.",
+                    budget=budget,
+                    ledger=ledger,
+                )
+            if not budget.has_step_left():
+                logger.warning("agent_conclusion_unusable", form=concludes_with.__name__)
+                return _gave_up(
+                    f"{did_not_fit.message} The run had no step left to ask for a corrected one.",
+                    budget=budget,
+                    ledger=ledger,
+                )
+            repairs_left -= 1
+            budget.spend_step()
+            logger.info("agent_conclusion_repair_asked", form=concludes_with.__name__)
+            request = _repair_request(closing_request, did_not_fit)
+            asked = f"Ask again for {concludes_with.__name__}, naming what did not fit last time."
+            continue
+        except UpstreamError as exc:
+            # `exc.message` is our own plain sentence, written for a person to read —
+            # not the provider's wording — so it is safe to pass on as the reason.
+            ledger.record(
+                kind=StepKind.REASONING,
+                name=concludes_with.__name__,
+                asked=asked,
+                observed=exc.message,
+                succeeded=False,
+            )
+            logger.warning(
+                "agent_conclusion_unusable",
+                form=concludes_with.__name__,
+            )
+            return _gave_up(exc.message, budget=budget, ledger=ledger)
+        break
 
     ledger.record(
         kind=StepKind.REASONING,
@@ -243,19 +346,33 @@ async def _conclude(
     )
 
 
+def _repair_request(closing_request: str, did_not_fit: ModelAnswerDidNotFitError) -> str:
+    """The closing question again, with what was wrong with the last answer under it."""
+    problems = "\n".join(f"- {problem}" for problem in did_not_fit.problems)
+    return (
+        f"{closing_request}\n\n"
+        "Your previous answer did not fit the form, for these reasons:\n"
+        f"{problems}\n"
+        "Fill the form in again, correcting exactly those fields and keeping everything "
+        "else as you had it."
+    )
+
+
+def _what_did_not_fit(did_not_fit: ModelAnswerDidNotFitError) -> str:
+    """One line for the record saying how the answer missed the form."""
+    return f"{did_not_fit.message} {' '.join(did_not_fit.problems)}"
+
+
 async def _carry_out(
     tool_call: ToolCall,
     *,
     tools_by_name: dict[str, BaseTool],
-    budget: RunBudget,
     ledger: RunLedger,
     events: EventStream,
 ) -> ToolMessage:
     """Do the one thing the model asked for, and put the result into words for it."""
-    # The model should always give a call an id, and the id it gives is the right
-    # thing to count retries against. One made up from where the call appeared is
-    # the fallback, because two calls must never share a retry allowance and an
-    # absent id would make every call in the run look like the same one.
+    # The provider requires every call to be answered under its own id; one made up
+    # from where the call appeared is the fallback for a call that arrived without one.
     call_id = tool_call["id"] or f"unnamed-call-{len(ledger) + 1}"
     name = tool_call["name"]
     asked = _what_was_asked_for(name, tool_call["args"])
@@ -282,21 +399,18 @@ async def _carry_out(
         )
         return ToolMessage(content=refusal, tool_call_id=call_id, name=name, status="error")
 
-    # Noted before the call so we can tell afterwards whether the tool wrote its own
-    # record. A tool that ran writes a better one than this loop could, and recording
-    # here as well would put every successful call in the record twice.
-    entries_before = len(ledger)
+    result = await _carry_out_once(tool, tool_call, call_id=call_id)
 
-    result = await _try_until_out_of_retries(tool, tool_call, call_id=call_id, budget=budget)
-
-    if len(ledger) > entries_before:
-        # The tool spoke for itself. Nothing to add.
+    if isinstance(getattr(result, "artifact", None), ToolOutcome):
+        # The tool spoke for itself: every investigation tool hands its outcome back as
+        # the message's artifact, and writes its own record on the way. Recording here
+        # as well would put every successful call in the record twice. Judged by the
+        # reply itself rather than by counting ledger entries, because several calls
+        # run at once and another call's entry could land in between.
         return result
 
-    # It did not, so it never got as far as its own reporting — unreadable arguments, or
-    # a tool that raised despite being contracted not to. This is the only record that
-    # call will ever have (NFR-3). The error mark on the model library's reply is the one
-    # signal we get that a tool failed rather than answered.
+    # It did not: unreadable arguments, a tool that raised, or a tool that keeps no
+    # record of its own. This is the only record that call will ever have (NFR-3).
     succeeded = result.status != "error"
     ledger.record(
         kind=StepKind.TOOL_CALL,
@@ -316,51 +430,55 @@ async def _carry_out(
     return result
 
 
-async def _try_until_out_of_retries(
-    tool: BaseTool,
-    tool_call: ToolCall,
-    *,
-    call_id: str,
-    budget: RunBudget,
-) -> ToolMessage:
-    """Use one tool, trying again while this call still has retries left (FR-1.3)."""
-    while True:
-        try:
-            # Invoked with the model's own call, not just its arguments, so the reply
-            # comes back as a message already tied to the call it answers.
-            return cast("ToolMessage", await tool.ainvoke({**tool_call, "id": call_id}))
-        except Exception as exc:
-            # Everything is caught here, deliberately. A tool reaches ShipBob,
-            # downloads images and does arithmetic, and none of what can come out of
-            # that is a reason for a claim to reach a representative as a server error
-            # rather than as a clarification request (NFR-4). What is caught is written
-            # down and handed to the model in plain words, never swallowed.
-            if budget.has_retry_left(call_id):
-                budget.spend_retry(call_id)
-                logger.warning(
-                    "tool_call_failed_trying_again",
-                    tool=tool.name,
-                    failure=type(exc).__name__,
-                )
-                continue
+def _declined(tool_call: ToolCall, *, asked: int, allowed: int, ledger: RunLedger) -> ToolMessage:
+    """Answer a call that was over the turn's allowance, and write it down (FR-1.3)."""
+    name = tool_call["name"]
+    refusal = (
+        f"This turn asked for {asked} tools and a turn may use at most {allowed}, so this "
+        "call was not carried out. Ask for it again on your next turn if you still need it."
+    )
+    ledger.record(
+        kind=StepKind.TOOL_CALL,
+        name=name,
+        asked=_what_was_asked_for(name, tool_call["args"]),
+        observed=refusal,
+        succeeded=False,
+    )
+    return ToolMessage(
+        content=refusal,
+        tool_call_id=tool_call["id"] or f"unnamed-call-{len(ledger)}",
+        name=name,
+        status="error",
+    )
 
-            logger.warning(
-                "tool_call_failed",
-                tool=tool.name,
-                failure=type(exc).__name__,
-            )
-            return ToolMessage(
-                # The exception's own words are kept out of this. They are written
-                # for whoever wrote the tool, and a sentence like that in front of
-                # the model is an invitation to reason about our internals.
-                content=(
-                    f"The {_readable(tool.name)} tool could not answer. "
-                    "Carry on without it, or say what you cannot establish because of it."
-                ),
-                tool_call_id=call_id,
-                name=tool.name,
-                status="error",
-            )
+
+async def _carry_out_once(tool: BaseTool, tool_call: ToolCall, *, call_id: str) -> ToolMessage:
+    """Use one tool once, and put any failure into words the model can act on (NFR-4).
+
+    Not retried. Every expected failure — ShipBob unreachable, an image that will not
+    download, arguments that do not parse — is already caught inside the tool and answered
+    in words, so an exception reaching here is a bug in the tool, and a bug does not mend
+    itself on a second try.
+    """
+    try:
+        # Invoked with the model's own call, not just its arguments, so the reply comes
+        # back as a message already tied to the call it answers.
+        return cast("ToolMessage", await tool.ainvoke({**tool_call, "id": call_id}))
+    except Exception as exc:
+        # Caught deliberately: nothing a tool does is a reason for a claim to reach a
+        # representative as a server error rather than as a clarification request.
+        logger.warning("tool_call_failed", tool=tool.name, failure=type(exc).__name__)
+        return ToolMessage(
+            # The exception's own words are kept out: they are written for whoever wrote
+            # the tool, and would invite the model to reason about our internals.
+            content=(
+                f"The {_readable(tool.name)} tool could not answer. "
+                "Carry on without it, or say what you cannot establish because of it."
+            ),
+            tool_call_id=call_id,
+            name=tool.name,
+            status="error",
+        )
 
 
 async def _pass_on_what_the_model_said(reply: AIMessage, *, events: EventStream) -> None:

@@ -53,20 +53,19 @@ def evidence_with(kind: EvidenceKind, state: EvidenceState) -> tuple[EvidenceFin
     )
 
 
-def assessment(name: AssessmentName, *, passed: bool = True, confidence: float = 0.9) -> Assessment:
+def assessment(name: AssessmentName, *, passed: bool = True) -> Assessment:
     """One of the four judgements made once the evidence was in hand."""
     return Assessment(
         name=name,
         passed=passed,
         reasoning="Why the investigation reached this answer.",
-        confidence=confidence,
         attachment_ids=("att-1",),
     )
 
 
-def all_questions_answered(*, confidence: float = 0.9) -> tuple[Assessment, ...]:
-    """All four questions answered yes, each as sure as asked for."""
-    return tuple(assessment(name, confidence=confidence) for name in AssessmentName)
+def all_questions_answered() -> tuple[Assessment, ...]:
+    """All four questions answered yes."""
+    return tuple(assessment(name) for name in AssessmentName)
 
 
 def matched_line() -> ClaimLine:
@@ -138,12 +137,11 @@ def decide(
     policy: Policy | None = None,
     budget_exhausted: bool = False,
     requested_details: tuple[str, ...] = (),
-    confidence: float = 1.0,
 ) -> OutcomeDecision:
     """Decide one claim line, defaulting everything a test does not care about to clean.
 
-    Clean means: all four pieces of evidence present, all four questions answered yes and
-    confidently, the product matched to one order line, and a payable amount. A test that
+    Clean means: all four pieces of evidence present, all four questions answered yes,
+    the product matched to one order line, and a payable amount. A test that
     cares about one of those replaces only that one, so what it is testing is the only
     thing on the page.
 
@@ -159,7 +157,6 @@ def decide(
         policy=Policy() if policy is None else policy,
         budget_exhausted=budget_exhausted,
         requested_details=requested_details,
-        confidence=confidence,
     )
 
 
@@ -227,16 +224,6 @@ def test_fr_1_14_a_recommendation_to_hand_the_claim_to_a_person_passes_through_u
     """Asking the representative is already the cautious answer, so it passes through."""
     decision = decide(
         Recommendation.REQUEST_REP_CLARIFICATION, evidence=(), assessments=(), amount=None
-    )
-
-    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert decision.overrides == ()
-
-
-def test_fr_1_15_a_refusal_made_on_thin_confidence_is_still_the_investigations_to_make() -> None:
-    """Never approving under uncertainty is a rule about approving, and about nothing else."""
-    decision = decide(
-        Recommendation.REQUEST_REP_CLARIFICATION, assessments=all_questions_answered(confidence=0.1)
     )
 
     assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
@@ -420,58 +407,8 @@ def test_fr_1_12_a_failed_question_and_an_unanswered_one_are_both_reported() -> 
 # ---------------------------------------------------------------------------
 
 
-def test_fr_1_15_confidence_below_the_threshold_hands_the_claim_to_a_person() -> None:
-    """A claim is only as well established as its weakest judgement."""
-    answers = (
-        assessment(AssessmentName.DAMAGE_VISIBLE, confidence=0.5),
-        assessment(AssessmentName.PRODUCT_IDENTIFIABLE),
-        assessment(AssessmentName.PRODUCT_ON_INVOICE),
-        assessment(AssessmentName.PACKAGING_DOCUMENTED),
-    )
-
-    decision = decide(Recommendation.APPROVE, assessments=answers)
-
-    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert decision.overrides == (OverrideReason.NOT_CONFIDENT_ENOUGH,)
-    assert "0.50" in decision.explanation
-    assert "0.70" in decision.explanation
-
-
-def test_fr_1_15_low_overall_confidence_withholds_an_otherwise_clean_approval() -> None:
-    """The confidence reported beside the next action participates in that action."""
-    decision = decide(Recommendation.APPROVE, confidence=0.4)
-
-    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert decision.overrides == (OverrideReason.NOT_CONFIDENT_ENOUGH,)
-    assert "0.40" in decision.explanation
-
-
-def test_fr_1_15_confidence_landing_exactly_on_the_threshold_is_confident_enough() -> None:
-    """The threshold is the lowest a payment may rest on, not the first figure above it."""
-    decision = decide(
-        Recommendation.APPROVE,
-        assessments=all_questions_answered(confidence=0.7),
-        policy=Policy(min_assessment_confidence=0.7),
-    )
-
-    assert decision.recommendation is Recommendation.APPROVE
-    assert decision.overrides == ()
-
-
-def test_fr_1_15_the_confidence_threshold_comes_from_the_claim_policy() -> None:
-    """The figure is a provisional judgement call, so it has to be changeable (NFR-7)."""
-    decision = decide(
-        Recommendation.APPROVE,
-        assessments=all_questions_answered(confidence=0.9),
-        policy=Policy(min_assessment_confidence=0.95),
-    )
-
-    assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
-    assert OverrideReason.NOT_CONFIDENT_ENOUGH in decision.overrides
-
-
 def test_an_investigation_that_assessed_nothing_is_incomplete() -> None:
-    """Missing assessments block approval without inventing a confidence score."""
+    """Missing assessments block approval on their own."""
     decision = decide(Recommendation.APPROVE, assessments=())
 
     assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
@@ -557,24 +494,17 @@ def test_fr_1_20_an_item_the_invoice_prices_at_nothing_goes_to_a_person() -> Non
 
 
 def test_nfr_4_the_most_cautious_recommendation_wins_when_two_rules_disagree() -> None:
-    """Missing evidence asks the merchant and thin confidence asks a person; a person wins."""
-    answers = (
-        assessment(AssessmentName.DAMAGE_VISIBLE, confidence=0.2),
-        assessment(AssessmentName.PRODUCT_IDENTIFIABLE),
-        assessment(AssessmentName.PRODUCT_ON_INVOICE),
-        assessment(AssessmentName.PACKAGING_DOCUMENTED),
-    )
-
+    """Missing evidence asks the merchant and an unpriceable product asks a person; a person wins."""
     decision = decide(
         Recommendation.APPROVE,
         evidence=evidence_with(EvidenceKind.INVOICE, EvidenceState.MISSING),
-        assessments=answers,
+        lines=(unmatched_line(MatchOutcome.AMBIGUOUS),),
     )
 
     assert decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert decision.overrides == (
         OverrideReason.EVIDENCE_INCOMPLETE,
-        OverrideReason.NOT_CONFIDENT_ENOUGH,
+        OverrideReason.PRODUCT_NOT_PRICEABLE,
     )
 
 
@@ -584,7 +514,7 @@ def test_nfr_3_every_rule_that_stepped_in_is_reported_and_not_only_the_first() -
         finding(EvidenceKind.INVOICE, EvidenceState.MISSING),
         finding(EvidenceKind.CUSTOMER_CONFIRMATION, EvidenceState.UNREADABLE),
     )
-    answers = (assessment(AssessmentName.DAMAGE_VISIBLE, passed=False, confidence=0.3),)
+    answers = (assessment(AssessmentName.DAMAGE_VISIBLE, passed=False),)
 
     decision = decide(
         Recommendation.APPROVE,
@@ -602,7 +532,6 @@ def test_nfr_3_every_rule_that_stepped_in_is_reported_and_not_only_the_first() -
         OverrideReason.EVIDENCE_INCOMPLETE,
         OverrideReason.ASSESSMENT_FAILED,
         OverrideReason.INVESTIGATION_INCOMPLETE,
-        OverrideReason.NOT_CONFIDENT_ENOUGH,
         OverrideReason.PRODUCT_NOT_PRICEABLE,
     )
 

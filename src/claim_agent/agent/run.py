@@ -11,6 +11,7 @@ from claim_agent.agent.ledger import RunLedger
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.precedent_context import precedent_for_claim
+from claim_agent.agent.threads import PassThreads
 from claim_agent.agent.triage import ClaimTriage, triage_claim
 from claim_agent.domain.models import Invoice
 from claim_agent.errors import ClaimAgentError
@@ -50,8 +51,14 @@ async def investigate_claim(
     policy: Policy,
     cache: ObservationCache | None = None,
     precedent_store: PrecedentStore | None = None,
+    threads: PassThreads | None = None,
 ) -> ClaimInvestigation:
-    """Split a claim into products, then investigate all of them in one run (FR-1a.*, FR-1b.*)."""
+    """Split a claim into products, then investigate all of them in one run (FR-1a.*, FR-1b.*).
+
+    `threads` is where the investigation's conversation is kept. A fresh thread is started
+    for every investigation, so investigating a claim again never appends to the last
+    time's evidence; a rework of the report this produces continues the thread (FR-R.2).
+    """
     shared_cache = cache if cache is not None else ObservationCache()
 
     triage = await triage_claim(
@@ -100,6 +107,7 @@ async def investigate_claim(
         policy=policy,
         shared_evidence=triage.shared_evidence,
         precedent=precedent,
+        thread=threads.start(record.case.case_id) if threads is not None else None,
     )
 
     return ClaimInvestigation(case_id=triage.case_id, triage=triage, findings=findings)

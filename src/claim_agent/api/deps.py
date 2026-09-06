@@ -8,6 +8,7 @@ from langchain_core.language_models import BaseChatModel
 
 from claim_agent.agent.images import ImageFetcher
 from claim_agent.agent.llm import StructuredModel, build_chat_model, build_structured_model
+from claim_agent.agent.threads import PassThreads
 from claim_agent.live_policy import LivePolicy
 from claim_agent.policy import Policy
 from claim_agent.settings import Settings
@@ -114,6 +115,17 @@ def get_image_fetcher(request: Request) -> ImageFetcher:
     return fetcher
 
 
+def get_pass_threads(request: Request) -> PassThreads:
+    """Return the conversations of the investigations this process has run (FR-R.2).
+
+    One registry for the whole process, because the point of it is that a send-back is
+    answered by the very investigation that produced the report, and that investigation
+    ran in an earlier request.
+    """
+    threads: PassThreads = request.app.state.pass_threads
+    return threads
+
+
 def get_models(request: Request) -> ModelsFor:
     """Return a way to build the models, rather than the models themselves.
 
@@ -151,3 +163,4 @@ DecisionStoreDep = Annotated[DecisionStore, Depends(get_decision_store)]
 EvidenceClientDep = Annotated[EvidenceClient, Depends(get_evidence_client)]
 ImageFetcherDep = Annotated[ImageFetcher, Depends(get_image_fetcher)]
 ModelsDep = Annotated[ModelsFor, Depends(get_models)]
+PassThreadsDep = Annotated[PassThreads, Depends(get_pass_threads)]

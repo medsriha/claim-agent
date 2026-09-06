@@ -14,12 +14,13 @@ from claim_agent.agent.ledger import LedgerEntry, RunLedger
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.loop import LoopOutcome, run_agent_pass
 from claim_agent.agent.observations import ObservationCache
-from claim_agent.agent.prompts import build_investigation_messages
+from claim_agent.agent.prompts import PROMPT_VERSION, build_investigation_messages
 from claim_agent.agent.schemas import (
     AssessmentJudgement,
     EvidenceJudgement,
     InvestigationConclusion,
 )
+from claim_agent.agent.threads import PassThread
 from claim_agent.agent.tools import investigation_tools
 from claim_agent.domain.assessment import REQUIRED_ASSESSMENTS, Assessment
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine
@@ -83,11 +84,12 @@ class ClaimFindings(BaseModel):
     budget: BudgetSnapshot
     conclusion: InvestigationConclusion | None
     requested_details: tuple[str, ...] = ()
-
-    @property
-    def confidence(self) -> float | None:
-        """No subjective confidence score is requested or shown for agent conclusions."""
-        return None
+    thread_id: str | None = None
+    """The conversation thread this run wrote to, so a rework can continue it (FR-R.2)."""
+    prompt_version: str | None = None
+    """Which edition of the wording produced this (NFR-1, NFR-5)."""
+    model: str | None = None
+    """Which model produced this."""
 
 
 async def investigate_claim_lines(
@@ -106,8 +108,13 @@ async def investigate_claim_lines(
     policy: Policy,
     shared_evidence: Sequence[EvidenceFinding] = (),
     precedent: PrecedentSet | None = None,
+    thread: PassThread | None = None,
 ) -> ClaimFindings:
-    """Investigate one claim and produce everything a representative needs (FR-1b.1)."""
+    """Investigate one claim and produce everything a representative needs (FR-1b.1).
+
+    `thread` is where the pass keeps its conversation. A rework of this claim's report is
+    given the same thread and continues from here rather than being told about it (FR-R.2).
+    """
     case = record.case
     # One budget and one record for the run, built here rather than taken as arguments, so a
     # claim can never end up sharing an allowance with the triage pass that preceded it
@@ -153,6 +160,7 @@ async def investigate_claim_lines(
         budget=budget,
         ledger=ledger,
         events=events,
+        thread=thread,
     )
 
     investigated = settle_conclusion(
@@ -162,6 +170,13 @@ async def investigate_claim_lines(
         invoice=invoice,
         policy=policy,
         contact_email=case.contact_email,
+    )
+    investigated = investigated.model_copy(
+        update={
+            "thread_id": thread.thread_id if thread is not None else None,
+            "prompt_version": PROMPT_VERSION,
+            "model": model_name(chat),
+        }
     )
 
     logger.info(
@@ -368,6 +383,15 @@ def _hand_it_to_a_person(
 def _ran_out_of_steps(outcome: LoopOutcome[AnyConclusion]) -> bool:
     """Say whether the run stopped without concluding because its steps ran out (FR-1.16)."""
     return outcome.gave_up and BudgetLimit.STEPS in outcome.budget.limits_reached
+
+
+def model_name(chat: BaseChatModel) -> str:
+    """The provider's name for a chat model, for the record on a report."""
+    for attribute in ("model", "model_name"):
+        named = getattr(chat, attribute, None)
+        if isinstance(named, str) and named:
+            return named
+    return chat._llm_type
 
 
 def _named(lines: Sequence[ClaimLine]) -> str:

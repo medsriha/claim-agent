@@ -37,6 +37,7 @@ from claim_agent.agent.ledger import RunLedger
 from claim_agent.agent.llm import StructuredModel
 from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.schemas import ClaimedProductProposal, ClaimSplit, ImageObservation
+from claim_agent.agent.tools import TRIAGE_TOOL_NAMES
 from claim_agent.agent.triage import ClaimTriage, triage_claim
 from claim_agent.domain.claim_line import MatchOutcome
 from claim_agent.domain.evidence import SHARED_EVIDENCE, EvidenceKind, EvidenceState
@@ -179,9 +180,7 @@ async def triage(
     model = ScriptedModel(replies=list(replies))
     structured = StructuredModel(model, max_attempts=1)
     cache = ObservationCache()
-    budget = RunBudget(
-        Policy(max_agent_steps=steps, max_image_analyses_per_run=images_allowed, max_tool_retries=0)
-    )
+    budget = RunBudget(Policy(max_agent_steps=steps, max_image_analyses_per_run=images_allowed))
     events = EventStream()
 
     answer = await triage_claim(
@@ -817,3 +816,21 @@ async def test_the_same_claim_investigated_twice_gives_the_same_triage(
     second = await triage(shipbob_http, images_http, replies=a_whole_claim(*products))
 
     assert first.triage == second.triage
+
+
+# --- The triage pass holds the tools that read and identify, and no others (FR-1a.1) ---
+
+
+async def test_the_triage_pass_is_offered_the_reading_tools_and_none_that_price(
+    api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
+) -> None:
+    """FR-1a.1: a pass that works out what the claim is for cannot spend its steps pricing it."""
+    serve(api)
+
+    run = await triage(
+        shipbob_http, images_http, replies=["Nothing to look at.", ClaimSplit(reasoning="none")]
+    )
+
+    assert set(run.model.bound_tools) == set(TRIAGE_TOOL_NAMES)
+    assert "compute_reimbursement" not in run.model.bound_tools
+    assert "generate_invoice" not in run.model.bound_tools

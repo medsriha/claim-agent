@@ -4,7 +4,7 @@ import re
 from collections.abc import Sequence
 from decimal import ROUND_HALF_UP
 
-from claim_agent.agent.schemas import AMOUNT_PLACEHOLDER, ClaimSplit, InvestigationConclusion
+from claim_agent.agent.schemas import ClaimSplit, InvestigationConclusion
 from claim_agent.domain.evidence import EvidenceFinding, EvidenceKind, gaps_the_merchant_can_fill
 from claim_agent.domain.models import DraftedEmail
 from claim_agent.domain.outcome import Recommendation
@@ -89,10 +89,6 @@ _MONEY_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(rf"[{_CURRENCY_SYMBOLS}]\s*{_NUMBER}"),
     re.compile(rf"{_NUMBER}\s*[{_CURRENCY_SYMBOLS}]"),
     re.compile(
-        rf"[{_CURRENCY_SYMBOLS}]\s*{re.escape(AMOUNT_PLACEHOLDER)}"
-        rf"|{re.escape(AMOUNT_PLACEHOLDER)}\s*[{_CURRENCY_SYMBOLS}]"
-    ),
-    re.compile(
         rf"\b(?:{_NUMBER}|{_WRITTEN_NUMBER})\s*-?\s*(?:{_any_of(_CURRENCY_WORDS)})\b",
         re.IGNORECASE,
     ),
@@ -170,23 +166,10 @@ def finish_email(
     _refuse_wording_that_calls_itself_a_draft(conclusion)
 
     if recommendation.is_approval:
-        # Adding the amount last is deliberate: the figure is money-shaped, so the
-        # checks above have to see the model's own words and nothing else.
-        figure = _as_money(_payable(amount))
-        if AMOUNT_PLACEHOLDER in subject or AMOUNT_PLACEHOLDER in body:
-            # Reports drafted under the earlier prompt used a marker. Finish them safely
-            # instead of exposing implementation wording to a representative.
-            subject = subject.replace(AMOUNT_PLACEHOLDER, figure)
-            body = body.replace(AMOUNT_PLACEHOLDER, figure)
-        else:
-            body = f"{body.rstrip()}\n\nApproved amount: {figure}"
+        # Added last, deliberately: the figure is money-shaped, so the checks above have
+        # to see the model's own words and nothing else.
+        body = f"{body.rstrip()}\n\nApproved amount: {_as_money(_payable(amount))}"
     elif recommendation is Recommendation.REQUEST_INFO:
-        if AMOUNT_PLACEHOLDER in subject or AMOUNT_PLACEHOLDER in body:
-            raise ModelOutputRejectedError(
-                "The drafted email leaves a place for an amount on a claim line that is not "
-                "recommended for payment, so there is no figure to put there.",
-                details={"recommendation": recommendation.value},
-            )
         details = tuple(
             dict.fromkeys(detail.strip() for detail in requested_details if detail.strip())
         )
@@ -208,12 +191,6 @@ def finish_email(
         if missing_from_body:
             requested = "\n".join(f"- {detail}" for detail in missing_from_body)
             body = f"{body.rstrip()}\n\nPlease provide:\n{requested}"
-    elif AMOUNT_PLACEHOLDER in subject or AMOUNT_PLACEHOLDER in body:
-        raise ModelOutputRejectedError(
-            "The drafted email leaves a place for an amount on a claim line that is not "
-            "recommended for payment, so there is no figure to put there.",
-            details={"recommendation": recommendation.value},
-        )
 
     return DraftedEmail(to=contact_email, subject=subject, body=body)
 

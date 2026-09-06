@@ -12,6 +12,7 @@ from claim_agent.api.deps import (
     ImageFetcherDep,
     MerchantMemoryDep,
     ModelsDep,
+    PassThreadsDep,
     PolicyDep,
     PrecedentStoreDep,
     ReportStoreDep,
@@ -181,6 +182,7 @@ async def send_report_back(
     memory: MerchantMemoryDep,
     precedent_store: PrecedentStoreDep,
     policy: PolicyDep,
+    threads: PassThreadsDep,
 ) -> Report:
     """Send a report back with a note, and get it reworked around that note (FR-2.8, FR-R.1).
 
@@ -252,6 +254,7 @@ async def send_report_back(
         memory=memory,
         precedent_store=precedent_store,
         policy=policy,
+        threads=threads,
     )
     reports.record(answered)
 

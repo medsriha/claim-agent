@@ -2,20 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import StrEnum
-from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
-
-Confidence = Annotated[float, Field(ge=0.0, le=1.0)]
-"""How sure something is, from 0 for no idea to 1 for certain.
-
-A plain fraction rather than words like "high" and "low", so it can be compared
-against the threshold in the policy file without anyone having to decide what
-"medium" means (FR-1.15).
-
-It is a self-report. Nothing in this system measures it, and a model that is
-confidently wrong will say so confidently.
-"""
+from pydantic import BaseModel, ConfigDict
 
 
 class AssessmentName(StrEnum):
@@ -68,9 +56,6 @@ class Assessment(BaseModel):
     name: AssessmentName
     passed: bool
     reasoning: str
-    # Kept nullable so reports written before subjective confidence was removed
-    # remain readable. New agent assessments leave it empty.
-    confidence: Confidence | None = None
     attachment_ids: tuple[str, ...] = ()
 
 
@@ -106,19 +91,3 @@ def failed(assessments: Sequence[Assessment]) -> tuple[AssessmentName, ...]:
     return tuple(
         name for name in REQUIRED_ASSESSMENTS if name in indexed and not indexed[name].passed
     )
-
-
-def lowest_confidence(assessments: Sequence[Assessment]) -> float | None:
-    """The least historical confidence value, or `None` if none was recorded.
-
-    This is the figure a recommendation of payment is tested against: a claim is
-    only as well established as its weakest judgement, so averaging would let one
-    confident answer cover for a shaky one (FR-1.15).
-
-    New agent assessments intentionally have no confidence value. Completeness is
-    checked separately by `all_answered`; absence here is not itself a failure.
-    """
-    reported = [
-        assessment.confidence for assessment in assessments if assessment.confidence is not None
-    ]
-    return min(reported) if reported else None

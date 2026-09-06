@@ -435,12 +435,12 @@ def test_a_past_correction_is_shown_and_marked_as_somebody_elses_words() -> None
 # --- No money comes out of the model (FR-1.21, NFR-2) -----------------------
 
 
-def test_the_prompts_keep_amounts_and_placeholders_out_of_email_wording() -> None:
+def test_the_prompts_keep_amounts_out_of_email_wording() -> None:
     """FR-1.21: code adds the capped amount after the model has finished writing."""
-    assert "Never write a figure or an amount placeholder in the email" in unwrapped(SYSTEM_PROMPT)
-    assert "must not contain an amount or amount placeholder" in unwrapped(INVESTIGATION_PROMPT)
-    assert "{{amount}}" not in SYSTEM_PROMPT
-    assert "{{amount}}" not in INVESTIGATION_PROMPT
+    assert "Never write a figure in the email" in unwrapped(SYSTEM_PROMPT)
+    assert "must not contain an amount" in unwrapped(INVESTIGATION_PROMPT)
+    for prompt in ALL_PROMPTS:
+        assert "placeholder" not in prompt.lower()
 
 
 def test_the_prompts_teach_how_to_write_an_amount_and_never_a_currency_symbol() -> None:

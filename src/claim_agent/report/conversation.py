@@ -18,6 +18,7 @@ from claim_agent.agent.revise import (
     rework_screening_report,
 )
 from claim_agent.agent.run import investigate_claim
+from claim_agent.agent.threads import PassThreads
 from claim_agent.api.deps import ModelsFor
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, build_claim_lines
 from claim_agent.domain.evidence import SHARED_EVIDENCE
@@ -78,6 +79,7 @@ async def answer_the_representative(
     memory: MerchantMemory,
     precedent_store: PrecedentStore,
     policy: Policy,
+    threads: PassThreads | None = None,
 ) -> Report:
     """Give a representative's message to the agent, and write down what came back.
 
@@ -94,6 +96,9 @@ async def answer_the_representative(
             is investigated afresh.
         precedent_store: The closed claims this service has handled (FR-S.5).
         policy: The thresholds this claim is judged by (FR-0.7).
+        threads: The conversations of investigations this process has run. An investigated
+            report is answered by continuing its own investigation's thread where that is
+            still held (FR-R.2). `None` keeps no threads.
 
     Returns:
         The next version of the report. Never raises for anything that can happen to a claim.
@@ -128,6 +133,7 @@ async def answer_the_representative(
         structured=structured,
         precedent_store=precedent_store,
         policy=policy,
+        threads=threads,
     )
 
     if isinstance(answered, ClaimRevision) and answered.settled:
@@ -143,6 +149,7 @@ async def answer_the_representative(
             structured=structured,
             precedent_store=precedent_store,
             policy=policy,
+            threads=threads,
         )
 
     if isinstance(answered, ClaimRevision) and answered.reinvestigate:
@@ -159,6 +166,7 @@ async def answer_the_representative(
             memory=memory,
             precedent_store=precedent_store,
             policy=policy,
+            threads=threads,
         )
 
     return build_revised_report(parked, answered, feedback=feedback, at=at)
@@ -175,6 +183,7 @@ async def _ask_the_agent(
     structured: StructuredModel,
     precedent_store: PrecedentStore,
     policy: Policy,
+    threads: PassThreads | None,
 ) -> ClaimFindingsRevision | ClaimRevision:
     """Put the message to the agent, in the shape this kind of report calls for.
 
@@ -225,6 +234,8 @@ async def _ask_the_agent(
                     finding for finding in content.evidence if finding.kind in SHARED_EVIDENCE
                 ),
             ),
+            threads=threads,
+            thread_id=content.thread_id,
         )
 
     if isinstance(content, ClarificationReportContent):
@@ -268,6 +279,7 @@ async def _look_into_what_they_settled(
     structured: StructuredModel,
     precedent_store: PrecedentStore,
     policy: Policy,
+    threads: PassThreads | None,
 ) -> Report:
     """Look into the products a representative just named, and nothing else (FR-1a.4).
 
@@ -308,6 +320,9 @@ async def _look_into_what_they_settled(
         precedent=precedent_for_claim(
             store=precedent_store, case=record.case, lines=lines, policy=policy
         ),
+        # No thread to continue: a claim nobody could split was never investigated. The
+        # pass starts one, so the rounds that follow it can.
+        threads=threads,
     )
 
     logger.info(
@@ -393,6 +408,7 @@ async def _investigate_the_claim_again(
     memory: MerchantMemory,
     precedent_store: PrecedentStore,
     policy: Policy,
+    threads: PassThreads | None,
 ) -> Report:
     """Investigate the claim again, because the representative asked for it.
 
@@ -443,6 +459,7 @@ async def _investigate_the_claim_again(
         events=EventStream(),
         policy=policy,
         precedent_store=precedent_store,
+        threads=threads,
     )
     built = build_investigation_report(screening, investigated, at=at)
 

@@ -1,9 +1,10 @@
+"""The triage pass: which products a claim is for, and what its shared evidence is (FR-1a)."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Final
 
-from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, ConfigDict
 
@@ -16,7 +17,13 @@ from claim_agent.agent.loop import run_agent_pass
 from claim_agent.agent.observations import ObservationCache
 from claim_agent.agent.prompts import build_triage_messages
 from claim_agent.agent.schemas import ClaimSplit
-from claim_agent.agent.tools import LIST_ATTACHMENTS, ImageInspection, investigation_tools
+from claim_agent.agent.tools import (
+    LIST_ATTACHMENTS,
+    TRIAGE_TOOL_NAMES,
+    AttachmentClassification,
+    ImageLog,
+    investigation_tools,
+)
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, MatchOutcome, build_claim_lines
 from claim_agent.domain.evidence import (
     SHARED_EVIDENCE,
@@ -33,7 +40,6 @@ from claim_agent.shipbob.evidence_client import EvidenceClient
 
 logger = get_logger(__name__)
 
-# What the pass is asked once it has stopped looking at things.
 TRIAGE_CLOSING_REQUEST: Final = (
     "Say which products this claim is for. Name each one as the order writes it, and say "
     "how many of it were damaged. If you cannot tell which product is meant, say that you "
@@ -43,20 +49,8 @@ TRIAGE_CLOSING_REQUEST: Final = (
 )
 
 
-class AttachmentClassification(BaseModel):
-    """What one image the investigation looked at turned out to be (FR-1.4)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    attachment_id: str
-    kind: EvidenceKind | None = None
-    state: EvidenceState
-    observed: str
-    problem: str | None = None
-
-
 class ClaimTriage(BaseModel):
-    """What the claim turned out to be about — the whole answer of Layer 1a."""
+    """What the claim turned out to be about: the whole answer of the triage pass."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -108,7 +102,8 @@ async def triage_claim(
         count=str(len(attachments)),
     )
 
-    watcher = _ImageWatcher(events)
+    # The inspect tool notes what each image turned out to be here, as it happens.
+    images = ImageLog(events)
     tools = investigation_tools(
         case_id=case.case_id,
         shipment_id=case.shipment_id,
@@ -123,12 +118,9 @@ async def triage_claim(
         ledger=ledger,
         events=events,
         policy=policy,
+        names=TRIAGE_TOOL_NAMES,
+        images=images,
     )
-    for tool in tools:
-        # Attached here rather than asked of the tools: what an image turned out to be
-        # is this pass's finding, and listening as the calls happen is what lets each
-        # image be announced while the pass is still working.
-        tool.callbacks = [watcher]
 
     outcome = await run_agent_pass(
         opening_messages=build_triage_messages(
@@ -144,9 +136,8 @@ async def triage_claim(
         events=events,
     )
 
-    # Settled from what the pass observed, even when it gave up before concluding.
-    # What it managed to establish is worth carrying forward either way (FR-1.16).
-    classifications = watcher.classifications()
+    # Settled from what the pass observed, even when it gave up before concluding (FR-1.16).
+    classifications = images.classifications()
     shared = _settle_shared_evidence(classifications)
     await _say_what_the_evidence_showed(events, shared)
 
@@ -176,77 +167,11 @@ async def triage_claim(
     )
 
 
-class _ImageWatcher(AsyncCallbackHandler):
-    """Notices what each image turned out to be, at the moment the pass looks at it."""
-
-    def __init__(self, events: EventStream) -> None:
-        """Start watching, announcing each image on the given stream as it is read."""
-        self._events = events
-        self._seen: list[AttachmentClassification] = []
-
-    async def on_tool_end(self, output: object, **_unused: object) -> None:
-        """Take the answer from one finished tool call, and say so if it was an image."""
-        classified = _classification_of(output)
-        if classified is None:
-            return
-
-        self._seen.append(classified)
-        await self._events.emit(
-            EventKind.IMAGE_CLASSIFIED,
-            _what_the_image_was(classified),
-            attachment_id=classified.attachment_id,
-            evidence_kind="none" if classified.kind is None else classified.kind.value,
-            state=classified.state.value,
-        )
-
-    def classifications(self) -> tuple[AttachmentClassification, ...]:
-        """What each image looked at turned out to be, one entry per image."""
-        best: dict[str, AttachmentClassification] = {}
-        for classified in self._seen:
-            settled = best.get(classified.attachment_id)
-            if settled is None or (settled.kind is None and classified.kind is not None):
-                best[classified.attachment_id] = classified
-        return tuple(best.values())
-
-
-def _classification_of(output: object) -> AttachmentClassification | None:
-    """Read one finished tool call, and say what it established about an image."""
-    artifact = getattr(output, "artifact", None)
-    if not isinstance(artifact, ImageInspection):
-        return None
-
-    if artifact.state is EvidenceState.UNREADABLE:
-        # Ours, not the merchant's. Nothing was seen, only the fact that we could
-        # not look (NFR-4).
-        return AttachmentClassification(
-            attachment_id=artifact.attachment_id,
-            state=EvidenceState.UNREADABLE,
-            observed="This image could not be read by this system.",
-            problem=artifact.summary,
-        )
-
-    observation = artifact.observation
-    if observation is None:
-        return None
-
-    return AttachmentClassification(
-        attachment_id=artifact.attachment_id,
-        kind=observation.kind,
-        # An image the model could read is present as an image, whatever it turned
-        # out to hold. Whether the claim has the evidence it needs is a separate
-        # question, settled below.
-        state=EvidenceState.UNUSABLE if not observation.is_legible else EvidenceState.PRESENT,
-        observed=observation.shows,
-        problem=observation.problem,
-    )
-
-
 def _settle_shared_evidence(
     classifications: Sequence[AttachmentClassification],
 ) -> tuple[EvidenceFinding, ...]:
     """Settle the three pieces of evidence that describe the parcel, once (FR-1a.3)."""
-    # Asked once for the whole set: an image we could not read might have been any of
-    # the three, so it bears on all of them.
+    # An image we could not read might have been any of the three, so it bears on all.
     something_unreadable = any(
         classified.state is EvidenceState.UNREADABLE for classified in classifications
     )
@@ -316,8 +241,6 @@ def _claim_lines_from(
 ) -> tuple[ClaimLine, ...]:
     """Turn the products the pass named into claim lines matched to the order (FR-1a.2)."""
     proposals = split.claimed_products
-    # Both lists are read off the same proposals, so they always have the same
-    # length, which is the one thing `build_claim_lines` refuses.
     return build_claim_lines(
         case_id,
         [
@@ -438,7 +361,7 @@ async def _say_how_the_claim_was_split(
 
 
 def _evidence_sentence(finding: EvidenceFinding) -> str:
-    """One plain sentence about one piece of shared evidence, ready to put on screen."""
+    """One plain sentence about one piece of shared evidence, for the screen."""
     named = _readable(finding.kind)
     if finding.state is EvidenceState.PRESENT:
         return f"The {named} is there, in image {finding.attachment_id}."
@@ -447,17 +370,6 @@ def _evidence_sentence(finding: EvidenceFinding) -> str:
     if finding.state is EvidenceState.UNREADABLE:
         return f"The {named} could not be settled, because an image could not be read."
     return f"The {named} is missing."
-
-
-def _what_the_image_was(classified: AttachmentClassification) -> str:
-    """One plain sentence about one image, ready to put on screen as it is read."""
-    if classified.state is EvidenceState.UNREADABLE:
-        return f"Image {classified.attachment_id}: could not be read by this system."
-    if classified.state is EvidenceState.UNUSABLE:
-        return f"Image {classified.attachment_id}: too poor to rely on — {classified.problem}"
-    if classified.kind is None:
-        return f"Image {classified.attachment_id}: none of the four kinds of evidence."
-    return f"Image {classified.attachment_id}: {_readable(classified.kind)}."
 
 
 def _readable(kind: EvidenceKind) -> str:
