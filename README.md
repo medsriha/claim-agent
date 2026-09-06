@@ -3,8 +3,6 @@
 Backend service that investigates ShipBob damaged-in-transit claims and returns a structured
 report plus a drafted merchant email. The agent recommends and a representative decides.
 
-How it is built, and how the agent thinks and decides, is in [ARCHITECTURE.md](ARCHITECTURE.md).
-
 ## Run it
 
 ```bash
