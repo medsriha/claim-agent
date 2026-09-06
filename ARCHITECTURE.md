@@ -222,7 +222,8 @@ Grouped by what a reviewer would ask about. Each item names the mechanism, not j
   a steady stream of clarification requests caused by nothing in the claim.
 - **One repair, then give up.** A systematic schema mismatch, for example a model build that
   emits an enum value the form does not know, would make every investigation fail the same
-  way. Nothing alerts; it appears as a rise in `BUDGET`-free clarification reports.
+  way. Nothing alerts; it would show up only as a rise in clarification reports whose
+  reason is a form that did not fit.
 - **Re-investigating a decided claim replaces it.** The report id is derived from the case id
   and the investigation always writes version 1, upserted on `(report_id, version)`. Running
   `/investigate` on a claim that was already approved overwrites the approved version 1 with a
