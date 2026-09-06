@@ -1,22 +1,3 @@
-/**
- * Turning values the service sends into words on screen.
- *
- * Presentation only. Nothing here decides anything about a claim, and nothing here
- * invents wording: names the service sends — `claim_too_old`, `key_information` — are
- * reshaped mechanically into readable text, never swapped for a phrase of our own.
- *
- * Nothing here does arithmetic on money either. The money function pads a figure for
- * display and never adds, multiplies or rounds.
- */
-
-/**
- * Turn a name the service sent into readable text: `days_since_delivery` becomes
- * "Days since delivery", `claim_too_old` becomes "Claim too old".
- *
- * Used for field names, check names and stop reasons alike. Doing it mechanically rather
- * than looking each one up in a table of our own wording means the screen can only ever
- * show what the service actually said, and a value we have never seen still reads.
- */
 export function humanise(name: string): string {
   const words = name.split("_").join(" ");
   return words.charAt(0).toUpperCase() + words.slice(1);
@@ -37,17 +18,6 @@ const MONTHS = [
   "December",
 ];
 
-/**
- * Write a time the same way on every machine — "11 February 2026, 11:36 UTC".
- *
- * The browser's own formatting changes with how the machine is configured, so the same
- * claim would read differently to two people. The service avoids that in the emails it
- * writes for the same reason.
- *
- * @param moment - A time as the service sends it, or `null`.
- * @returns The formatted time, "not recorded" when there is none, or the original text if
- *   it cannot be read as a time — showing what arrived beats inventing a date.
- */
 export function formatMoment(moment: string | null): string {
   if (moment === null) {
     return "not recorded";

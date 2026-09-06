@@ -1,10 +1,3 @@
-/**
- * What the claim is worth, how old it is, and what a rep corrected for this merchant before.
- *
- * The service works these out once, up front. The screen prints them and adds nothing —
- * in particular the order value arrives already worked out, and the order lines reported
- * alongside it are never added up here.
- */
 import { formatDayCount, formatMoment, formatMoney } from "../display";
 import type { ClaimContext } from "../api/types";
 

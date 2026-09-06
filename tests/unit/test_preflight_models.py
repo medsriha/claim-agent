@@ -24,14 +24,12 @@ from claim_agent.preflight.models import (
     TerminalReport,
 )
 
-# Times from the CASE-1001 example in REQUIREMENTS.md.
 DELIVERED = datetime(2026, 2, 11, 11, 36, 14, tzinfo=UTC)
 FILED_AT = datetime(2026, 2, 19, 14, 20, 16, tzinfo=UTC)
 DELIVERED_A_DAY_LATER = datetime(2026, 2, 12, 11, 36, 14, tzinfo=UTC)
 
 
 def make_gate(gate: GateName, *, passed: bool = True) -> GateResult:
-    """Build one check's outcome, so a test can concentrate on the verdict around it."""
     return GateResult(
         gate=gate,
         passed=passed,
@@ -45,7 +43,6 @@ ALL_FOUR_GATES = tuple(make_gate(gate) for gate in GateName)
 
 
 def make_context(**overrides: Any) -> ClaimContext:
-    """Build the starting facts for a claim, varying only what a test cares about."""
     fields: dict[str, Any] = {
         "order_value_usd": Decimal("90.00"),
         "is_high_value": False,
@@ -57,7 +54,6 @@ def make_context(**overrides: Any) -> ClaimContext:
 
 
 def make_record() -> CaseRecord:
-    """Build what was read about a claim, with an order that could not be read."""
     return CaseRecord(
         case=Case(case_id="CASE-1001", created_date=FILED_AT),
         shipment=Shipment(shipment_id="342578703", is_insured=False),
@@ -66,7 +62,6 @@ def make_record() -> CaseRecord:
 
 
 def make_report() -> TerminalReport:
-    """Build the explanation a rep receives when a claim is stopped (FR-0.4)."""
     return TerminalReport(
         case_id="CASE-1001",
         account_name="Best Paw Nutrition",
@@ -81,7 +76,6 @@ def make_report() -> TerminalReport:
 
 
 def make_result(**overrides: Any) -> PreflightResult:
-    """Build a pre-flight outcome that lets a claim through, so a test can break one rule."""
     fields: dict[str, Any] = {
         "case_id": "CASE-1001",
         "verdict": Verdict.PROCEED,
@@ -108,7 +102,6 @@ def test_the_two_delivery_dates_only_disagree_when_both_are_there(
     shipment_value: datetime | None,
     expected: bool,
 ) -> None:
-    """FR-0.2: the age of a claim depends on which record you believe, so a clash matters."""
     source: Literal["case", "shipment"] = "case" if case_value is not None else "shipment"
     delivery = DeliveryDate(
         value=case_value or shipment_value,
@@ -121,7 +114,6 @@ def test_the_two_delivery_dates_only_disagree_when_both_are_there(
 
 
 def test_no_delivery_date_anywhere_is_a_state_of_its_own() -> None:
-    """FR-0.2: with neither record carrying a date, nothing can be said about the claim's age."""
     delivery = DeliveryDate(value=None, source="none", case_value=None, shipment_value=None)
 
     assert delivery.value is None
@@ -129,7 +121,6 @@ def test_no_delivery_date_anywhere_is_a_state_of_its_own() -> None:
 
 
 def test_a_check_records_the_values_it_looked_at() -> None:
-    """NFR-3: a rep has to be able to verify a finding rather than take it on trust."""
     gate = make_gate(GateName.AGE)
 
     assert gate.observed["days_since_delivery"] == "8"
@@ -137,12 +128,10 @@ def test_a_check_records_the_values_it_looked_at() -> None:
 
 
 def test_the_order_value_a_rep_sees_keeps_its_cents() -> None:
-    """NFR-2: money reaches the rep as an exact figure, trailing zeros and all."""
     assert make_context().model_dump(mode="json")["order_value_usd"] == "90.00"
 
 
 def test_an_unreadable_order_leaves_the_value_unknown_rather_than_nought() -> None:
-    """FR-0.5: no value at all is a different thing from an order worth nothing."""
     context = make_context(order_value_usd=None, is_high_value=False)
 
     assert context.order_value_usd is None
@@ -150,7 +139,6 @@ def test_an_unreadable_order_leaves_the_value_unknown_rather_than_nought() -> No
 
 
 def test_a_claim_that_may_proceed_carries_all_four_checks_and_no_reasons() -> None:
-    """FR-0.3: nothing ruled this claim out, so the investigation runs."""
     result = make_result()
 
     assert result.verdict is Verdict.PROCEED
@@ -160,7 +148,6 @@ def test_a_claim_that_may_proceed_carries_all_four_checks_and_no_reasons() -> No
 
 
 def test_a_stopped_claim_carries_its_reasons_and_the_rep_s_report() -> None:
-    """FR-0.4: a claim that cannot be processed still produces something for a rep to approve."""
     result = make_result(
         verdict=Verdict.TERMINAL,
         terminal_reasons=(TerminalReason.CLAIM_TOO_OLD,),
@@ -172,32 +159,26 @@ def test_a_stopped_claim_carries_its_reasons_and_the_rep_s_report() -> None:
 
 
 def test_a_stopped_claim_with_no_reason_is_refused() -> None:
-    """FR-0.3: a case stopped for nothing anybody can name would quietly disappear."""
     with pytest.raises(ValidationError, match="at least one reason"):
         make_result(verdict=Verdict.TERMINAL, report=make_report())
 
 
 def test_a_stopped_claim_with_no_report_is_refused() -> None:
-    """FR-0.4: the rep has to receive the explanation, so a stopped claim without one is a bug."""
     with pytest.raises(ValidationError, match="report for the rep"):
         make_result(verdict=Verdict.TERMINAL, terminal_reasons=(TerminalReason.CLAIM_TOO_OLD,))
 
 
 def test_a_claim_allowed_through_while_still_carrying_reasons_to_stop_is_refused() -> None:
-    """NFR-4: letting a ruled-out claim run on is the failure that must never happen quietly."""
     with pytest.raises(ValidationError, match="must not carry terminal reasons"):
         make_result(terminal_reasons=(TerminalReason.SHIPMENT_INSURED,))
 
 
 def test_a_claim_allowed_through_while_carrying_a_stop_report_is_refused() -> None:
-    """FR-0.3: a claim cannot both proceed and come with the explanation for why it did not."""
     with pytest.raises(ValidationError, match="must not carry a terminal report"):
         make_result(report=make_report())
 
 
 def test_an_insured_claim_that_is_not_marked_for_rep_clarification_is_refused() -> None:
-    """FR-0.2: the flag and the reason have to agree, or a claim is routed by one and
-    explained by the other."""
     with pytest.raises(ValidationError, match="requires_rep_clarification"):
         TerminalReport(
             case_id="CASE-9001",
@@ -213,8 +194,6 @@ def test_an_insured_claim_that_is_not_marked_for_rep_clarification_is_refused() 
 
 
 def test_a_claim_with_nothing_to_tell_the_merchant_must_not_carry_an_email() -> None:
-    """FR-0.2: being insured is the one reason no email explains, so an email here would
-    have to be explaining something we deliberately keep out of them."""
     with pytest.raises(ValidationError, match="must not carry an email"):
         TerminalReport(
             case_id="CASE-9001",
@@ -230,7 +209,6 @@ def test_a_claim_with_nothing_to_tell_the_merchant_must_not_carry_an_email() -> 
 
 
 def test_a_reason_the_merchant_could_be_told_needs_an_email() -> None:
-    """FR-0.4: a claim closed for age is owed the explanation, so the email cannot be absent."""
     with pytest.raises(ValidationError, match="needs an email"):
         TerminalReport(
             case_id="CASE-1004",

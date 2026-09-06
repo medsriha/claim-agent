@@ -1,14 +1,9 @@
-/**
- * What the screen shows when a claim could not be screened at all.
- *
- * The sentence comes from the service wherever it sent one; only the heading is ours.
- */
 import type { FailureKind } from "../api/failure";
 
 interface FailureNoticeProps {
   kind: FailureKind;
   message: string;
-  /** Run the same screening again. */
+
   onRetry: () => void;
 }
 

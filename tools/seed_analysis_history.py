@@ -23,17 +23,8 @@ WEEKS = 53
 
 CENTS = Decimal("0.01")
 
-# How often a representative agreed, by how sure the system said it was and what the order was
-# worth. These are the invented truth the rest of the file works backwards from.
-#
-# Read the bottom row against the band it belongs to. A claim in the "very high" band is one the
-# system said it was more than 95% sure of, so anything under 95 there is the system flattering
-# itself — and the numbers are set so that taken together it does. Broken apart, the flattery is
-# entirely in the expensive claims: cheap ones really do come in above 95, expensive ones do not.
-# That is FR-C.7's open question with a shape somebody could argue from, and it is the reason the
-# screen never reports one blended figure without the breakdown beside it.
+
 _AGREEMENT: dict[str, tuple[float, float, float]] = {
-    #                     under $100  $100-$500  $500+
     "below_the_bar": (0.55, 0.52, 0.48),
     "fair": (0.74, 0.72, 0.68),
     "high": (0.89, 0.87, 0.82),
@@ -42,11 +33,7 @@ _AGREEMENT: dict[str, tuple[float, float, float]] = {
 
 _CONFIDENCE_BAND_EDGES = (("below_the_bar", 0.70), ("fair", 0.85), ("high", 0.95))
 
-# What the merchant reported, in ShipBob's own words, and how much weight to give each.
-#
-# The two vocabularies come from the case description, which states them in a fixed form:
-# "Damage Type: Damage due to carrier mishandling. Defect Type: Product damaged, but shipping box
-# is intact." Carriers come from the shipment. All of it is quoted rather than reworded.
+
 _DEFECTS = (
     ("Both product and shipping box damaged", 0.60),
     ("Product damaged, but shipping box is intact", 0.40),
@@ -61,20 +48,7 @@ _CARRIERS = (
     ("UniUni", 0.18),
 )
 
-# How much each of those moves how *clear* a claim is.
-#
-# This is the invented causal story the whole history rests on, and it is worth stating plainly
-# because every pattern the analysis screen shows comes out of it:
-#
-# **A shipping box that arrived intact is the strong signal, and it points the wrong way.** If
-# the outer packaging is undamaged and the product inside is not, the damage may well not have
-# happened in transit at all — so the evidence does not corroborate itself, the system is less
-# sure, and a representative has to look. A box damaged along with the product tells a
-# consistent story and is far easier to settle.
-#
-# Packaging failures are ShipBob's own doing and liability is clear; carrier mishandling is
-# somebody else's and may need taking up with them. And carriers differ, which is exactly the
-# kind of thing an operations team would want to see and could act on.
+
 _DEFECT_EFFECT = {
     "Both product and shipping box damaged": 0.16,
     "Product damaged, but shipping box is intact": -0.16,
@@ -98,9 +72,7 @@ _RECOMMENDATIONS = (
     (Recommendation.REQUEST_REP_CLARIFICATION, 0.23),
 )
 
-# Invented, like everything else here. Kept short and specific, because a correction that says
-# "the amount was wrong" carries nothing (FR-C.2) and one on a demonstration screen should still
-# read like something a person would actually type.
+
 _WORDS_WHEN_CHANGED = (
     "Customer confirmation came in by phone; logged separately.",
     "The two-pack was claimed, not the single bottle.",
@@ -137,16 +109,7 @@ def _value_column(order_value: Decimal) -> int:
 def _agreement_chance(
     confidence: float, order_value: Decimal, clarity: float, progress: float
 ) -> float:
-    """How likely a representative was to accept this piece of advice.
-
-    Mostly a matter of which confidence band the claim landed in, which is where the calibration
-    story lives. How clear the claim is nudges it a little further on top, so that two claims the
-    system was equally sure about still differ if one of them was the murkier case.
-
-    `progress` runs from nothing at the start of the history to one at the end, and shifts the
-    chance by a few points either side. That is the improvement over time the screen is meant to
-    show: the same claim gets a slightly better answer late in the year than early.
-    """
+    """How likely a representative was to accept this piece of advice."""
     base = _AGREEMENT[_band_for_confidence(confidence)][_value_column(order_value)]
     return min(0.995, base + 0.06 * (clarity - 0.62) + 0.03 * (progress - 0.5) * 2)
 
@@ -169,14 +132,7 @@ def _pick(rng: random.Random, choices: tuple[tuple[str, float], ...]) -> str:
 
 
 def _clarity(rng: random.Random, defect: str, damage: str, carrier: str, progress: float) -> float:
-    """How clear-cut a claim is, from nothing to one.
-
-    Everything else follows from this: a clear claim is one the system is sure about and a
-    representative accepts, and a murky one is not. Making the three things a merchant reports
-    drive one number, and that number drive the rest, is what stops the patterns on the analysis
-    screen being noise — each cut of the data differs because something about those claims really
-    is different, rather than because the dice fell that way.
-    """
+    """How clear-cut a claim is, from nothing to one."""
     centre = (
         0.60
         + 0.06 * progress
@@ -188,12 +144,7 @@ def _clarity(rng: random.Random, defect: str, damage: str, carrier: str, progres
 
 
 def _draw_confidence(rng: random.Random, clarity: float) -> float:
-    """How sure the system said it was.
-
-    Read off how clear the claim is, because that is what a system reading the evidence would be
-    responding to — and pitched a little above it, which is how the history comes to show the
-    system flattering itself at the top of its range.
-    """
+    """How sure the system said it was."""
     return min(0.99, max(0.30, rng.gauss(0.52 + 0.46 * clarity, 0.06)))
 
 
@@ -209,12 +160,7 @@ def _draw_recommendation(rng: random.Random) -> Recommendation:
 
 
 def _amount_for(outcome: Recommendation, order_value: Decimal) -> Decimal | None:
-    """What would be paid on this outcome, or nothing where no money is involved.
-
-    Sixty per cent of the item's price, capped at $100, which is the arithmetic the real system
-    does (FR-1.19, FR-1.20). Repeated here rather than imported because this file is inventing a
-    plausible history, not deciding a claim.
-    """
+    """What would be paid on this outcome, or nothing where no money is involved."""
     if outcome is not Recommendation.APPROVE:
         return None
     share = (order_value * Decimal("0.60")).quantize(CENTS, ROUND_HALF_UP)
@@ -230,12 +176,7 @@ def _a_different_outcome(rng: random.Random, outcome: Recommendation) -> Recomme
 def _screening_decision(
     rng: random.Random, case_id: str, decided_at: datetime, progress: float
 ) -> DecisionRecord:
-    """One claim the quick checks stopped, and what a representative did about it.
-
-    These are cheap and almost always accepted: the four checks are fixed rules with clear
-    answers, so there is little for anybody to disagree with. That is exactly why they are
-    counted apart from the investigated claims everywhere on the screen.
-    """
+    """One claim the quick checks stopped, and what a representative did about it."""
     agreed = rng.random() < 0.955 + 0.02 * progress
     sent_back = not agreed
     defect = _pick(rng, _DEFECTS)
@@ -277,8 +218,6 @@ def _claim_decision(
     claim = {"defect_type": defect, "damage_type": damage, "carrier": carrier}
 
     if rng.random() < _agreement_chance(confidence, order_value, clarity, progress):
-        # A murky claim gets reworded more often even when it is accepted: there is more to
-        # explain, and the draft has more chances to say it not quite right.
         edited = rng.random() < 0.40 - 0.26 * clarity - 0.10 * progress
         return DecisionRecord(
             decision_id=f"DEC-{case_id}-01",
@@ -298,8 +237,6 @@ def _claim_decision(
             decided_at=decided_at,
         )
 
-    # They did not accept it. Two thirds of the time they fix it themselves and approve;
-    # otherwise it goes back for the investigation to run again (FR-2.8, actions 1 and 2).
     if rng.random() < 0.66:
         changes_outcome = rng.random() < 0.55
         decided_outcome = _a_different_outcome(rng, recommended) if changes_outcome else recommended
@@ -324,7 +261,6 @@ def _claim_decision(
             decided_at=decided_at,
         )
 
-    # Sent back: nothing was decided, so what was recommended still stands on both sides.
     return DecisionRecord(
         decision_id=f"DEC-{case_id}-01",
         case_id=case_id,
@@ -345,17 +281,8 @@ def _claim_decision(
 
 
 def generate(now: datetime) -> list[DecisionRecord]:
-    """Invent a year of decisions ending at `now`.
-
-    Args:
-        now: The moment the history should run up to, in UTC.
-
-    Returns:
-        Every invented decision, oldest first. Roughly five thousand of them, which is enough for
-        each candidate rule on the screen to be scored on a meaningful number rather than on a
-        handful.
-    """
-    rng = random.Random(STARTING_NUMBER)  # noqa: S311 - inventing demo data, not securing anything
+    """Invent a year of decisions ending at `now`."""
+    rng = random.Random(STARTING_NUMBER)
     decisions: list[DecisionRecord] = []
     case_number = 90001
 
@@ -377,8 +304,6 @@ def generate(now: datetime) -> list[DecisionRecord]:
                 decisions.append(_screening_decision(rng, case_id, decided_at, progress))
                 continue
 
-            # One decision per claim, however many products were on it: a claim is
-            # investigated once and approved once (FR-C.1, FR-2.9b).
             decisions.append(_claim_decision(rng, case_id, decided_at, progress))
 
     decisions.sort(key=lambda decision: decision.decided_at)
@@ -386,16 +311,7 @@ def generate(now: datetime) -> list[DecisionRecord]:
 
 
 def seed(store: DecisionStore, now: datetime) -> str:
-    """Write the invented history, replacing anything this tool wrote before.
-
-    Safe to run twice: every decision carries an identifier of its own, and writing one again
-    replaces it rather than adding a second copy. Running it on a different day writes a
-    different set, because the history is anchored to today — so it clears first, or the screen
-    would show two overlapping years.
-
-    Returns:
-        A sentence saying what happened, for the person who ran it.
-    """
+    """Write the invented history, replacing anything this tool wrote before."""
     removed = store.clear()
     decisions = generate(now)
     for decision in decisions:
@@ -408,22 +324,13 @@ def seed(store: DecisionStore, now: datetime) -> str:
 
 
 def clear(store: DecisionStore) -> str:
-    """Remove every decision again.
-
-    This matters as much as the writing does: invented history on a screen is indistinguishable
-    from the real thing, so there has to be an obvious way to undo it (FR-C.8).
-    """
+    """Remove every decision again."""
     removed = store.clear()
     if not removed:
         return "There were no decisions to remove."
     return f"Removed {removed:,} invented decisions. The analysis screen is empty again."
 
 
-# The moment the written-out figures are anchored to.
-#
-# Fixed, unlike the seeded store, which ends on the day it was run. A file checked into the
-# repository must not change every time somebody regenerates it, or the difference between two
-# versions would be a year of dates rather than whatever actually changed.
 FIGURES_AS_AT = datetime(2026, 9, 4, 9, 0, tzinfo=UTC)
 
 FIGURES_PERIOD = "twelve_months"
@@ -431,17 +338,7 @@ FIGURES_PERIOD = "twelve_months"
 
 
 def write_figures(path: Path) -> str:
-    """Work the figures out once and save them, for the screen to carry.
-
-    One period only — the twelve months the screen shows. It offered a choice of three once; that
-    went, because three sets of figures nobody can switch between is bulk in the page for nothing.
-
-    Args:
-        path: Where to write. Usually `web/src/analysis/demoFigures.json`.
-
-    Returns:
-        A sentence saying what happened, for the person who ran it.
-    """
+    """Work the figures out once and save them, for the screen to carry."""
     decisions = generate(FIGURES_AS_AT)
     starts_at, ends_at = window_for(FIGURES_PERIOD, FIGURES_AS_AT)
     view = build(summarise(decisions, starts_at, ends_at), FIGURES_PERIOD, FIGURES_AS_AT)
@@ -468,11 +365,11 @@ def main() -> int:
     arguments = parser.parse_args()
 
     if arguments.figures is not None:
-        print(write_figures(arguments.figures))  # noqa: T201
+        print(write_figures(arguments.figures))
         return 0
 
     store = DecisionStore(get_settings().database_path)
-    print(clear(store) if arguments.clear else seed(store, datetime.now(UTC)))  # noqa: T201
+    print(clear(store) if arguments.clear else seed(store, datetime.now(UTC)))
     return 0
 
 

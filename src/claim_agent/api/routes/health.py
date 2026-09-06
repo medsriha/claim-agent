@@ -19,9 +19,5 @@ class Health(BaseModel):
 
 @router.get("/health", summary="Liveness check")
 async def health(settings: SettingsDep) -> Health:
-    """Answer that the service is running.
-
-    Deliberately checks nothing external. If this reached out to ShipBob, a slow
-    ShipBob would make a perfectly healthy service look dead and get it restarted.
-    """
+    """Answer that the service is running."""
     return Health(status="ok", version=__version__, environment=settings.environment)

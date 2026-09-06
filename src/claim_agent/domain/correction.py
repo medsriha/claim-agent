@@ -7,7 +7,7 @@ from claim_agent.domain.outcome import Recommendation
 
 CENTS = Decimal("0.01")
 
-# How each recommendation reads as advice the system gave.
+
 _ADVISED: dict[Recommendation, str] = {
     Recommendation.APPROVE: "paying the claim",
     Recommendation.APPROVE_HIGH_VALUE: "paying the claim, with a second look at its value",
@@ -15,7 +15,7 @@ _ADVISED: dict[Recommendation, str] = {
     Recommendation.REQUEST_REP_CLARIFICATION: "asking a representative to clarify it",
 }
 
-# The same recommendations as something a representative did instead.
+
 _DECIDED: dict[Recommendation, str] = {
     Recommendation.APPROVE: "approved it",
     Recommendation.APPROVE_HIGH_VALUE: "approved it as a high-value claim",
@@ -25,22 +25,7 @@ _DECIDED: dict[Recommendation, str] = {
 
 
 def correction_from(decision: DecisionRecord) -> str | None:
-    """Write what the system got wrong and what the right answer was, or `None` if it was right.
-
-    FR-C.2 asks for a correction only where the decision *differs* from the recommendation, and
-    for enough words that the next investigation can act on it. So the sentence always carries
-    the figures: "the amount was wrong" teaches nothing, and a note that cannot change the next
-    run is worse than no note, because it still takes up room in front of the evidence.
-
-    Args:
-        decision: What a representative decided, holding both what was advised and what they
-            settled on.
-
-    Returns:
-        The sentence, or `None` when they agreed with the advice. A representative who only
-        reworded the email agrees: FR-2.8 reads rewording as being about how an email reads
-        rather than what it says, and only substance is worth remembering.
-    """
+    """Write what the system got wrong and what the right answer was, or `None` if it was right."""
     if not decision.outcome_changed and not decision.amount_changed:
         return None
 
@@ -72,8 +57,6 @@ def _paying(amount: Decimal | None) -> str:
 
 
 def _words(wording: dict[Recommendation, str], outcome: Recommendation | None) -> str:
-    # An outcome is absent only on a claim the quick checks stopped, which has no products and
-    # so never reaches this branch — `outcome_changed` is false when either side is missing.
     if outcome is None:
         return "something else"
     return wording[outcome]

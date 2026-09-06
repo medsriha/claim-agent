@@ -1,18 +1,8 @@
-/**
- * Every colour, typeface and measurement the ShipBob look is made of.
- *
- * The brand blue and the navy are sampled straight from the ShipBob logo artwork, so
- * those two are exact. Everything else — the greys, the pass and stop colours, the
- * spacing — is ours, chosen to sit beside them. Nothing outside this file writes a
- * colour, so a wrong shade can never hide in a component.
- */
-
 :root {
-  /* Sampled from the logo: the mark's blue and the wordmark's navy. */
+
   --sb-brand: #175cff;
   --sb-ink: #09083a;
 
-  /* Ours, derived to sit with the two above. */
   --sb-brand-strong: #0f45c4;
   --sb-brand-tint: #eaf0ff;
   --sb-ink-soft: #4a4f6b;
@@ -23,9 +13,6 @@
   --sb-surface: #ffffff;
   --sb-line: #dcdfeb;
 
-  /* A check that passed, a check that stopped the claim, something to notice. Each has a
-     tint for the background behind it, and each carries words too — no state on this
-     page rests on colour alone. */
   --sb-pass: #0b7a4b;
   --sb-pass-tint: #e7f4ee;
   --sb-stop: #c62828;
@@ -33,42 +20,16 @@
   --sb-flag: #9a6400;
   --sb-flag-tint: #fdf4e3;
 
-  /* The chart colours, for the analysis screen.
-
-     Four hues in a fixed order, plus a hairline for the axis. They were checked rather than
-     picked by eye — against this page's own white, for lightness, for staying apart under colour
-     blindness, and for reading clearly against the background.
-
-     They started as four steps of one blue, because how far a representative went in changing a
-     recommendation is genuinely an *order* and one hue climbing is how a reader sees an order in
-     the colour. That was abandoned: four steps of one hue that all stay light enough to read on
-     white sit too close together to tell apart in a stacked chart, which is the whole job. Four
-     hues lose the ordering and win the legibility, and the legend carries the meaning instead.
-
-     Aqua and yellow sit below three-to-one against white. That is allowed here only because
-     every chart using them also has a legend and a table holding the same figures, so nothing
-     rests on seeing a pale fill.
-
-     The pass, stop and flag colours above are deliberately not usable here. Flag against stop is
-     very nearly indistinguishable to a reader with the commonest form of colour blindness, and
-     pass against flag is worse. That costs nothing where each sits beside a word, as on the
-     screening screen, and would cost a great deal in a chart.
-
-     The axis is a hairline a step darker than --sb-line, so an axis reads as an axis and a
-     gridline reads as a gridline. Gridlines use --sb-line itself. */
   --sb-chart-1: #2a78d6;
   --sb-chart-2: #eb6834;
   --sb-chart-3: #1baf7a;
   --sb-chart-4: #eda100;
   --sb-chart-axis: #b9bed2;
 
-  /* A system stack: nothing to download, so no flash of unstyled text. */
   --sb-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
   --sb-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* How long a message takes to fade in as the conversation plays out. The pause
-     *between* messages is a timer, so it lives in the code that runs it. */
   --sb-turn-in: 220ms;
 
   --sb-radius: 10px;

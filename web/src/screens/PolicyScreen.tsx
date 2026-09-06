@@ -1,16 +1,3 @@
-/**
- * The admin panel: the numbers every claim is judged by, and a way to change them.
- *
- * Almost every threshold in this system is a placeholder somebody invented so the code
- * would run — the service says so itself, in the explanation under each one. This screen
- * exists so a change can be tried and seen: edit the age limit, save, screen a claim, and
- * the claim is judged by the new number with nothing restarted in between.
- *
- * Three things it deliberately does not do. It does not judge a value — what is typed is
- * sent as typed, and the service decides. It does not read a number out of anything, so no
- * amount of money can pass through browser arithmetic. And it does not decide what changed:
- * it sends the whole form and draws whatever the service says is now in force.
- */
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiFailure } from "../api/failure";
@@ -28,13 +15,6 @@ export function PolicyScreen(): React.JSX.Element {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [saved, setSaved] = useState(false);
 
-  /**
-   * Send one request and draw its answer.
-   *
-   * Every one of the three requests answers with the whole policy, so they all end the
-   * same way: the panel throws away what it was holding and shows what came back. That is
-   * what stops the screen and the service disagreeing about what is in force.
-   */
   const send = useCallback((request: () => Promise<PolicyView>, savedOnSuccess: boolean): void => {
     request()
       .then((answer) => {
@@ -43,9 +23,7 @@ export function PolicyScreen(): React.JSX.Element {
         setSaved(savedOnSuccess);
       })
       .catch((error: unknown) => {
-        // The client promises to throw only its own failure type. Anything else would be a
-        // bug in this screen rather than a problem with the policy, and it still has to end
-        // in something readable rather than a blank page.
+
         setFailure(
           error instanceof ApiFailure
             ? error
@@ -57,7 +35,6 @@ export function PolicyScreen(): React.JSX.Element {
       });
   }, []);
 
-  /** Start a request from a button: say the panel is working, then send it. */
   const run = useCallback(
     (request: () => Promise<PolicyView>, savedOnSuccess: boolean): void => {
       setBusy(true);
@@ -81,9 +58,7 @@ export function PolicyScreen(): React.JSX.Element {
   }, [run]);
 
   useEffect(() => {
-    // The panel is built already working, so the first read has nothing to set up front.
-    // That matters: an effect that changes state as it runs makes the page draw twice
-    // before it has anything to show.
+
     send(fetchPolicy, false);
   }, [send]);
 
@@ -94,8 +69,6 @@ export function PolicyScreen(): React.JSX.Element {
     );
   };
 
-  // Nothing to save until something is different from what the service holds, and nothing
-  // to put back unless the service says the policy has moved off its startup values.
   const edited =
     inForce !== null && draft.some((value) => differs(value, servedValue(inForce, value.name)));
   const canPutBack = inForce !== null && !inForce.matches_startup;
@@ -172,7 +145,6 @@ export function PolicyScreen(): React.JSX.Element {
   );
 }
 
-/** What each count in the service's answer is called on screen, in the order it answers with. */
 const STORES: readonly (readonly [keyof ClearedStores, string])[] = [
   ["corrections", "Merchant corrections"],
   ["reports", "Reports, every version"],
@@ -180,16 +152,6 @@ const STORES: readonly (readonly [keyof ClearedStores, string])[] = [
   ["past_claims", "Past claims"],
 ];
 
-/**
- * Emptying everything the service remembers.
- *
- * Sits apart from the policy form because it is not a policy value: the form changes what
- * later claims are judged by, and this throws away what the system has already learned. It is
- * here because both are things an operator does to a service that is already running.
- *
- * It keeps its own state rather than sharing the form's. The two have nothing to do with each
- * other, and a failure to forget must not read as a failure to save.
- */
 function EverythingRemembered(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [cleared, setCleared] = useState<ClearedStores | null>(null);
@@ -252,7 +214,6 @@ function EverythingRemembered(): React.JSX.Element {
   );
 }
 
-/** The complaints the service made about one value, if it refused a change to it. */
 function problemsFor(failure: ApiFailure | null, name: string): readonly ValueProblem[] {
   if (failure === null) {
     return [];
@@ -260,7 +221,6 @@ function problemsFor(failure: ApiFailure | null, name: string): readonly ValuePr
   return failure.problems.filter((problem) => problem.name === name);
 }
 
-/** The whole form, ready to submit: a value per name, each exactly as it is held. */
 function submitted(draft: PolicyValue[]): SubmittedValues {
   const values: SubmittedValues = {};
   for (const value of draft) {
@@ -269,12 +229,10 @@ function submitted(draft: PolicyValue[]): SubmittedValues {
   return values;
 }
 
-/** The value the service sent under this name, if it sent one. */
 function servedValue(inForce: PolicyView, name: string): PolicyValue | undefined {
   return inForce.values.find((value) => value.name === name);
 }
 
-/** True when a value has been changed away from the one the service sent. */
 function differs(value: PolicyValue, served: PolicyValue | undefined): boolean {
   if (served === undefined) {
     return true;

@@ -43,33 +43,28 @@ from claim_agent.storage.precedent_store import PrecedentSet
 
 logger = get_logger(__name__)
 
-# Any answer built on the investigation's own form.
+
 AnyConclusion = TypeVar("AnyConclusion", bound=InvestigationConclusion)
-# What the run is asked once it has stopped looking at things.
+
 CLOSING_REQUEST = (
     "Now give your conclusion for this claim: what each of the four pieces of evidence "
     "showed, your answers to the four questions if the evidence was all there, every "
     "product that should be paid for, your next action, and — only when that action "
     "addresses the merchant — the email draft."
 )
-# Each recommendation as a representative would say it, for the message on a screen.
+
 _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
     Recommendation.APPROVE: "pay this claim",
     Recommendation.APPROVE_HIGH_VALUE: "pay this claim, and look again at what it cost",
     Recommendation.REQUEST_INFO: "go back to the merchant",
     Recommendation.REQUEST_REP_CLARIFICATION: "ask the representative for clarification",
 }
-# What is recorded for a piece of evidence nobody reported on.
+
 _NOTHING_ESTABLISHED = "Nothing was established about this piece of evidence."
 
 
 class ClaimFindings(BaseModel):
-    """Everything one claim's investigation established, ready to be reported on (FR-1b.1).
-
-    `lines` is every damaged product the claim covers, and there is one `outcome`, one
-    `amount` and one `drafted_email` across all of them (FR-1b.3). What each product
-    contributed to the figure is in `amount.components`.
-    """
+    """Everything one claim's investigation established, ready to be reported on (FR-1b.1)."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -110,15 +105,9 @@ async def investigate_claim_lines(
     precedent: PrecedentSet | None = None,
     thread: PassThread | None = None,
 ) -> ClaimFindings:
-    """Investigate one claim and produce everything a representative needs (FR-1b.1).
-
-    `thread` is where the pass keeps its conversation. A rework of this claim's report is
-    given the same thread and continues from here rather than being told about it (FR-R.2).
-    """
+    """Investigate one claim and produce everything a representative needs (FR-1b.1)."""
     case = record.case
-    # One budget and one record for the run, built here rather than taken as arguments, so a
-    # claim can never end up sharing an allowance with the triage pass that preceded it
-    # (FR-1.3).
+
     budget = RunBudget(policy)
     ledger = RunLedger()
 
@@ -234,10 +223,6 @@ def settle_conclusion(
         decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
         and not directed_by_representative
     ):
-        # This action is entirely internal. No merchant wording is generated or surfaced
-        # while the representative still has to resolve what is wrong or ambiguous. The
-        # one exception is a payment they directed that could not be paid: the draft is
-        # kept, with no figure, so they can finish it rather than start from nothing.
         drafted = None
     else:
         try:
@@ -250,8 +235,6 @@ def settle_conclusion(
             )
         except ModelOutputRejectedError as refused:
             if decision.recommendation is Recommendation.REQUEST_REP_CLARIFICATION:
-                # The claim was already going to a person; the draft was a courtesy, and
-                # its absence is worth a concern rather than a change of outcome.
                 return ClaimFindings(
                     lines=tuple(lines),
                     evidence=evidence,
@@ -265,8 +248,7 @@ def settle_conclusion(
                     conclusion=conclusion,
                     requested_details=(),
                 )
-            # Unsafe or incomplete merchant wording becomes a clarification request. The
-            # report keeps the investigation's conclusion and explains why no email was made.
+
             logger.warning(
                 "drafted_email_refused",
                 recommendation=decision.recommendation.value,

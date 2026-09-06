@@ -25,12 +25,7 @@ logger = get_logger(__name__)
 
 
 class ClaimInvestigation(BaseModel):
-    """Everything an investigation established about one claim (FR-1b.1).
-
-    `findings` is `None` only when nothing could be investigated, which happens when the
-    claim could not be split into products at all — guessing a split is what FR-1a.4
-    forbids, so there is nothing to have found.
-    """
+    """Everything an investigation established about one claim (FR-1b.1)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -53,12 +48,7 @@ async def investigate_claim(
     precedent_store: PrecedentStore | None = None,
     threads: PassThreads | None = None,
 ) -> ClaimInvestigation:
-    """Split a claim into products, then investigate all of them in one run (FR-1a.*, FR-1b.*).
-
-    `threads` is where the investigation's conversation is kept. A fresh thread is started
-    for every investigation, so investigating a claim again never appends to the last
-    time's evidence; a rework of the report this produces continues the thread (FR-R.2).
-    """
+    """Split a claim into products, then investigate all of them in one run (FR-1a.*, FR-1b.*)."""
     shared_cache = cache if cache is not None else ObservationCache()
 
     triage = await triage_claim(
@@ -76,17 +66,11 @@ async def investigate_claim(
     )
 
     if triage.is_ambiguous or not triage.claim_lines:
-        # Nothing may be investigated while it is unclear which products are being
-        # claimed for. Guessing a split is silent and expensive; asking the party who
-        # can settle it is neither (FR-1a.4).
         logger.info("claim_split_unsettled", case_id=triage.case_id, ambiguity=triage.ambiguity)
         return ClaimInvestigation(case_id=triage.case_id, triage=triage)
 
     invoice = await invoice_for_claim(record=record, evidence=evidence, cache=shared_cache)
 
-    # Looked up before the run starts: the store is a file on disk and reading it blocks. It
-    # also means the run begins with its precedent already in hand, which is what FR-S.6 asks
-    # for — precedent arrives with the claim, never fetched on a whim.
     precedent = _precedent_for_the_claim(
         store=precedent_store, record=record, triage=triage, policy=policy
     )

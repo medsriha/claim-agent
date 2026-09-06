@@ -22,9 +22,6 @@ from claim_agent.domain.reimbursement import AmountComponent, AmountDerivation
 from claim_agent.settings import get_settings
 from claim_agent.storage.precedent_store import PrecedentStore, all_records
 
-# The three accounts of damage the sample claims give, near enough word for word. A past
-# claim is found mostly on how the merchant described what happened, so a record phrased
-# in wording no sample claim uses would sit in the store and never be offered.
 CRUSHED_BOX = (
     "Customer received order and product arrived damaged. Both product and shipping box "
     "damaged. Damage due to poor/bad packaging. 1 order affected."
@@ -38,9 +35,7 @@ BOX_INTACT = (
     "box is intact. Damage due to poor/bad packaging. 1 order affected."
 )
 
-# The cap every recommended figure was held to. Named here rather than read from the claim
-# policy on purpose: these are records of what was decided at the time, and a record must
-# not change its mind because an operator later moved the limit.
+
 CAP_AT_THE_TIME = Decimal("100.00")
 
 _ALL_PRESENT = dict.fromkeys(REQUIRED_EVIDENCE, EvidenceState.PRESENT)
@@ -70,12 +65,7 @@ def _evidence(states: dict[EvidenceKind, EvidenceState]) -> tuple[EvidenceFindin
 
 
 def _assessments(passed: bool) -> tuple[Assessment, ...]:
-    """The four judgements, all of them going the same way.
-
-    Empty for a claim that never got this far: the judgements are made once every piece of
-    evidence is in hand, so a claim that went back to the merchant for a missing photograph
-    has none, and inventing four for it would describe an investigation that did not happen.
-    """
+    """The four judgements, all of them going the same way."""
     return tuple(
         Assessment(
             name=name,
@@ -127,29 +117,7 @@ def _closed(
     note: str,
     match: MatchOutcome = MatchOutcome.MATCHED,
 ) -> PrecedentRecord:
-    """Build one closed claim line the way the system would, had a person closed it.
-
-    Args:
-        case_id: The claim it belonged to. Invented, like everything else here.
-        user_id: The merchant. Never compared against — similarity is over what happened,
-            not over who it happened to — but kept so a record reads like a real one.
-        account: The pattern of damage, in the wording the sample claims use. This is what
-            a later claim is mostly matched on.
-        detail: One sentence of this merchant's own, added to the pattern. Real merchants do
-            not file claims phrased identically, and without it every record scores the same
-            against a claim and the ranking says nothing.
-        product: The damaged product's name.
-        sku: Its code.
-        unit_price: What one cost, as text so no figure passes through a float (FR-1.21).
-        quantity: How many of them were damaged.
-        evidence: What state each of the four pieces of evidence was in.
-        outcome: What the claim actually closed on.
-        proposed: What the investigation judged the damage to be worth, as text, or `None`
-            where the outcome paid nothing.
-        closed_on: When a representative closed it.
-        note: What that representative said about the decision.
-        match: How the damaged product related to the order behind it.
-    """
+    """Build one closed claim line the way the system would, had a person closed it."""
     price = Decimal(unit_price)
     line_id = f"{case_id}-L01"
     return capture_closed_line(
@@ -195,14 +163,9 @@ def _closed(
 
 
 def past_claims() -> tuple[PrecedentRecord, ...]:
-    """The twelve invented claims, closed between November and February.
-
-    Deliberately older than every sample claim, because a precedent is something that
-    happened before the claim in hand.
-    """
+    """The twelve invented claims, closed between November and February."""
     missing = dict(_ALL_PRESENT)
     return (
-        # A crushed box, the pattern CASE-1001 and CASE-1002 describe.
         _closed(
             case_id="CASE-0811",
             user_id="410882",
@@ -260,7 +223,6 @@ def past_claims() -> tuple[PrecedentRecord, ...]:
             closed_on=datetime(2025, 12, 9, 11, 48, tzinfo=UTC),
             note="Went back to the merchant for the invoice. Nothing further was sent.",
         ),
-        # Carrier mishandling, the pattern CASE-1003 and CASE-1005 describe.
         _closed(
             case_id="CASE-0834",
             user_id="392551",
@@ -345,7 +307,6 @@ def past_claims() -> tuple[PrecedentRecord, ...]:
             closed_on=datetime(2026, 2, 2, 12, 45, tzinfo=UTC),
             note="The photograph of the damage was too blurry to see anything. Asked again.",
         ),
-        # Expensive enough that the cap decided the figure rather than the damage did.
         _closed(
             case_id="CASE-0861",
             user_id="377654",
@@ -360,7 +321,6 @@ def past_claims() -> tuple[PrecedentRecord, ...]:
             closed_on=datetime(2026, 2, 6, 9, 25, tzinfo=UTC),
             note="Worth more than we may pay. Held to the cap and flagged for a second look.",
         ),
-        # Claimed for something the order never held.
         _closed(
             case_id="CASE-0864",
             user_id="392551",
@@ -380,22 +340,7 @@ def past_claims() -> tuple[PrecedentRecord, ...]:
 
 
 def seed(database_path: Path, *, only_if_empty: bool = False) -> str:
-    """Write the invented claims, and say what happened.
-
-    Safe to run twice: a record is keyed on its claim line, so writing the same one again
-    replaces it rather than leaving two copies.
-
-    Args:
-        database_path: The database file the service reads, from the settings.
-        only_if_empty: Write nothing if the store already holds anything at all. This is
-            what the container runs on start-up, so a restart leaves existing history alone
-            rather than piling a second copy on it. It asks whether the store is empty and
-            nothing more: a store somebody cleared is empty like any other, and is seeded
-            again.
-
-    Returns:
-        A sentence saying what happened, for whoever ran it.
-    """
+    """Write the invented claims, and say what happened."""
     already = all_records(database_path)
     if only_if_empty and already:
         return f"Left alone: the store already holds {len(already)} past claim(s)."
@@ -411,20 +356,7 @@ def seed(database_path: Path, *, only_if_empty: bool = False) -> str:
 
 
 def clear(database_path: Path) -> str:
-    """Remove every past claim from the store.
-
-    Reaches past the store's own methods, which deliberately have no way to delete a
-    record: the system never forgets a claim somebody closed, and giving it that ability
-    so a demonstration could tidy up after itself would be the wrong trade. The words a
-    claim is searched by are kept in a second table, and a record deleted without them
-    would leave every search offering claims that are no longer there.
-
-    Args:
-        database_path: The database file the service reads, from the settings.
-
-    Returns:
-        A sentence saying how many past claims were removed.
-    """
+    """Remove every past claim from the store."""
     if not database_path.exists():
         return f"Nothing to clear: {database_path} does not exist yet."
 
@@ -453,9 +385,9 @@ def main() -> int:
 
     database_path = get_settings().database_path
     if arguments.clear:
-        print(clear(database_path))  # noqa: T201
+        print(clear(database_path))
     else:
-        print(seed(database_path, only_if_empty=arguments.if_empty))  # noqa: T201
+        print(seed(database_path, only_if_empty=arguments.if_empty))
     return 0
 
 

@@ -13,7 +13,6 @@ from claim_agent.errors import StorageError
 from claim_agent.storage.database import initialise
 from claim_agent.storage.merchant_memory import MerchantMemory
 
-# CASE-1001's merchant, the one account number REQUIREMENTS.md ties to a case.
 BEST_PAW_NUTRITION = "334430"
 CLEANBOSS = "283959"
 
@@ -21,7 +20,6 @@ WRITTEN_AT = datetime(2026, 2, 19, 14, 20, 16, 123456, tzinfo=UTC)
 
 
 def a_correction(**overrides: Any) -> MerchantCorrection:
-    """Build one correction, so a test writes down only the part it is about."""
     fields: dict[str, Any] = {
         "user_id": BEST_PAW_NUTRITION,
         "case_id": "CASE-1001",
@@ -33,14 +31,12 @@ def a_correction(**overrides: Any) -> MerchantCorrection:
 
 
 def table_names(database: Path) -> set[str]:
-    """List the tables in a database file, by reading it directly rather than through us."""
     with closing(sqlite3.connect(database)) as connection:
         rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         return {str(row[0]) for row in rows}
 
 
 def test_a_correction_comes_back_exactly_as_it_was_written(tmp_path: Path) -> None:
-    """FR-3.8: what a rep corrected has to reach the merchant's next claim unchanged."""
     memory = MerchantMemory(tmp_path / "claims.db")
     written = a_correction()
 
@@ -50,7 +46,6 @@ def test_a_correction_comes_back_exactly_as_it_was_written(tmp_path: Path) -> No
 
 
 def test_the_moment_a_correction_was_made_survives_the_round_trip(tmp_path: Path) -> None:
-    """FR-3.8: the fraction of a second is kept, so two corrections never tie by accident."""
     memory = MerchantMemory(tmp_path / "claims.db")
 
     memory.record_correction(a_correction(recorded_at=WRITTEN_AT))
@@ -63,7 +58,6 @@ def test_the_moment_a_correction_was_made_survives_the_round_trip(tmp_path: Path
 def test_a_correction_written_on_another_clock_comes_back_as_the_same_instant(
     tmp_path: Path,
 ) -> None:
-    """FR-0.6: times are stored in UTC, so where one was written cannot change the order."""
     memory = MerchantMemory(tmp_path / "claims.db")
     berlin = timezone(timedelta(hours=1))
     written_in_berlin = WRITTEN_AT.astimezone(berlin)
@@ -76,7 +70,6 @@ def test_a_correction_written_on_another_clock_comes_back_as_the_same_instant(
 
 
 def test_corrections_come_back_oldest_first(tmp_path: Path) -> None:
-    """FR-0.5: a rep reads a merchant's history in the order it happened."""
     memory = MerchantMemory(tmp_path / "claims.db")
     newest = a_correction(case_id="CASE-1006", recorded_at=WRITTEN_AT + timedelta(days=30))
     oldest = a_correction(case_id="CASE-1001", recorded_at=WRITTEN_AT)
@@ -88,7 +81,6 @@ def test_corrections_come_back_oldest_first(tmp_path: Path) -> None:
 
 
 def test_reading_the_same_history_twice_gives_the_same_order(tmp_path: Path) -> None:
-    """FR-0.6: even corrections made at the very same moment come back the same way twice."""
     memory = MerchantMemory(tmp_path / "claims.db")
     first = a_correction(summary="Written first.")
     second = a_correction(summary="Written second.")
@@ -104,7 +96,6 @@ def test_reading_the_same_history_twice_gives_the_same_order(tmp_path: Path) -> 
 
 
 def test_one_merchants_corrections_never_reach_another(tmp_path: Path) -> None:
-    """FR-3.8: history is keyed on the account number, so merchants stay separate."""
     memory = MerchantMemory(tmp_path / "claims.db")
     theirs = a_correction(user_id=CLEANBOSS, case_id="CASE-1002")
     ours = a_correction()
@@ -116,7 +107,6 @@ def test_one_merchants_corrections_never_reach_another(tmp_path: Path) -> None:
 
 
 def test_a_merchant_we_have_never_seen_has_no_corrections(tmp_path: Path) -> None:
-    """FR-0.5: a merchant with no history is the ordinary case, not a failure."""
     memory = MerchantMemory(tmp_path / "claims.db")
     memory.record_correction(a_correction())
 
@@ -124,14 +114,12 @@ def test_a_merchant_we_have_never_seen_has_no_corrections(tmp_path: Path) -> Non
 
 
 def test_a_case_with_no_merchant_on_it_has_no_corrections(tmp_path: Path) -> None:
-    """FR-0.5: a case naming no merchant carries on without history rather than failing."""
     memory = MerchantMemory(tmp_path / "claims.db")
 
     assert memory.corrections_for(None) == ()
 
 
 def test_the_database_and_its_table_are_made_on_first_use(tmp_path: Path) -> None:
-    """FR-0.5: nothing has to be set up by hand before the first claim is screened."""
     database = tmp_path / "somewhere" / "new" / "claims.db"
     memory = MerchantMemory(database)
     assert not database.exists()
@@ -143,7 +131,6 @@ def test_the_database_and_its_table_are_made_on_first_use(tmp_path: Path) -> Non
 
 
 def test_preparing_the_database_twice_changes_nothing(tmp_path: Path) -> None:
-    """FR-0.5: setting up runs before every piece of work, so it has to be repeatable."""
     database = tmp_path / "claims.db"
     initialise(database)
     initialise(database)
@@ -156,7 +143,6 @@ def test_preparing_the_database_twice_changes_nothing(tmp_path: Path) -> None:
 
 
 def test_a_file_that_is_not_a_database_is_reported_as_a_handled_failure(tmp_path: Path) -> None:
-    """NFR-4, NFR-6: a broken store must never read as a merchant with a clean record."""
     database = tmp_path / "claims.db"
     database.write_bytes(b"this file is not a database")
     memory = MerchantMemory(database)
@@ -166,11 +152,9 @@ def test_a_file_that_is_not_a_database_is_reported_as_a_handled_failure(tmp_path
     with pytest.raises(StorageError) as writing:
         memory.record_correction(a_correction())
 
-    # The caller is told the store failed, not which library or file was involved.
     assert "sqlite" not in str(reading.value).lower()
     assert "sqlite" not in str(writing.value).lower()
-    # Our own store failing must not be reported as ShipBob being unavailable, or the
-    # first hour of working out what went wrong is spent looking at the wrong system.
+
     assert reading.value.code == "storage_unavailable"
     assert reading.value.status_code == 503
 
@@ -178,7 +162,6 @@ def test_a_file_that_is_not_a_database_is_reported_as_a_handled_failure(tmp_path
 def test_a_database_path_that_cannot_be_used_is_reported_as_a_handled_failure(
     tmp_path: Path,
 ) -> None:
-    """NFR-6: a misconfigured path is a handled state with a clear message, not a crash."""
     blocking_file = tmp_path / "not-a-folder"
     blocking_file.write_text("something else lives here")
     memory = MerchantMemory(blocking_file / "claims.db")
@@ -187,11 +170,7 @@ def test_a_database_path_that_cannot_be_used_is_reported_as_a_handled_failure(
         memory.corrections_for(BEST_PAW_NUTRITION)
 
 
-# --- Starting a demonstration from nothing (development only) ----------------
-
-
 def test_forgetting_everything_empties_the_store_for_every_merchant(tmp_path: Path) -> None:
-    """A demonstration sometimes has to start from a system that remembers nothing."""
     memory = MerchantMemory(tmp_path / "claims.db")
     memory.record_correction(a_correction(user_id="334430", case_id="CASE-1001"))
     memory.record_correction(a_correction(user_id="283959", case_id="CASE-1002"))
@@ -204,5 +183,4 @@ def test_forgetting_everything_empties_the_store_for_every_merchant(tmp_path: Pa
 
 
 def test_forgetting_an_empty_store_removes_nothing_and_says_so(tmp_path: Path) -> None:
-    """Zero is an ordinary answer: there was nothing there, which is not a failure."""
     assert MerchantMemory(tmp_path / "claims.db").forget_everything() == 0

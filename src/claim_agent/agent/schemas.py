@@ -189,13 +189,7 @@ class InvestigationConclusion(BaseModel):
     def _the_high_value_label_is_not_the_models_to_claim(
         cls, chosen: Recommendation
     ) -> Recommendation:
-        """Read a model-chosen high-value approval as the plain approval it is (FR-C.7).
-
-        Whether the damaged goods were expensive is arithmetic, and code does it after the
-        rules have run. A model that asks for the label is asking to approve, so that is
-        what it gets — read this way rather than refused, since the answer is otherwise
-        perfectly good and the rules that hold an approval back must still run over it.
-        """
+        """Read a model-chosen high-value approval as the plain approval it is (FR-C.7)."""
         if chosen is Recommendation.APPROVE_HIGH_VALUE:
             return Recommendation.APPROVE
         return chosen
@@ -261,8 +255,26 @@ class InvestigationConclusion(BaseModel):
     )
 
 
+def _as_a_list_of_sentences(written: object) -> object:
+    """Read a list the model wrote as a single string, or left null, as the list it meant."""
+    if written is None:
+        return ()
+    if isinstance(written, str):
+        return (written.strip(),) if written.strip() else ()
+    if isinstance(written, list | tuple):
+        return tuple(
+            str(item).strip() for item in written if item is not None and str(item).strip()
+        )
+    return written
+
+
 class _RepliesToTheRepresentative(BaseModel):
     """The four things every reworked answer says back, whatever kind of report it was."""
+
+    @field_validator("changed", "left_unchanged", mode="before")
+    @classmethod
+    def _lists_may_arrive_as_prose(cls, written: object) -> object:
+        return _as_a_list_of_sentences(written)
 
     changed: tuple[str, ...] = Field(
         default=(),
@@ -329,6 +341,11 @@ class RevisedClaimReport(_RepliesToTheRepresentative):
     """A reworked report about a whole claim rather than one product (FR-R.9, FR-R.10)."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("requested_details", mode="before")
+    @classmethod
+    def _details_may_arrive_as_prose(cls, written: object) -> object:
+        return _as_a_list_of_sentences(written)
 
     ambiguity: str | None = Field(
         default=None,

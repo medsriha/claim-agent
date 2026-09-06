@@ -1,11 +1,3 @@
-/**
- * The ShipBob logo: the isometric box mark, and the wordmark beside it.
- *
- * The mark's outline was traced from the logo artwork rather than drawn by eye, so its
- * proportions are the real ones. The wordmark is set in the page's own typeface, which is
- * not the typeface ShipBob uses — swap both for the official asset before this goes in
- * front of anyone outside the team.
- */
 export function ShipBobLogo(): React.JSX.Element {
   return (
     <span className="logo">

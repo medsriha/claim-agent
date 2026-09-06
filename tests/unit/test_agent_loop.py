@@ -23,21 +23,15 @@ from claim_agent.policy import Policy
 CLOSING_REQUEST = "Say which products this claim is for."
 
 
-# --- Building the pieces a pass needs ---------------------------------------
-
-
 def budget_of(*, steps: int = 6) -> RunBudget:
-    """A fresh budget with small limits, so a test can use one up quickly."""
     return RunBudget(Policy(max_agent_steps=steps))
 
 
 def a_split(reasoning: str = "The claim is for one bottle.") -> ClaimSplit:
-    """A filled-in triage form, standing in for whatever the model would really say."""
     return ClaimSplit(reasoning=reasoning)
 
 
 def a_conclusion() -> InvestigationConclusion:
-    """A filled-in investigation form, for the pass that ends on the other shape."""
     return InvestigationConclusion(
         evidence=(),
         recommendation=Recommendation.REQUEST_REP_CLARIFICATION,
@@ -48,7 +42,6 @@ def a_conclusion() -> InvestigationConclusion:
 
 
 def asks_for(name: str, call_id: str = "call-1", **args: Any) -> AIMessage:
-    """A model reply that asks for one tool, the way a real one arrives."""
     return AIMessage(
         content="",
         tool_calls=[{"name": name, "args": args, "id": call_id, "type": "tool_call"}],
@@ -57,22 +50,17 @@ def asks_for(name: str, call_id: str = "call-1", **args: Any) -> AIMessage:
 
 @tool
 async def list_attachments(case_id: str) -> str:
-    """List the images attached to a case."""
+    """List attachments."""
     return f"two images on {case_id}"
 
 
 @tool
 async def inspect_image(attachment_id: str) -> str:
-    """Say what one image shows."""
+    """Inspect an image."""
     return f"{attachment_id} shows a cracked bottle"
 
 
 def a_tool_that_fails(times: int) -> BaseTool:
-    """A tool that raises on its first `times` uses and then answers.
-
-    Tools are contracted never to raise. This one does, so the loop's answer to a broken
-    contract can be checked.
-    """
     used = {"count": 0}
 
     @tool
@@ -94,12 +82,6 @@ async def run_triage(
     ledger: RunLedger | None = None,
     events: EventStream | None = None,
 ) -> LoopOutcome[ClaimSplit]:
-    """Run one pass that ends on the triage form, with everything else defaulted.
-
-    The structured asker is given a single attempt so that one queued reply answers
-    exactly one question. Its own retrying is tested where it lives; here it would only
-    make the scripts harder to read.
-    """
     return await run_agent_pass(
         opening_messages=[SystemMessage(content="The rules."), HumanMessage(content="Which?")],
         tools=tools,
@@ -114,18 +96,12 @@ async def run_triage(
 
 
 def two_tools_that_notice_each_other() -> tuple[BaseTool, BaseTool, dict[str, bool]]:
-    """Two tools where each can only finish once the other has started.
-
-    Run one after the other, the first would wait for ever for a second that never
-    began. Run together, both finish. That is the whole test of concurrency, with no
-    timing in it.
-    """
     started = {"left": asyncio.Event(), "right": asyncio.Event()}
     seen = {"overlapped": False}
 
     @tool
     async def read_left(case_id: str) -> str:
-        """Read the left-hand record."""
+        """Read the left side."""
         started["left"].set()
         await asyncio.wait_for(started["right"].wait(), timeout=1.0)
         seen["overlapped"] = True
@@ -133,7 +109,7 @@ def two_tools_that_notice_each_other() -> tuple[BaseTool, BaseTool, dict[str, bo
 
     @tool
     async def read_right(case_id: str) -> str:
-        """Read the right-hand record."""
+        """Read the right side."""
         started["right"].set()
         await asyncio.wait_for(started["left"].wait(), timeout=1.0)
         return f"right of {case_id}"
@@ -142,7 +118,6 @@ def two_tools_that_notice_each_other() -> tuple[BaseTool, BaseTool, dict[str, bo
 
 
 def asks_for_several(*names: str) -> AIMessage:
-    """A model reply that asks for several tools in one turn, each under its own id."""
     return AIMessage(
         content="",
         tool_calls=[
@@ -153,24 +128,14 @@ def asks_for_several(*names: str) -> AIMessage:
 
 
 def tool_names_in(outcome: LoopOutcome[Any]) -> list[str]:
-    """The tools a pass used, in the order it used them."""
     return [entry.name for entry in outcome.ledger if entry.kind is StepKind.TOOL_CALL]
 
 
 def events_of(stream: EventStream, kind: EventKind) -> list[RunEvent]:
-    """Everything of one kind the run said about itself, in order."""
     return [event for event in stream.events() if event.kind is kind]
 
 
-# --- The model decides what to look at, and how much to look at (FR-1.1) ----
-
-
 async def test_a_pass_with_nothing_to_look_at_concludes_on_its_first_turn() -> None:
-    """FR-1.1: a claim with nothing to investigate costs one turn, not a fixed sequence.
-
-    This is the cheap case the requirement is really about. The tools are there and the
-    model is free to use them; it decides it does not need to, and the pass is over.
-    """
     model = scripted(AIMessage(content="Nothing here needs looking at."), a_split())
     budget = budget_of(steps=6)
 
@@ -184,19 +149,17 @@ async def test_a_pass_with_nothing_to_look_at_concludes_on_its_first_turn() -> N
 
 
 async def test_the_tools_are_put_in_front_of_the_model_for_it_to_choose_among() -> None:
-    """FR-1.1: nothing sequences the tools — every one of them is offered every turn."""
     model = scripted(asks_for("inspect_image", attachment_id="ATT-01"), "done", a_split())
 
     await run_triage(model, tools=[list_attachments, inspect_image])
 
     assert model.bound_tools == ["list_attachments", "inspect_image"]
     assert model.asked[0].tool_names == ("list_attachments", "inspect_image")
-    # The one it chose is the only one that ran. Nothing made it call the other first.
+
     assert model.asked[1].text.endswith("ATT-01 shows a cracked bottle")
 
 
 async def test_a_pass_uses_two_tools_and_then_concludes() -> None:
-    """FR-1.1: a claim with things to look at takes as many turns as it asks for."""
     model = scripted(
         asks_for("list_attachments", call_id="call-1", case_id="CASE-1003"),
         asks_for("inspect_image", call_id="call-2", attachment_id="ATT-01"),
@@ -209,13 +172,11 @@ async def test_a_pass_uses_two_tools_and_then_concludes() -> None:
 
     assert tool_names_in(outcome) == ["list_attachments", "inspect_image"]
     assert outcome.answer == a_split()
-    # Three turns of the loop: two that asked for a tool, one that stopped asking. The
-    # conclusion itself costs no extra step.
+
     assert outcome.budget.steps_used == 3
 
 
 async def test_what_a_tool_answered_is_put_back_in_front_of_the_model() -> None:
-    """FR-1.1: the model reasons on what it found, which is what makes this a loop."""
     model = scripted(
         asks_for("inspect_image", attachment_id="ATT-01"),
         AIMessage(content="A cracked bottle is enough."),
@@ -229,7 +190,6 @@ async def test_what_a_tool_answered_is_put_back_in_front_of_the_model() -> None:
 
 
 async def test_the_pass_asks_for_its_conclusion_in_the_callers_own_words() -> None:
-    """NFR-2: the conclusion is a separate question, asked for as a named form."""
     model = scripted("done", a_split())
 
     await run_triage(model)
@@ -238,15 +198,7 @@ async def test_the_pass_asks_for_its_conclusion_in_the_callers_own_words() -> No
     assert CLOSING_REQUEST in model.asked[-1].text
 
 
-# --- It always terminates (FR-1.3, FR-1.16) ---------------------------------
-
-
 async def test_a_model_that_asks_for_tools_for_ever_stops_at_the_step_budget() -> None:
-    """FR-1.3: the allowance is in the loop, not the prompt, so nothing can talk past it.
-
-    The script here is far longer than the budget. What stops the run is the budget, and
-    the leftover replies are the proof of it.
-    """
     endless = [asks_for("list_attachments", case_id="CASE-1003") for _ in range(20)]
     model = scripted(*endless)
     budget = budget_of(steps=3)
@@ -261,7 +213,6 @@ async def test_a_model_that_asks_for_tools_for_ever_stops_at_the_step_budget() -
 
 
 async def test_a_pass_that_runs_out_of_steps_hands_back_what_it_established() -> None:
-    """FR-1.16: exhaustion requests clarification with findings, never an empty result."""
     model = scripted(
         asks_for("inspect_image", attachment_id="ATT-01"),
         *[asks_for("list_attachments", case_id="CASE-1003") for _ in range(5)],
@@ -273,16 +224,12 @@ async def test_a_pass_that_runs_out_of_steps_hands_back_what_it_established() ->
     assert outcome.answer is None
     assert outcome.reason is not None
     assert "steps" in outcome.reason
-    # The work is still here. Only the conclusion is missing.
+
     assert tool_names_in(outcome) == ["inspect_image", "list_attachments"]
     assert outcome.ledger[0].observed == "ATT-01 shows a cracked bottle"
 
 
-# --- Every failure ends in front of a person (NFR-4) ------------------------
-
-
 async def test_a_conclusion_that_does_not_fit_the_form_is_asked_for_once_more() -> None:
-    """NFR-2, NFR-4: a formatting slip costs one repair turn, not the whole investigation."""
     model = scripted("done", {"nothing": "that fits the form"}, a_split("Fixed on the second try."))
     budget = budget_of(steps=6)
 
@@ -293,12 +240,12 @@ async def test_a_conclusion_that_does_not_fit_the_form_is_asked_for_once_more() 
     assert outcome.answer.reasoning == "Fixed on the second try."
     asked_for_the_form = [ask for ask in model.asked if ask.schema_name == "ClaimSplit"]
     assert len(asked_for_the_form) == 2
-    # The second question is a changed one: it names what was wrong the first time.
+
     repair = asked_for_the_form[1].text
     assert "did not fit the form" in repair
     assert "not in the shape of ClaimSplit" in repair
     assert CLOSING_REQUEST in repair
-    # One failed record, then one that succeeded, and the repair cost a step.
+
     assert [entry.succeeded for entry in outcome.ledger] == [False, True]
     assert outcome.budget.steps_used == 2
 
@@ -306,7 +253,6 @@ async def test_a_conclusion_that_does_not_fit_the_form_is_asked_for_once_more() 
 async def test_a_corrected_answer_that_still_does_not_fit_ends_the_pass_rather_than_raising() -> (
     None
 ):
-    """NFR-2: one repair is a changed question; a third identical ask would not be."""
     model = scripted("done", {"nothing": "that fits"}, {"still": "nothing that fits"})
 
     outcome = await run_triage(model)
@@ -324,7 +270,6 @@ async def test_a_corrected_answer_that_still_does_not_fit_ends_the_pass_rather_t
 
 
 async def test_a_repair_is_not_asked_for_when_no_step_is_left_to_pay_for_it() -> None:
-    """FR-1.3: the repair turn is a step like any other, and cannot exceed the allowance."""
     model = scripted("done", {"nothing": "that fits the form"}, a_split("never reached"))
 
     outcome = await run_triage(model, budget=budget_of(steps=1))
@@ -337,7 +282,6 @@ async def test_a_repair_is_not_asked_for_when_no_step_is_left_to_pay_for_it() ->
 
 
 async def test_a_provider_that_fails_at_the_conclusion_ends_the_pass_rather_than_raising() -> None:
-    """NFR-4: a model that cannot be reached returns a rep action, not a crash."""
     model = scripted("done", ModelConnectionError("the socket closed"))
 
     outcome = await run_triage(model)
@@ -347,7 +291,6 @@ async def test_a_provider_that_fails_at_the_conclusion_ends_the_pass_rather_than
 
 
 async def test_a_model_that_fails_mid_pass_ends_the_pass_rather_than_raising() -> None:
-    """NFR-4: a failure on an ordinary turn is a result to read, not an exception."""
     model = scripted(ModelConnectionError("the socket closed"))
     budget = budget_of(steps=4)
 
@@ -355,8 +298,7 @@ async def test_a_model_that_fails_mid_pass_ends_the_pass_rather_than_raising() -
 
     assert outcome.gave_up is True
     assert outcome.reason == "The model provider could not be reached."
-    # Written down as well as returned, so "why is clarification needed?" is answerable
-    # from the record alone (NFR-3).
+
     assert [entry.observed for entry in outcome.ledger] == [
         "The model provider could not be reached."
     ]
@@ -364,7 +306,6 @@ async def test_a_model_that_fails_mid_pass_ends_the_pass_rather_than_raising() -
 
 
 async def test_a_refused_request_says_so_rather_than_blaming_the_connection() -> None:
-    """NFR-4: the two kinds of model failure send a reader looking in different places."""
     model = scripted(ModelAuthenticationError("the key is wrong"))
 
     outcome = await run_triage(model)
@@ -373,11 +314,6 @@ async def test_a_refused_request_says_so_rather_than_blaming_the_connection() ->
 
 
 async def test_a_model_that_does_not_answer_in_time_ends_the_pass() -> None:
-    """NFR-4: a timeout is named in the requirement, and it reaches a person like the rest.
-
-    An ordinary timeout can arrive without the model library having labelled it as one of
-    its own conditions, so it is handled in its own right.
-    """
     model = scripted(TimeoutError("no answer"))
 
     outcome = await run_triage(model)
@@ -386,15 +322,7 @@ async def test_a_model_that_does_not_answer_in_time_ends_the_pass() -> None:
     assert outcome.reason == "The model provider did not answer in time."
 
 
-# --- A tool that breaks its contract (FR-1.3, NFR-4) ------------------------
-
-
 async def test_a_tool_that_breaks_is_reported_to_the_model_in_words_and_not_retried() -> None:
-    """NFR-4: a broken tool is reported through the run, not raised, and not tried again.
-
-    Every expected failure is caught inside the tool and answered in words, so an exception
-    reaching the loop is a bug, and a bug does not mend itself on a second try.
-    """
     breaks_once = a_tool_that_fails(times=1)
     model = scripted(
         asks_for("read_case", case_id="CASE-1003"),
@@ -406,20 +334,14 @@ async def test_a_tool_that_breaks_is_reported_to_the_model_in_words_and_not_retr
     outcome = await run_triage(model, tools=[breaks_once], budget=budget)
 
     assert outcome.ledger[0].succeeded is False
-    # The model is told in plain words, and gets to decide what to do about it.
+
     assert "read case tool could not answer" in model.asked[1].text
-    # The exception's own wording never reaches the model.
+
     assert "the read failed" not in model.asked[1].text
     assert outcome.answer == a_split()
 
 
 async def test_a_tool_asked_for_with_the_wrong_arguments_is_reported_rather_than_fatal() -> None:
-    """NFR-4: the model gets its own mistake back as words, and the pass carries on.
-
-    The tool refuses the call itself, before any of its own work starts. It is reported
-    the same way as a tool that broke, which is a coarse answer — the model is told the
-    call did not work rather than which argument was wrong.
-    """
     model = scripted(
         asks_for("inspect_image"),
         AIMessage(content="I will try that differently."),
@@ -436,11 +358,6 @@ async def test_a_tool_asked_for_with_the_wrong_arguments_is_reported_rather_than
 
 
 async def test_asking_for_a_tool_that_does_not_exist_is_answered_rather_than_fatal() -> None:
-    """NFR-4: a tool the agent does not have is a fact to report, not a crash.
-
-    It is deliberately not retried — the name will be missing the second time too — and
-    the model is told what it does have so it can correct itself.
-    """
     model = scripted(
         asks_for("send_email", to="merchant@example.test"),
         AIMessage(content="Understood."),
@@ -456,11 +373,7 @@ async def test_asking_for_a_tool_that_does_not_exist_is_answered_rather_than_fat
     assert outcome.answer == a_split()
 
 
-# --- The record and the narration (NFR-3, NFR-5) ----------------------------
-
-
 async def test_every_step_is_written_down_in_the_order_it_happened() -> None:
-    """NFR-3, NFR-5: the record answers what the run did, and in what order."""
     model = scripted(
         asks_for("list_attachments", call_id="call-1", case_id="CASE-1003"),
         asks_for("inspect_image", call_id="call-2", attachment_id="ATT-01"),
@@ -488,7 +401,6 @@ async def test_every_step_is_written_down_in_the_order_it_happened() -> None:
 
 
 async def test_the_run_says_what_it_is_doing_while_it_works() -> None:
-    """FR-1.1: choosing what to look at next is the thing worth showing a representative."""
     model = scripted(
         AIMessage(
             content="The first image is too dark, so I will look at the second.",
@@ -516,7 +428,6 @@ async def test_the_run_says_what_it_is_doing_while_it_works() -> None:
 
 
 async def test_a_tool_that_could_not_answer_is_narrated_as_such() -> None:
-    """NFR-4: a screen shows the failure rather than a step that appears to have worked."""
     model = scripted(asks_for("read_case", case_id="CASE-1003"), "done", a_split())
     stream = EventStream()
 
@@ -533,12 +444,6 @@ async def test_a_tool_that_could_not_answer_is_narrated_as_such() -> None:
 
 
 async def test_a_long_remark_reaches_the_screen_whole() -> None:
-    """A remark is passed on as written, however long, and with its line breaks kept.
-
-    The end of a remark is the part saying what the run decided to do next, so cutting
-    one loses exactly what somebody watching wanted to read. The line breaks matter for
-    the same reason: a remark written as a list is meant to be read as a list.
-    """
     remark = "Here is what I am weighing up:\n\n" + "- Another consideration.\n" * 100
     model = scripted(AIMessage(content=remark), a_split())
     stream = EventStream()
@@ -549,15 +454,7 @@ async def test_a_long_remark_reaches_the_screen_whole() -> None:
     assert said == remark.strip()
 
 
-# --- One budget per pass (FR-1.3) -------------------------------------------
-
-
 async def test_each_pass_runs_on_its_own_budget() -> None:
-    """FR-1.3: budgets are per run, so a claim with four products has four of them.
-
-    Both passes here go through the same loop and end on different forms, which is the
-    reuse the loop exists for. Each gets the whole allowance its policy grants.
-    """
     triage_model = scripted(asks_for("list_attachments", case_id="CASE-1003"), "done", a_split())
     triage_budget = budget_of(steps=3)
     triage = await run_triage(triage_model, tools=[list_attachments], budget=triage_budget)
@@ -578,7 +475,7 @@ async def test_each_pass_runs_on_its_own_budget() -> None:
 
     assert triage.answer == a_split()
     assert line.answer == a_conclusion()
-    # Neither pass spent anything the other had.
+
     assert triage.budget.steps_used == 2
     assert line.budget.steps_used == 2
     assert triage.budget.steps_allowed == 3
@@ -586,11 +483,6 @@ async def test_each_pass_runs_on_its_own_budget() -> None:
 
 
 async def test_a_budget_that_another_pass_already_spent_is_refused() -> None:
-    """FR-1.3: sharing one budget between passes is a mistake in our code, so it is loud.
-
-    A shared budget would leave the last product a fraction of the allowance the first
-    one had, and the only sign would be unexplained representative clarification requests.
-    """
     already_used = budget_of(steps=4)
     await run_triage(scripted("done", a_split()), budget=already_used)
 
@@ -598,12 +490,7 @@ async def test_a_budget_that_another_pass_already_spent_is_refused() -> None:
         await run_triage(scripted("done", a_split()), budget=already_used)
 
 
-# --- The same claim, investigated twice (NFR-1) -----------------------------
-
-
 async def test_the_same_script_reaches_the_same_outcome_twice() -> None:
-    """NFR-1: nothing here reads a clock or a random number, so two runs match exactly."""
-
     async def one_run() -> LoopOutcome[ClaimSplit]:
         return await run_triage(
             scripted(
@@ -619,15 +506,10 @@ async def test_the_same_script_reaches_the_same_outcome_twice() -> None:
     first = await one_run()
     second = await one_run()
 
-    # Every part of it: the answer, the record of how it was reached, and what it cost.
     assert first == second
 
 
-# --- A pass can continue an earlier pass's conversation (FR-R.2) -------------
-
-
 async def test_a_pass_given_a_used_thread_continues_that_conversation() -> None:
-    """FR-R.2: the second pass sees everything the first one saw and said, then its own turn."""
     threads = PassThreads()
     thread = threads.start("CASE-1")
     first = scripted(asks_for("list_attachments", case_id="CASE-1"), "seen enough", a_split())
@@ -662,13 +544,12 @@ async def test_a_pass_given_a_used_thread_continues_that_conversation() -> None:
     assert outcome.answer is not None
     assert outcome.answer.reasoning == "Continued."
     shown = second.asked[0].text
-    # The first pass's question, its tool result and its remark all precede the new turn.
+
     assert shown.index("The rules.") < shown.index("Which?") < shown.index("two images on CASE-1")
     assert shown.index("seen enough") < shown.index("the split is wrong")
 
 
 async def test_a_pass_with_no_thread_starts_from_nothing_every_time() -> None:
-    """A pass that keeps no thread is exactly the pass it was before threads existed."""
     first = scripted("done", a_split())
     await run_triage(first)
     second = scripted("done", a_split())
@@ -679,7 +560,6 @@ async def test_a_pass_with_no_thread_starts_from_nothing_every_time() -> None:
 
 
 async def test_two_threads_never_see_each_other() -> None:
-    """A fresh thread per investigation keeps two claims' evidence apart."""
     threads = PassThreads()
     one, two = threads.start("CASE-1"), threads.start("CASE-2")
     assert one.thread_id != two.thread_id
@@ -687,11 +567,7 @@ async def test_two_threads_never_see_each_other() -> None:
     assert await threads.remembers(two.thread_id) is False
 
 
-# --- The tools of one turn run together, within a cap (FR-1.3, NFR-8) --------
-
-
 async def test_the_tools_of_one_turn_are_carried_out_at_the_same_time() -> None:
-    """NFR-8: independent calls in one turn do not wait for one another."""
     left, right, seen = two_tools_that_notice_each_other()
     model = scripted(asks_for_several("read_left", "read_right"), "done", a_split())
 
@@ -699,17 +575,12 @@ async def test_the_tools_of_one_turn_are_carried_out_at_the_same_time() -> None:
 
     assert seen["overlapped"] is True
     assert outcome.answer == a_split()
-    # The answers go back in the order they were asked for, whichever finished first.
+
     answered = model.asked[1].text
     assert answered.index("left of CASE-1") < answered.index("right of CASE-1")
 
 
 async def test_a_turn_may_not_ask_for_more_tools_than_the_cap_allows() -> None:
-    """FR-1.3: a step is a turn, so a turn is held to a fixed amount of work.
-
-    Every call still gets an answer under its own id — the provider requires one — and
-    the declined ones say plainly that they can be asked for again.
-    """
     model = scripted(
         asks_for_several("list_attachments", "list_attachments", "list_attachments"),
         "done",
@@ -728,11 +599,7 @@ async def test_a_turn_may_not_ask_for_more_tools_than_the_cap_allows() -> None:
     assert outcome.answer == a_split()
 
 
-# --- What a run cost is on the record (NFR-3) ---------------------------------
-
-
 async def test_the_tokens_a_pass_spent_are_on_its_budget_snapshot() -> None:
-    """NFR-3: what each model turn cost is added up on the run, from the provider's own figures."""
     model = scripted(
         AIMessage(
             content="done",

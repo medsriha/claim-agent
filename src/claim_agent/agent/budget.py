@@ -22,12 +22,7 @@ class BudgetLimit(StrEnum):
 
 
 class BudgetSnapshot(BaseModel):
-    """What one run spent, in a form that can go straight into its report (NFR-3).
-
-    The token figures are what the provider reported for every model call the run made,
-    including the image analyses and the closing form. Zero when the provider reported
-    nothing, which a scripted model does.
-    """
+    """What one run spent, in a form that can go straight into its report (NFR-3)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -112,12 +107,7 @@ class RunBudget:
         return True
 
     def record_usage(self, usage: Mapping[str, Any] | None) -> None:
-        """Add what the provider reported for one model call to the run's total.
-
-        `usage` is the reply's `usage_metadata`, or `None` when the provider gave none;
-        either way the call is counted, so "how many times was the model asked" is
-        answerable even when tokens are not.
-        """
+        """Add what the provider reported for one model call to the run's total."""
         self._model_calls += 1
         if not usage:
             return
@@ -142,11 +132,7 @@ class RunBudget:
 
 
 class UsageMeter(AsyncCallbackHandler):
-    """A callback that hands each model reply's usage to a recorder.
-
-    Used for the model calls the loop does not see the reply of: a structured answer comes
-    back already parsed, so the usage is read off the provider's result as it lands.
-    """
+    """A callback that hands each model reply's usage to a recorder."""
 
     def __init__(self, record: Callable[[Mapping[str, Any] | None], None]) -> None:
         """Forward every reply's usage to `record`."""

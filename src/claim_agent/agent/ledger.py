@@ -9,7 +9,7 @@ from claim_agent.observability import get_logger
 
 logger = get_logger(__name__)
 
-# How long the two written parts of an entry may be.
+
 MAX_SUMMARY_CHARACTERS = 300
 
 
@@ -65,8 +65,7 @@ class RunLedger:
             at=at,
         )
         self._entries.append(entry)
-        # The prose belongs in the record a representative reads, not in the logs;
-        # what the logs want is enough to line a run up against them.
+
         logger.info(
             "agent_step",
             sequence=entry.sequence,

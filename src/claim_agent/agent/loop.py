@@ -26,20 +26,14 @@ from claim_agent.observability import get_logger
 
 logger = get_logger(__name__)
 
-# The form this pass ends on — one of the shapes in `claim_agent.agent.schemas`.
-# Naming it is what lets a caller that asked for a claim split get a claim split
-# back, rather than something it has to check the type of itself.
+
 Answer = TypeVar("Answer", bound=BaseModel)
 
-# A backstop that must never be what stops a run: the graph ends a run by raising, and
-# raising loses the findings FR-1.16 says must reach a person. Two graph moves per step
-# — think, then act — plus a few for starting and concluding, so ours always trips first.
+
 _MOVES_PER_STEP = 2
 _MOVES_TO_SPARE = 10
 
-# How many times a pass may ask the model to correct a conclusion that did not fit its
-# form. One, because the second try is a changed question — it names what was wrong —
-# and a third identical one is back to asking the same thing twice. Each costs a step.
+
 _REPAIRS_ALLOWED: Final = 1
 
 
@@ -49,12 +43,7 @@ def _graph_limit(budget: RunBudget) -> int:
 
 
 class _PassState(TypedDict):
-    """What one pass carries between moves, and what a thread keeps between passes.
-
-    `messages` is appended to rather than replaced: a node hands back only what it
-    added, and the graph keeps the whole conversation. That is what lets a later pass
-    on the same thread continue from where this one stopped (FR-R.2).
-    """
+    """What one pass carries between moves, and what a thread keeps between passes."""
 
     messages: Annotated[list[BaseMessage], add_messages]
     outcome: LoopOutcome[Any] | None
@@ -88,17 +77,7 @@ async def run_agent_pass(
     events: EventStream,
     thread: PassThread | None = None,
 ) -> LoopOutcome[Answer]:
-    """Run one AI pass: ask, use tools, ask again, then conclude (FR-1.1, FR-1.3).
-
-    Args:
-        opening_messages: What the model is shown first. On a fresh thread that is the
-            whole question; on a thread that already holds a conversation it is only the
-            new turn, and the graph puts the earlier conversation in front of it.
-        thread: Where this pass's conversation is kept, or `None` to keep none. A pass
-            given a thread another pass already used continues that conversation, which
-            is how a representative's note is answered by the investigation that
-            produced the report rather than by a retelling of it (FR-R.2).
-    """
+    """Run one AI pass: ask, use tools, ask again, then conclude (FR-1.1, FR-1.3)."""
     _refuse_a_used_budget(budget)
 
     model = chat.bind_tools(list(tools))
@@ -137,8 +116,6 @@ async def run_agent_pass(
                 )
             }
         except ModelError as exc:
-            # Both end the pass — a turn is never retried — but they send a reader
-            # looking in different places, so they are reported differently.
             return {
                 "outcome": _model_turn_failed(
                     "The model provider could not be reached."
@@ -156,18 +133,7 @@ async def run_agent_pass(
         return {"messages": [reply]}
 
     async def act(state: _PassState) -> dict[str, object]:
-        """Carry out whatever the model just asked for, and hand back what came of it.
-
-        The calls of one turn run at the same time: they are independent of one another,
-        and the per-claim memo already makes two callers asking the same question do the
-        work once. Their answers go back in the order they were asked for, because the
-        model reads them against its own list.
-
-        A turn that asks for more tools than a turn may use gets the first ones carried
-        out and the rest declined in words, each under its own call id — the provider
-        requires an answer to every call, and a declined call answered plainly is one the
-        model can ask for again next turn (FR-1.3).
-        """
+        """Carry out whatever the model just asked for, and hand back what came of it."""
         asked_for = cast(AIMessage, state["messages"][-1])
         allowed = budget.tool_calls_allowed_per_step
         carried_out, declined = asked_for.tool_calls[:allowed], asked_for.tool_calls[allowed:]
@@ -225,15 +191,10 @@ async def run_agent_pass(
     builder.add_conditional_edges(
         "think", what_next, {"act": "act", "conclude": "conclude", "done": END}
     )
-    # Straight back to thinking, with no allowance check on the way. The check lives
-    # at the top of `think` instead, so there is exactly one place that decides
-    # whether a run may continue rather than two that could disagree.
+
     builder.add_edge("act", "think")
     builder.add_edge("conclude", END)
 
-    # With a thread, the graph writes every move to it and reads whatever an earlier
-    # pass left there first, so the opening messages land after that conversation.
-    # The outcome is reset because it belongs to the pass that produced it.
     graph = builder.compile(checkpointer=thread.checkpointer if thread is not None else None)
     config = RunnableConfig(recursion_limit=_graph_limit(budget))
     if thread is not None:
@@ -246,9 +207,6 @@ async def run_agent_pass(
 
     outcome = finished["outcome"]
     if outcome is None:
-        # Not reachable by any path above: every way out of the graph sets an
-        # outcome. Kept because "the graph ended without an answer" must never
-        # become a silent `None` in front of a rep (NFR-4).
         return _gave_up(
             "The investigation stopped without reaching a conclusion.",
             budget=budget,
@@ -266,14 +224,7 @@ async def _conclude(
     budget: RunBudget,
     ledger: RunLedger,
 ) -> LoopOutcome[Answer]:
-    """Ask the model to fill in the form this pass ends on (NFR-2).
-
-    An answer that does not fit the form is not the end of the pass. The validator's own
-    account of what was wrong is put in front of the model and the form is asked for
-    once more — a changed question, not the same one twice. Only when that also fails,
-    or there is no step left to spend on it, does the pass give up, and even then it
-    carries everything it established (FR-1.16, NFR-4).
-    """
+    """Ask the model to fill in the form this pass ends on (NFR-2)."""
     request = closing_request
     asked = f"Draw a conclusion for this pass, in the shape of {concludes_with.__name__}."
     repairs_left = _REPAIRS_ALLOWED
@@ -315,8 +266,6 @@ async def _conclude(
             asked = f"Ask again for {concludes_with.__name__}, naming what did not fit last time."
             continue
         except UpstreamError as exc:
-            # `exc.message` is our own plain sentence, written for a person to read —
-            # not the provider's wording — so it is safe to pass on as the reason.
             ledger.record(
                 kind=StepKind.REASONING,
                 name=concludes_with.__name__,
@@ -371,17 +320,13 @@ async def _carry_out(
     events: EventStream,
 ) -> ToolMessage:
     """Do the one thing the model asked for, and put the result into words for it."""
-    # The provider requires every call to be answered under its own id; one made up
-    # from where the call appeared is the fallback for a call that arrived without one.
+
     call_id = tool_call["id"] or f"unnamed-call-{len(ledger) + 1}"
     name = tool_call["name"]
     asked = _what_was_asked_for(name, tool_call["args"])
 
     tool = tools_by_name.get(name)
     if tool is None:
-        # Not retried: the same name will be missing the second time. The model is
-        # told what it does have, which is enough for it to correct itself on the
-        # next turn — and that turn costs a step, so this cannot go round for ever.
         available = ", ".join(sorted(tools_by_name)) or "no tools at all"
         refusal = f"There is no tool called {name}. The tools available are: {available}."
         ledger.record(
@@ -402,15 +347,8 @@ async def _carry_out(
     result = await _carry_out_once(tool, tool_call, call_id=call_id)
 
     if isinstance(getattr(result, "artifact", None), ToolOutcome):
-        # The tool spoke for itself: every investigation tool hands its outcome back as
-        # the message's artifact, and writes its own record on the way. Recording here
-        # as well would put every successful call in the record twice. Judged by the
-        # reply itself rather than by counting ledger entries, because several calls
-        # run at once and another call's entry could land in between.
         return result
 
-    # It did not: unreadable arguments, a tool that raised, or a tool that keeps no
-    # record of its own. This is the only record that call will ever have (NFR-3).
     succeeded = result.status != "error"
     ledger.record(
         kind=StepKind.TOOL_CALL,
@@ -453,24 +391,12 @@ def _declined(tool_call: ToolCall, *, asked: int, allowed: int, ledger: RunLedge
 
 
 async def _carry_out_once(tool: BaseTool, tool_call: ToolCall, *, call_id: str) -> ToolMessage:
-    """Use one tool once, and put any failure into words the model can act on (NFR-4).
-
-    Not retried. Every expected failure — ShipBob unreachable, an image that will not
-    download, arguments that do not parse — is already caught inside the tool and answered
-    in words, so an exception reaching here is a bug in the tool, and a bug does not mend
-    itself on a second try.
-    """
+    """Use one tool once, and put any failure into words the model can act on (NFR-4)."""
     try:
-        # Invoked with the model's own call, not just its arguments, so the reply comes
-        # back as a message already tied to the call it answers.
         return cast("ToolMessage", await tool.ainvoke({**tool_call, "id": call_id}))
     except Exception as exc:
-        # Caught deliberately: nothing a tool does is a reason for a claim to reach a
-        # representative as a server error rather than as a clarification request.
         logger.warning("tool_call_failed", tool=tool.name, failure=type(exc).__name__)
         return ToolMessage(
-            # The exception's own words are kept out: they are written for whoever wrote
-            # the tool, and would invite the model to reason about our internals.
             content=(
                 f"The {_readable(tool.name)} tool could not answer. "
                 "Carry on without it, or say what you cannot establish because of it."

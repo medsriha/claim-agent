@@ -1,10 +1,3 @@
-/**
- * One message in the conversation: who it is from, what it is called, and its contents.
- *
- * This is the only place that knows which component draws which kind of message. It holds
- * no rules of its own — every value it passes on came from the service, and the labels it
- * draws were settled when the conversation was laid out.
- */
 import type { MessageState } from "./useReveal";
 import { ClaimRead, OrderRead, ParcelRead } from "../components/CaseReads";
 import { ClaimNumbers } from "../components/ClaimNumbers";
@@ -19,16 +12,15 @@ import type { TranscriptMessage } from "./transcript";
 
 interface MessageProps {
   message: TranscriptMessage;
-  /** Whether this message is still working or has settled into its finding. */
+
   state: MessageState;
-  /** Screen the same claim again. Only ever reached from a failure. */
+
   onRetry: () => void;
 }
 
 export function Message({ message, state, onRetry }: MessageProps): React.JSX.Element {
   return (
-    // Named outright rather than built from the speaker, so the one class that carries a
-    // style is greppable and no class name is invented that the stylesheet has no rule for.
+
     <li className={message.speaker === "rep" ? "turn turn-rep" : "turn"}>
       {message.label !== null && <p className="turn-label">{message.label}</p>}
       <div className="turn-body">
@@ -38,12 +30,6 @@ export function Message({ message, state, onRetry }: MessageProps): React.JSX.El
   );
 }
 
-/**
- * What a message that is still working looks like: something turning, and a word for it.
- *
- * A check draws its own working state instead, because it already has a place for a mark
- * and turning it into a spinner is what makes the mark's arrival read as an answer.
- */
 function Working(): React.JSX.Element {
   return (
     <p className="bubble bubble-working">
@@ -53,18 +39,10 @@ function Working(): React.JSX.Element {
   );
 }
 
-/**
- * The contents of one message.
- *
- * A `switch` over every kind, with no fallback branch: adding a kind without drawing it
- * becomes a type error here rather than a blank space on screen.
- */
 function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
   const { body } = message;
   const working = state === "working";
 
-  // A check keeps its own frame while it works, so the spinner sits exactly where the tick
-  // or cross will be. Everything else stands behind one plain working message.
   if (working && body.kind !== "gate") {
     return <Working />;
   }
@@ -102,8 +80,7 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
       );
 
     case "gate":
-      // No bubble around it: a check card carries its own frame and its own colour down
-      // the edge, and nesting that inside another box reads as two things, not one.
+
       return <GateCard gate={body.gate} working={working} />;
 
     case "findings":
@@ -138,7 +115,7 @@ function Body({ message, state, onRetry }: MessageProps): React.JSX.Element {
       );
 
     case "report":
-      // Carries its own frame: it is the one thing being acted on.
+
       return <ReportCard report={body.report} unavailableReason={body.unavailableReason} />;
 
     case "failure":

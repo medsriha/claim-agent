@@ -35,16 +35,7 @@ class EmailWording(BaseModel):
 
 
 class InvestigationReportContent(BaseModel):
-    """Settled findings for one claim, ready for a UI to lay out (FR-1b.1, FR-2.9a).
-
-    `lines` is every damaged product the claim covers. There is one outcome, one amount and
-    one email across all of them; what each product contributed to the figure is in
-    `amount.components` (FR-1b.4).
-
-    `finding_summary` keeps the investigation's concise decision basis separate from the
-    itemized merchant request. It is optional so reports stored before this field was added
-    remain readable; their UI can fall back to the deterministic outcome explanation.
-    """
+    """Settled findings for one claim, ready for a UI to lay out (FR-1b.1, FR-2.9a)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -84,11 +75,7 @@ class ScreeningReportContent(BaseModel):
 
 
 class ClarificationReportContent(BaseModel):
-    """Claim-level findings when no safe product-level investigation can be produced.
-
-    `requested_details` is populated when the merchant can settle the unclear split.
-    It stays empty when the problem needs a representative instead.
-    """
+    """Claim-level findings when no safe product-level investigation can be produced."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -119,36 +106,7 @@ class ReportReview(BaseModel):
 
 
 class RevisionTurn(BaseModel):
-    """One round of the conversation between a representative and the agent (FR-R.13).
-
-    A representative sends a report back with a note; the agent reworks it and answers. That
-    exchange is one turn, and every turn a report has been through is kept on it, oldest
-    first. Together they are the record of how a decision was reached and where a person
-    intervened.
-
-    A turn that changes the report produces a new version. A question answered without changing
-    the report is recorded on the current version instead, because a conversation is worth
-    keeping but is not itself a new telling of the findings.
-
-    Fields:
-        turn: Which round this is, counting from 1.
-        from_version: The version of the report the representative was looking at when they
-            wrote the note. Reading that version back is how somebody sees what they saw.
-        feedback: What they said, in their own words, exactly as written.
-        reply: What the agent said back to them. Where the rework did not happen, this is
-            the reason it did not.
-        changed: What the agent changed in response, one item each (FR-R.10).
-        left_unchanged: What the note did not bear on, carried forward as it was.
-        needs_reply: Whether the agent's reply asks the representative a question. It changes
-            nothing about what is recommended; it says the conversation is waiting on a
-            person rather than finished.
-        reworked: Whether anything about the report actually changed. False covers a run that
-            could not be completed and an answer that was only an answer — a representative
-            asking a question and being told something does not make the report different.
-        reinvestigated: Whether this round caused the claim to be investigated again. That
-            happens when a representative settles what an unsettled claim is for, and the
-            findings become this report's own next version (FR-1a.4).
-    """
+    """One round of the conversation between a representative and the agent (FR-R.13)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -164,20 +122,7 @@ class RevisionTurn(BaseModel):
 
 
 class Report(BaseModel):
-    """The canonical structured handoff and its review state.
-
-    One report per claim, covering every damaged product on it (FR-1b.1, FR-2.9b).
-
-    `content` is everything a UI needs to construct the report. The scalar fields beside it
-    support claim lists, review actions, and analysis without making those callers understand
-    the complete content shape. `drafted_email` is a single structured field so it can be
-    rendered and edited exactly once.
-
-    `product_names` is every damaged product the claim covers, in the order the investigation
-    established them, and empty for a claim that names none — one the quick checks stopped, or
-    one nobody could split. It is the summary of `content`; the claim lines themselves, with
-    their prices and how each matched the order, are inside it.
-    """
+    """The canonical structured handoff and its review state."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -250,9 +195,6 @@ class Report(BaseModel):
             if self.amount_usd is not None:
                 raise ValueError("A clarification request cannot carry an approved amount.")
 
-        # A representative clarification request usually carries no email, but it may: a
-        # payment a representative directed that could not be priced keeps its approval
-        # draft, so they can finish it on their screen rather than start from nothing.
         if (
             self.recommendation
             in (
@@ -285,10 +227,6 @@ class Report(BaseModel):
         if self.decisions_taken != len(self.reviews):
             raise ValueError("Every review action must have one structured review entry.")
         for position, turn in enumerate(self.revisions, start=1):
-            # The conversation is the record of how a decision was reached (FR-R.13), so it has
-            # to be readable in the order it happened. A turn out of sequence, or one claiming
-            # to answer a version that did not exist when it was written, is a garbled record
-            # rather than a surprising one.
             if turn.turn != position:
                 raise ValueError("The rounds of a conversation must be numbered in order.")
             if not 1 <= turn.from_version <= self.version:
@@ -297,12 +235,7 @@ class Report(BaseModel):
 
 
 class ClaimView(BaseModel):
-    """The report on one claim, if it has one yet (FR-2.9b).
-
-    A claim has at most one report, so this holds none or one. It is kept as a list rather
-    than a single optional field because "nobody has asked for this claim to be investigated"
-    is an ordinary answer, and an empty list says it without a caller having to read a null.
-    """
+    """The report on one claim, if it has one yet (FR-2.9b)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

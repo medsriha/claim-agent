@@ -10,44 +10,20 @@ from pydantic import BaseModel, ConfigDict
 from claim_agent.policy import Policy
 
 MAX_TEXT_SCANNED: Final = 20_000
-"""How much evidence text is scanned for references.
-
-Text read off a photograph is untrusted and could be any length. Twenty thousand
-characters is far more than any invoice, and stopping there means a huge input costs
-bounded time rather than unbounded time.
-"""
+"""How much evidence text is scanned for references."""
 
 MIN_REFERENCE_LENGTH: Final = 5
-"""How long a run of characters must be before it is treated as a reference at all.
-
-A bare `1` or `24` appears in every document ever printed — quantities, page numbers,
-street numbers — and would match something by chance. Five is chosen because the shortest
-real identifier in ShipBob's sample data is the six-digit `329233`, so five leaves a
-little room without letting ordinary small numbers in. Nothing about it is sacred; it is
-here rather than buried in a condition so it can be argued with.
-"""
+"""How long a run of characters must be before it is treated as a reference at all."""
 
 _REFERENCE_PATTERN: Final = re.compile(r"#?\b([A-Za-z]{0,4}[-_]?\d{3,}[A-Za-z0-9-]*)\b")
-"""Something that looks like an order or shipment reference.
-
-Deliberately shaped around what the sample data actually contains: a bare run of digits
-(`342578703`), a short letter prefix in front of digits (`HS3449170`, `SO387378`), and a
-longer hyphenated form (`ShipBobFulfillment-169579`). Anything with no digits at all is
-not a reference — it is a word.
-"""
+"""Something that looks like an order or shipment reference."""
 
 _TRIM_PATTERN: Final = re.compile(r"[^a-z0-9]")
 """What is removed before two references are compared: everything but letters and digits."""
 
 
 class ReferenceShape(StrEnum):
-    """What a reference looked like, which hints at whose numbering it is.
-
-    `DIGITS` is ShipBob's own style — their order, shipment and case numbers are all plain
-    runs of digits. `PREFIXED` is almost always a merchant's own numbering, as in
-    `HS3449170`. `FULFILMENT` is ShipBob's fulfilment id, which names a shipment but is not
-    the shipment id.
-    """
+    """What a reference looked like, which hints at whose numbering it is."""
 
     DIGITS = "digits"
     PREFIXED = "prefixed"
@@ -55,11 +31,7 @@ class ReferenceShape(StrEnum):
 
 
 class MatchStrength(StrEnum):
-    """How firmly a reference ties to one of this claim's identifiers, strongest first.
-
-    Every one of these is explainable to a representative in a sentence, which matters:
-    somebody has to be able to disagree with the reasoning rather than trust a number.
-    """
+    """How firmly a reference ties to one of this claim's identifiers, strongest first."""
 
     EXACT = "exact"
     NORMALISED = "normalised"
@@ -73,31 +45,11 @@ _SCORES: Final = {
     MatchStrength.CONTAINED: 0.65,
     MatchStrength.NONE: 0.0,
 }
-"""What each kind of match is worth, from 0 to 1.
-
-**There is no fuzzy string similarity here, deliberately.** An order number is not a word.
-"Looks eighty percent like `337761802`" is a meaningless statement about digits, and a
-scoring function that produced it would give a confident-looking number to a comparison
-that means nothing. Every score below comes from a relationship a person can check by eye:
-the same characters, the same characters ignoring punctuation, or one number sitting
-inside the other.
-
-`CONTAINED` is scored below the others but still above the default confidence bar, because
-it is the real CASE-1003 situation — `344917` printed on an invoice against `3449170` on
-the merchant's screen — and treating that as no relation at all would be wrong. It is a
-lead, not a proof, and its score says so.
-"""
+"""What each kind of match is worth, from 0 to 1."""
 
 
 class ExtractedReference(BaseModel):
-    """One thing in evidence text that looks like an order or shipment reference.
-
-    Attributes:
-        raw: Exactly as it appeared, so a representative can find it on the document.
-        normalised: Case-folded with punctuation and any leading `#` removed, which is the
-            form two references are compared in.
-        shape: What it looked like.
-    """
+    """One thing in evidence text that looks like an order or shipment reference."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -107,17 +59,7 @@ class ExtractedReference(BaseModel):
 
 
 class ReferenceMatch(BaseModel):
-    """One reference weighed against one of this claim's identifiers.
-
-    Attributes:
-        reference: What was found on the document.
-        matched_field: Which of the claim's identifiers it matched — `order_id`,
-            `shipment_id`, `case_number` or `case_id`.
-        matched_value: What that identifier actually is.
-        strength: How firmly the two are tied.
-        score: That strength as a number from 0 to 1.
-        explanation: One plain sentence saying why, for somebody who has to agree with it.
-    """
+    """One reference weighed against one of this claim's identifiers."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -130,23 +72,7 @@ class ReferenceMatch(BaseModel):
 
 
 class ReferenceResolution(BaseModel):
-    """Whether a document can be shown to belong to this claim.
-
-    Attributes:
-        belongs_to_claim: True only when exactly one match cleared the confidence bar.
-            **False is the answer that matters** — it means the document has not been tied
-            to this claim, and reading prices off it risks reasoning about somebody else's
-            order.
-        best: The match that cleared the bar, or `None`.
-        is_ambiguous: True when two references tied for the best score. Nothing is chosen
-            then, because choosing would be a guess about which document is which (FR-1.13).
-        candidates: Every match found, best first, so a person can see what was considered.
-        references_found: Everything that looked like a reference, whether it matched or
-            not — the raw material, for somebody checking by hand.
-        expected: This claim's own identifiers, so a reader can compare without going and
-            looking them up.
-        reason: One plain sentence a representative can agree or disagree with.
-    """
+    """Whether a document can be shown to belong to this claim."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -160,22 +86,7 @@ class ReferenceResolution(BaseModel):
 
 
 def extract_references(text: str) -> tuple[ExtractedReference, ...]:
-    """Pull everything out of evidence text that looks like an order or shipment reference.
-
-    Merchant text is untrusted input read off a photograph, so only a bounded amount of it
-    is scanned and nothing found in it is allowed to do anything except be compared.
-
-    References come back in the order they appeared, each kept once. Order is preserved
-    because a reader compares this against the document by eye, and a list that reorders
-    itself between two runs of the same claim reads as a different answer (NFR-1).
-
-    Args:
-        text: Whatever was read off the document.
-
-    Returns:
-        What was found, possibly nothing. Nothing is an ordinary answer: plenty of
-        documents carry no reference we would recognise.
-    """
+    """Pull everything out of evidence text that looks like an order or shipment reference."""
     found: dict[str, ExtractedReference] = {}
     for match in _REFERENCE_PATTERN.finditer(text[:MAX_TEXT_SCANNED]):
         raw = match.group(1)
@@ -195,30 +106,7 @@ def resolve_reference(
     case_number: str | None = None,
     case_id: str | None = None,
 ) -> ReferenceResolution:
-    """Work out whether a document belongs to this claim, and say how confident that is.
-
-    Every reference found in the text is weighed against every identifier this claim
-    carries, and the best relationship each pair has is kept. The best of those is compared
-    against the confidence policy asks for.
-
-    **Two references tying for the best score settle nothing.** They are reported and
-    neither is chosen, because picking one would be a guess about which document is in
-    front of us, and FR-1.13 reserves that judgement for a person.
-
-    Args:
-        text: What was read off the document.
-        policy: Read for `min_order_reference_confidence`, the bar a match must clear
-            (FR-0.7, NFR-7).
-        order_id: This claim's order at ShipBob, if it names one.
-        shipment_id: This claim's parcel at ShipBob, if it names one.
-        case_number: The case number a merchant would quote.
-        case_id: The case's own identifier.
-
-    Returns:
-        Whether the document is tied to this claim, what tied it, and everything that was
-        considered. A document that cannot be tied is an ordinary answer and never an
-        error: it is the answer that stops a wrong recommendation (NFR-4).
-    """
+    """Work out whether a document belongs to this claim, and say how confident that is."""
     expected = [
         ("order_id", order_id),
         ("shipment_id", shipment_id),
@@ -288,12 +176,7 @@ def resolve_reference(
 def _best_match_per_reference(
     references: Sequence[ExtractedReference], known: Sequence[tuple[str, str]]
 ) -> list[ReferenceMatch]:
-    """The strongest relationship each reference has with any of this claim's identifiers.
-
-    One entry per reference at most, so a reference that relates to two identifiers cannot
-    outvote one that relates firmly to a single identifier. Sorted by score, then by the
-    order the references appeared, so ties are stable between runs (NFR-1).
-    """
+    """The strongest relationship each reference has with any of this claim's identifiers."""
     matches: list[tuple[int, ReferenceMatch]] = []
     for position, reference in enumerate(references):
         best: ReferenceMatch | None = None
@@ -316,11 +199,7 @@ def _best_match_per_reference(
 
 
 def _strength_between(reference: ExtractedReference, value: str) -> MatchStrength:
-    """How firmly one reference relates to one identifier.
-
-    Checked strongest first and stopped at the first that holds, so a reference gets the
-    best description of its relationship rather than the last one tried.
-    """
+    """How firmly one reference relates to one identifier."""
     if reference.raw == value:
         return MatchStrength.EXACT
     trimmed = _for_comparison(value)
@@ -371,10 +250,5 @@ def _shape_of(raw: str) -> ReferenceShape:
 
 
 def _for_comparison(value: str) -> str:
-    """Reduce a reference to the form two of them are compared in.
-
-    Capitals and punctuation are how a number was typed rather than which number it is, so
-    `#SO-387378` and `so387378` compare as one thing. Nothing else is removed: two
-    references differing by a digit are different numbers and must never compare as equal.
-    """
+    """Reduce a reference to the form two of them are compared in."""
     return _TRIM_PATTERN.sub("", value.casefold())

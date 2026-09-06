@@ -40,7 +40,6 @@ class RunEvent(BaseModel):
     detail: Mapping[str, str] = Field(default_factory=dict)
 
 
-# Where an event goes once it has been made.
 EventSink = Callable[[RunEvent], Awaitable[None]]
 
 
@@ -73,9 +72,6 @@ class EventStream:
             try:
                 await self._sink(event)
             except Exception as exc:
-                # Every failure is caught on purpose. Whoever is watching is outside
-                # our control — a browser closes, a connection drops — and none of
-                # that may stop an investigation that is otherwise going fine (NFR-4).
                 logger.warning(
                     "event_not_delivered",
                     event_kind=kind.value,

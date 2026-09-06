@@ -28,12 +28,12 @@ from claim_agent.policy import Policy
 
 logger = get_logger(__name__)
 
-# What a report says about a piece of evidence that was never looked at on this pass.
+
 _NOT_REVIEWED = (
     "Not reviewed: the representative directed payment before this was investigated, so "
     "nothing was established about it."
 )
-# The email a merchant gets when the model supplied no usable approval wording.
+
 _APPROVAL_SUBJECT = "Your damage claim has been approved"
 _APPROVAL_BODY = (
     "We have reviewed your damage claim for {products} and approved it. The approved amount "
@@ -42,13 +42,7 @@ _APPROVAL_BODY = (
 
 
 class DirectedPayment(BaseModel):
-    """A representative's instruction to pay, with what the model supplied to carry it out.
-
-    This is everything the model contributes to a directed payment: the approval email's
-    wording and, when the representative named one, the figure they named. The figure is
-    kept as the text the model wrote, because money is parsed exactly once, where it is
-    priced (FR-1.20, FR-1.21).
-    """
+    """A representative's instruction to pay, with what the model supplied to carry it out."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -72,43 +66,7 @@ async def approve_as_directed(
     concerns: Sequence[str] = (),
     earlier_amount: AmountDerivation | None = None,
 ) -> ClaimFindings:
-    """Pay a claim because a representative said to, without investigating it again.
-
-    A representative who has read a report and told the agent to approve it has answered the
-    only question that was open. Nothing about the evidence needs to be looked at again to
-    carry that out: what is left is to settle the figure and write the email, and both of
-    those are arithmetic and wording rather than judgement. So this does exactly that, with
-    no model call and no tool — one invoice read, one figure, one email.
-
-    The figure comes from the first of these that exists: the amount the representative
-    named; the amount the investigation itself judged the damage to be worth, where a report
-    had one and the rules withheld it; and otherwise what the damaged products cost on the
-    invoice. Whichever it is, it is held to the cap where it is read (FR-1.20), and the
-    email carries the figure that survived rather than any figure the model wrote (FR-1.21).
-
-    Every rule that would have withheld the payment is evaluated and recorded as waived, so
-    a payment a person directed and one the evidence earned never look the same (NFR-5).
-    A directed payment with nothing payable is still refused, because there would be no
-    figure to put in the email; the report then asks the representative what to pay.
-
-    Args:
-        lines: The products being paid for, matched against the order.
-        directed: The instruction, as the model read it: email wording and any figure named.
-        invoice: ShipBob's priced record of the shipment, or `None` when it could not be read.
-        policy: Read for the reimbursement cap and the high-value figure (FR-0.7).
-        contact_email: Who the approval email goes to, from the case.
-        model: The name of the model that read the instruction, for the record on the report.
-        events: Where progress is narrated for whoever is watching.
-        evidence: What an earlier investigation established about the four pieces of
-            evidence, carried forward unchanged. Empty for a claim nobody investigated.
-        assessments: Its answers to the four questions, likewise carried forward.
-        concerns: Its concerns, likewise.
-        earlier_amount: The figure the earlier report worked out, if it worked one out.
-
-    Returns:
-        The claim's findings, approved with the figure and the email, or handed to the
-        representative when nothing could be priced.
-    """
+    """Pay a claim because a representative said to, without investigating it again."""
     budget = RunBudget(policy)
     ledger = RunLedger()
     products = _named(lines)
@@ -144,9 +102,6 @@ async def approve_as_directed(
     )
     conclusion = _the_conclusion(lines, directed=directed, amount=amount)
 
-    # The email is written whether or not a figure could be found. Where it could not, the
-    # report asks the representative for one and keeps the draft, so they adjust wording
-    # on their screen and answer with the figure rather than start again from nothing.
     drafted, refused = _the_approval_email(
         conclusion,
         lines=lines,
@@ -187,12 +142,7 @@ async def approve_as_directed(
 
 
 def what_pricing_produced(findings: ClaimFindings) -> str:
-    """One sentence saying what came of the instruction, for the representative.
-
-    The model's reply is written before anything is priced, so on its own it can only say
-    what is about to happen. The outcome is added afterwards, by code, because code is the
-    only thing that knows it.
-    """
+    """One sentence saying what came of the instruction, for the representative."""
     if findings.outcome.recommendation.is_approval:
         return (
             f"Priced at ${findings.amount.amount_usd.quantize(CENTS)} from the invoice and "
@@ -279,11 +229,7 @@ def _not_reviewed(kind: EvidenceKind) -> EvidenceFinding:
 def _the_conclusion(
     lines: Sequence[ClaimLine], *, directed: DirectedPayment, amount: AmountDerivation
 ) -> InvestigationConclusion:
-    """Write the instruction up in the form an investigation's answer takes.
-
-    The report reads its summary and its email wording off a conclusion, so a directed
-    payment gets one that says exactly what happened: nothing was judged, a person decided.
-    """
+    """Write the instruction up in the form an investigation's answer takes."""
     return InvestigationConclusion(
         evidence=(),
         damaged_items=tuple(
@@ -312,15 +258,7 @@ def _the_approval_email(
     amount: AmountDerivation,
     contact_email: str | None,
 ) -> tuple[DraftedEmail, tuple[str, ...]]:
-    """Finish the model's approval wording, or fall back to plain wording of our own.
-
-    A directed payment must not fail for want of an email: the representative has decided,
-    and the email is the one thing left between that decision and the merchant. So where the
-    model wrote no wording, or wrote a figure into it, the report says so as a concern and
-    a short deterministic email is used instead. The figure is added by code, and only
-    when there is one: a draft kept while the representative is asked for the figure has
-    no amount line, and gains one when they approve at a figure.
-    """
+    """Finish the model's approval wording, or fall back to plain wording of our own."""
     try:
         return (
             finish_email(

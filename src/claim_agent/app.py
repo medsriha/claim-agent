@@ -39,9 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start-up and shut-down hooks (clients, connection pools)."""
     logger.info("service_starting", version=__version__, environment=app.state.settings.environment)
     yield
-    # The connections the ShipBob reader holds open are given back here, when a real
-    # server stops. Only the closing happens here; see `create_app` for why the client
-    # itself is not built here.
+
     await app.state.shipbob.aclose()
     await app.state.evidence.aclose()
     await app.state.attachment_http.aclose()
@@ -55,20 +53,7 @@ def create_app(
     precedent_store: PrecedentStore | None = None,
     report_store: ReportStore | None = None,
 ) -> FastAPI:
-    """Build the application. Tests call this directly with overridden settings.
-
-    Anything a route needs for the whole life of the process is built here and kept
-    on the application, so a route reads it rather than making its own. Passing a
-    merchant memory in is how a test starts with a merchant who already has
-    corrections on file (FR-0.5).
-    Passing a report store in is how one starts with reports already decided on
-    (FR-2.9b).
-
-    The policy passed in is the one the service starts with. It is not kept as it
-    is: the admin panel can change the thresholds while the service runs, so what
-    routes actually read is a holder that can be given a new policy, and that
-    remembers this one to go back to (FR-0.7).
-    """
+    """Build the application. Tests call this directly with overridden settings."""
     settings = settings or get_settings()
     policy = policy or get_policy()
     configure_logging(level=settings.log_level, json_logs=settings.json_logs)
@@ -80,11 +65,7 @@ def create_app(
     )
     app.state.settings = settings
     app.state.live_policy = LivePolicy(policy)
-    # Built here and not in the start-up hook on purpose. A test drives the app in
-    # this same process without ever starting a server, and that path runs no
-    # start-up hook, so a reader built there would simply not exist by the time a
-    # route asked for it. Building it here is safe because an HTTP client does not
-    # attach itself to a running loop until its first request.
+
     app.state.shipbob = ShipBobClient(
         httpx.AsyncClient(
             base_url=settings.shipbob_base_url,
@@ -92,10 +73,7 @@ def create_app(
         ),
         max_attempts=settings.shipbob_max_attempts,
     )
-    # The images an investigation looks at live at a storage address that has nothing
-    # to do with ShipBob's API, so they are fetched with a client of their own. Sharing
-    # ShipBob's would mean sending its credentials to a storage host, which is the kind
-    # of thing that only has to happen once to be a problem.
+
     app.state.evidence = EvidenceClient(
         httpx.AsyncClient(
             base_url=settings.shipbob_base_url,
@@ -111,8 +89,7 @@ def create_app(
     app.state.precedent_store = precedent_store or PrecedentStore(settings.database_path)
     app.state.report_store = report_store or ReportStore(settings.database_path)
     app.state.decision_store = DecisionStore(settings.database_path)
-    # The conversations of every investigation, kept for the life of the process so a
-    # send-back continues the investigation that wrote the report (FR-R.2).
+
     app.state.pass_threads = PassThreads()
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -12,7 +13,6 @@ A_LATER_MOMENT = datetime(2026, 1, 1, 9, 5, tzinfo=UTC)
 
 
 def test_a_run_that_did_nothing_leaves_an_empty_record() -> None:
-    """NFR-3: an empty ledger is an ordinary state, so a report can say so plainly."""
     ledger = RunLedger()
 
     assert ledger.entries() == ()
@@ -21,7 +21,6 @@ def test_a_run_that_did_nothing_leaves_an_empty_record() -> None:
 
 
 def test_each_step_is_written_down_in_the_order_it_happened() -> None:
-    """NFR-5: the record is ordered, so "what happened, and in what order" is answerable."""
     ledger = RunLedger()
 
     ledger.record(
@@ -45,7 +44,6 @@ def test_each_step_is_written_down_in_the_order_it_happened() -> None:
 
 
 def test_the_sequence_number_is_assigned_by_the_ledger() -> None:
-    """NFR-5: a caller cannot get the ordering wrong, because it does not supply it."""
     ledger = RunLedger()
 
     entry = ledger.record(
@@ -61,7 +59,6 @@ def test_the_sequence_number_is_assigned_by_the_ledger() -> None:
 
 
 def test_ordering_does_not_depend_on_a_clock() -> None:
-    """NFR-1: two runs of the same claim leave the same record, because no time is read here."""
     first = RunLedger()
     second = RunLedger()
     for ledger in (first, second):
@@ -73,13 +70,11 @@ def test_ordering_does_not_depend_on_a_clock() -> None:
             succeeded=True,
         )
 
-    # Identical, stamp included: the stamp is absent because nobody supplied one.
     assert first.entries() == second.entries()
     assert first.entries()[0].at is None
 
 
 def test_a_moment_is_recorded_only_when_the_caller_supplies_one() -> None:
-    """NFR-5: wall-clock time comes in from the edge, the way the pre-flight screen takes it."""
     ledger = RunLedger()
 
     ledger.record(
@@ -103,7 +98,6 @@ def test_a_moment_is_recorded_only_when_the_caller_supplies_one() -> None:
 
 
 def test_a_failed_step_stays_in_the_record() -> None:
-    """NFR-4: a run is not tidied up to look better than it was."""
     ledger = RunLedger()
 
     ledger.record(
@@ -122,7 +116,6 @@ def test_a_failed_step_stays_in_the_record() -> None:
 
 
 def test_the_failed_steps_can_be_read_on_their_own() -> None:
-    """NFR-3: "why is clarification needed?" is answerable from the record itself."""
     ledger = RunLedger()
 
     ledger.record(
@@ -141,12 +134,11 @@ def test_the_failed_steps_can_be_read_on_their_own() -> None:
     )
 
     assert [entry.sequence for entry in ledger.failures()] == [2]
-    # The successful steps are still there; nothing was moved out of the record.
+
     assert len(ledger) == 2
 
 
 def test_a_run_where_everything_worked_has_no_failures_to_report() -> None:
-    """NFR-3: silence in the failure list means every step worked, not that none were recorded."""
     ledger = RunLedger()
 
     ledger.record(
@@ -162,7 +154,6 @@ def test_a_run_where_everything_worked_has_no_failures_to_report() -> None:
 
 
 def test_the_record_handed_out_cannot_be_changed_from_outside() -> None:
-    """NFR-5: a record a later step could edit would not be evidence of anything."""
     ledger = RunLedger()
     ledger.record(
         kind=StepKind.TOOL_CALL,
@@ -176,13 +167,12 @@ def test_the_record_handed_out_cannot_be_changed_from_outside() -> None:
     assert isinstance(handed_out, tuple)
 
     with pytest.raises(ValidationError):
-        handed_out[0].observed = "Something else entirely."  # type: ignore[misc]
+        cast(Any, handed_out[0]).observed = "Something else entirely."
 
     assert ledger.entries()[0].observed == "Four images."
 
 
 def test_an_over_long_account_is_trimmed_rather_than_refused() -> None:
-    """NFR-4: a run must not fail over the wording of its own record."""
     ledger = RunLedger()
 
     entry = ledger.record(
@@ -195,14 +185,12 @@ def test_an_over_long_account_is_trimmed_rather_than_refused() -> None:
 
     assert len(entry.asked) == MAX_SUMMARY_CHARACTERS
     assert len(entry.observed) == MAX_SUMMARY_CHARACTERS
-    # Marked, so a reader can tell the sentence was cut short rather than being
-    # an odd thing for the system to have said.
+
     assert entry.asked.endswith("…")
     assert entry.observed.endswith("…")
 
 
 def test_an_account_that_already_fits_is_left_exactly_as_written() -> None:
-    """NFR-3: the words a representative reads are not tampered with unnecessarily."""
     ledger = RunLedger()
 
     entry = ledger.record(
@@ -218,7 +206,6 @@ def test_an_account_that_already_fits_is_left_exactly_as_written() -> None:
 
 
 def test_a_step_that_was_not_about_one_particular_thing_has_no_reference() -> None:
-    """NFR-3: a missing identifier means the step was not about one record, not that it is lost."""
     ledger = RunLedger()
 
     entry = ledger.record(
@@ -233,7 +220,6 @@ def test_a_step_that_was_not_about_one_particular_thing_has_no_reference() -> No
 
 
 def test_a_ledger_cannot_have_entries_removed_or_rewritten() -> None:
-    """NFR-5: append-only, so the record cannot be edited into something else."""
     ledger = RunLedger()
 
     assert not hasattr(ledger, "remove")
@@ -242,7 +228,6 @@ def test_a_ledger_cannot_have_entries_removed_or_rewritten() -> None:
 
 
 def test_every_run_gets_its_own_record() -> None:
-    """NFR-5: one ledger per run, so one line's steps never appear in another line's record."""
     first_line = RunLedger()
     second_line = RunLedger()
 

@@ -11,7 +11,6 @@ from claim_agent.domain.outcome import Recommendation
 from claim_agent.domain.reimbursement import CENTS, AmountDerivation
 from claim_agent.errors import ModelOutputRejectedError
 
-# How each of the four pieces of evidence is described to a merchant (FR-1.7).
 MISSING_EVIDENCE_WORDING: dict[EvidenceKind, str] = {
     EvidenceKind.INVOICE: "the invoice for this order, showing what was bought and what it cost",
     EvidenceKind.CUSTOMER_CONFIRMATION: (
@@ -22,11 +21,11 @@ MISSING_EVIDENCE_WORDING: dict[EvidenceKind, str] = {
         "a photo of the outer shipping box the order arrived in, damaged or not"
     ),
 }
-# The currency symbols a figure can be written with.
+
 _CURRENCY_SYMBOLS = r"$£€¥₹¢"
-# A figure written in digits, thousands separators and decimals included.
+
 _NUMBER = r"\d[\d,]*(?:\.\d+)?"
-# Numbers written as words, so "fifty-two dollars" is caught as well as "$52".
+
 _NUMBER_WORDS = (
     "zero",
     "one",
@@ -60,7 +59,7 @@ _NUMBER_WORDS = (
     "thousand",
     "million",
 )
-# Words that turn a number into an amount of money.
+
 _CURRENCY_WORDS = (
     r"dollars?",
     r"usd",
@@ -80,11 +79,10 @@ def _any_of(options: Sequence[str]) -> str:
     return "|".join(sorted(options, key=len, reverse=True))
 
 
-# A number written out in words, however many words it takes: "one hundred and fifty".
 _WRITTEN_NUMBER = (
     rf"(?:{_any_of(_NUMBER_WORDS)})(?:[\s-]+(?:and[\s-]+)?(?:{_any_of(_NUMBER_WORDS)}))*"
 )
-# Every shape money can take in text the model wrote, in the order they are searched.
+
 _MONEY_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(rf"[{_CURRENCY_SYMBOLS}]\s*{_NUMBER}"),
     re.compile(rf"{_NUMBER}\s*[{_CURRENCY_SYMBOLS}]"),
@@ -95,7 +93,7 @@ _MONEY_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(rf"\b(?:usd|eur|gbp|cad|aud|jpy)\s*{_NUMBER}", re.IGNORECASE),
     re.compile(rf"(?<![\d.{_CURRENCY_SYMBOLS}])\d[\d,]*\.\d{{2}}(?![\d.])"),
 )
-# Words that would tell a merchant this email is not the real thing.
+
 _DRAFT_MARKERS = (
     r"drafts?",
     r"drafted",
@@ -105,7 +103,7 @@ _DRAFT_MARKERS = (
     r"for\s+review",
     r"internal\s+use\s+only",
 )
-# The markers above as one search.
+
 _DRAFT_MARKER_PATTERN = re.compile(rf"\b(?:{'|'.join(_DRAFT_MARKERS)})\b", re.IGNORECASE)
 _REQUEST_WORD_PATTERN = re.compile(r"[a-z0-9]+(?:'[a-z]+)?", re.IGNORECASE)
 _REQUEST_STOP_WORDS = frozenset(
@@ -134,14 +132,14 @@ _REQUEST_STOP_WORDS = frozenset(
         "your",
     }
 )
-# Small wording normalization used only to avoid appending a request twice.
+
 _REQUEST_WORD_ALIASES = {
     "photograph": "photo",
     "photographs": "photo",
     "photos": "photo",
 }
 
-# A structured agent answer that carries merchant email wording.
+
 EmailWording = InvestigationConclusion | ClaimSplit | RevisionPlan
 
 
@@ -166,8 +164,6 @@ def finish_email(
     _refuse_wording_that_calls_itself_a_draft(conclusion)
 
     if recommendation.is_approval:
-        # Added last, deliberately: the figure is money-shaped, so the checks above have
-        # to see the model's own words and nothing else.
         body = f"{body.rstrip()}\n\nApproved amount: {_as_money(_payable(amount))}"
     elif recommendation is Recommendation.REQUEST_INFO:
         details = tuple(
@@ -182,9 +178,6 @@ def finish_email(
             isinstance(conclusion, InvestigationConclusion)
             and conclusion.recommendation is not Recommendation.REQUEST_INFO
         ):
-            # A rule can withhold the model's approval because merchant-fillable evidence
-            # is missing. Its approval wording is no longer suitable, so use a small
-            # deterministic request instead of telling the merchant they were approved.
             subject = "More information needed for your damage claim"
             body = "We need some additional information before we can complete your claim."
         missing_from_body = [detail for detail in details if not _request_is_covered(detail, body)]

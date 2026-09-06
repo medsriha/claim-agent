@@ -1,4 +1,3 @@
-/** One structured report a representative reads and decides on. */
 import { useState } from "react";
 
 import { approveReport, readReport, sendReportBack } from "../api/reportsClient";
@@ -13,7 +12,7 @@ type Busy = "approving" | "reworking" | null;
 
 interface ReportCardProps {
   report: Report;
-  /** Set when the structured findings arrived but could not be persisted. */
+
   unavailableReason: string | null;
 }
 
@@ -23,8 +22,7 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
   const [body, setBody] = useState(report.drafted_email?.body ?? "");
   const [feedback, setFeedback] = useState("");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  // What a representative would pay, as text. Never parsed, never added to anything: the
-  // service does the arithmetic and a second one here could disagree with it (FR-1.21).
+
   const [amount, setAmount] = useState(report.amount_usd ?? "");
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState<Busy>(null);
@@ -37,8 +35,7 @@ export function ReportCard({ report, unavailableReason }: ReportCardProps): Reac
   const payable =
     current.amount_usd !== null &&
     (current.recommendation === "approve" || current.recommendation === "approve_high_value");
-  // A changed figure is what the service reads as a correction and remembers against the
-  // merchant (FR-C.2). Compared as text, because these are figures and not numbers.
+
   const overridden = payable && amount.trim() !== "" && amount.trim() !== current.amount_usd;
 
   const act = async (what: Busy, run: () => Promise<Report>): Promise<void> => {
@@ -299,14 +296,6 @@ function ReadOnlyEmail({ email }: { email: DraftedEmail }): React.JSX.Element {
   );
 }
 
-/**
- * What a representative decided about this report, other than writing back.
- *
- * Sending one back is left out here on purpose: it is drawn as the conversation instead, and
- * printing the same sentence twice on one card is noise rather than a record. The service
- * still returns every action; nothing is filtered out of what it sends, only out of what this
- * one section draws.
- */
 function ReviewHistory({ reviews }: { reviews: readonly ReportReview[] }): React.JSX.Element | null {
   const decisions = reviews.filter((review) => review.action !== "sent_back");
   if (decisions.length === 0) {

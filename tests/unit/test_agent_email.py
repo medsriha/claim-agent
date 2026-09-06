@@ -25,7 +25,6 @@ def a_conclusion(
     body: str = "Hi there,\n\nWe have looked at your claim.\n\nThanks,\nShipBob Support",
     recommendation: Recommendation = Recommendation.APPROVE,
 ) -> InvestigationConclusion:
-    """Build the answer the model would have given, with only the wording that matters set."""
     return InvestigationConclusion(
         evidence=(),
         recommendation=recommendation,
@@ -36,16 +35,12 @@ def a_conclusion(
 
 
 def an_amount(usd: str) -> AmountDerivation:
-    """Build a worked-out amount for a single damaged bottle, priced from an invoice."""
     return AmountDerivation(
         components=(
             AmountComponent(
                 product_name="Liposomal Tripeptide Collagen",
                 quantity=1,
                 unit_price=Decimal(usd),
-                # This file is about substituting the figure, not about working it out,
-                # so the item refunds its whole price and the amount below is the figure
-                # under test.
                 sku="0180",
             ),
         ),
@@ -59,7 +54,6 @@ def an_amount(usd: str) -> AmountDerivation:
 
 
 def nothing_payable() -> AmountDerivation:
-    """Build the amount that comes back when nothing on the claim could be priced."""
     return AmountDerivation(
         components=(),
         items_total_usd=Decimal("0.00"),
@@ -72,7 +66,6 @@ def nothing_payable() -> AmountDerivation:
 
 
 def test_the_figure_is_added_by_code_after_the_models_wording() -> None:
-    """FR-1.21: the model writes no figure; code appends the checked one, to the cent."""
     conclusion = a_conclusion(body="We have approved your claim.")
 
     email = finish_email(
@@ -86,13 +79,6 @@ def test_the_figure_is_added_by_code_after_the_models_wording() -> None:
 
 
 def test_the_figure_never_passes_through_a_floating_point_number() -> None:
-    """NFR-2: money stays an exact decimal, so no cent can drift on its way to a merchant.
-
-    An amount of 1.005 is the case that tells the two apart. Held as an exact decimal
-    and rounded the way money is rounded, it is $1.01. Turned into a floating point
-    number first it becomes very slightly less than 1.005 and rounds down to $1.00,
-    which is a cent the merchant would never get back.
-    """
     conclusion = a_conclusion(body="We have approved your claim.")
 
     email = finish_email(
@@ -107,7 +93,6 @@ def test_the_figure_never_passes_through_a_floating_point_number() -> None:
 
 
 def test_an_email_is_still_written_when_the_case_has_no_contact_address() -> None:
-    """FR-2.7: the wording is worth having even when there is nobody to send it to yet."""
     conclusion = a_conclusion(body="We have approved your claim.")
 
     email = finish_email(
@@ -122,7 +107,6 @@ def test_an_email_is_still_written_when_the_case_has_no_contact_address() -> Non
 
 
 def test_every_finished_email_is_marked_unsent() -> None:
-    """FR-1.17: nothing this file produces can describe itself as already sent."""
     for recommendation in (Recommendation.APPROVE, Recommendation.REQUEST_INFO):
         amount = an_amount("52.00") if recommendation is Recommendation.APPROVE else None
         body = (
@@ -171,7 +155,6 @@ MONEY_THE_MODEL_MUST_NOT_WRITE = (
 
 @pytest.mark.parametrize("written", MONEY_THE_MODEL_MUST_NOT_WRITE)
 def test_money_the_model_wrote_is_recognised(written: str) -> None:
-    """FR-1.21: no monetary figure may be read out of model output, however it is written."""
     assert money_the_model_wrote(f"We will refund {written} to you.")
 
 
@@ -191,17 +174,10 @@ NUMBERS_THAT_ARE_NOT_MONEY = (
 
 @pytest.mark.parametrize("written", NUMBERS_THAT_ARE_NOT_MONEY)
 def test_ordinary_numbers_in_a_merchant_email_are_left_alone(written: str) -> None:
-    """FR-1.7: a good claim must not be sent to a person because the email counted bottles.
-
-    Quantities, dates, order numbers and product codes are what a useful merchant email
-    is made of. Reading any of them as a figure would refuse an email that is entirely
-    correct.
-    """
     assert money_the_model_wrote(written) == ()
 
 
 def test_an_email_carrying_a_figure_the_model_wrote_is_refused() -> None:
-    """FR-1.21: an invented figure is refused outright rather than corrected."""
     conclusion = a_conclusion(body="We will refund $52.00 for the damaged bottle.")
 
     with pytest.raises(ModelOutputRejectedError) as refusal:
@@ -216,7 +192,6 @@ def test_an_email_carrying_a_figure_the_model_wrote_is_refused() -> None:
 
 
 def test_a_figure_in_the_subject_line_is_refused_as_well() -> None:
-    """FR-1.21: a subject reaches a merchant exactly as a body does."""
     conclusion = a_conclusion(subject="Your claim CASE-1005: $52.00 approved")
 
     with pytest.raises(ModelOutputRejectedError) as refusal:
@@ -231,7 +206,6 @@ def test_a_figure_in_the_subject_line_is_refused_as_well() -> None:
 
 
 def test_the_figure_this_file_inserts_is_not_mistaken_for_the_models_own() -> None:
-    """FR-1.21: the search reads the model's words, and runs before the real figure goes in."""
     conclusion = a_conclusion(body="We have approved your claim.")
 
     email = finish_email(
@@ -258,7 +232,6 @@ WORDING_THAT_DESCRIBES_THE_EMAIL = (
 
 @pytest.mark.parametrize("written", WORDING_THAT_DESCRIBES_THE_EMAIL)
 def test_an_email_describing_itself_as_a_draft_is_recognised(written: str) -> None:
-    """FR-1.17: a marker inside the wording is a marker that can reach a merchant."""
     assert draft_markers_the_model_wrote(written)
 
 
@@ -271,16 +244,10 @@ WORDING_ABOUT_THE_CLAIM_RATHER_THAN_THE_EMAIL = (
 
 @pytest.mark.parametrize("written", WORDING_ABOUT_THE_CLAIM_RATHER_THAN_THE_EMAIL)
 def test_wording_about_the_claim_still_being_decided_is_allowed(written: str) -> None:
-    """FR-1.17: telling a merchant the claim is not settled is the honest thing to write.
-
-    The ban is on the email describing itself, not on the email saying a person has yet
-    to decide. Refusing these would refuse exactly the wording the requirement wants.
-    """
     assert draft_markers_the_model_wrote(written) == ()
 
 
 def test_an_email_that_calls_itself_a_draft_is_refused() -> None:
-    """FR-1.17, FR-2.7: a rep must read the exact words a merchant would get, and no others."""
     conclusion = a_conclusion(body="This is a draft. We will refund you shortly.")
 
     with pytest.raises(ModelOutputRejectedError) as refusal:
@@ -295,7 +262,6 @@ def test_an_email_that_calls_itself_a_draft_is_refused() -> None:
 
 
 def test_an_email_that_recommends_paying_but_has_no_amount_is_refused() -> None:
-    """FR-1.21: approval without a worked-out figure has nothing honest to write."""
     conclusion = a_conclusion(body="We have approved your claim.")
 
     with pytest.raises(ModelOutputRejectedError):
@@ -308,7 +274,6 @@ def test_an_email_that_recommends_paying_but_has_no_amount_is_refused() -> None:
 
 
 def test_an_approval_whose_amount_comes_to_nothing_is_refused() -> None:
-    """FR-1.21: a refund of no money is a fault upstream, not an email to send a merchant."""
     conclusion = a_conclusion(body="We have approved your claim.")
 
     with pytest.raises(ModelOutputRejectedError):
@@ -321,7 +286,6 @@ def test_an_approval_whose_amount_comes_to_nothing_is_refused() -> None:
 
 
 def test_the_capped_amount_is_added_after_the_models_wording() -> None:
-    """The model writes approval wording; code adds the exact amount after the cap."""
     conclusion = a_conclusion(body="We have approved your claim and a credit is on its way.")
 
     email = finish_email(
@@ -337,7 +301,6 @@ def test_the_capped_amount_is_added_after_the_models_wording() -> None:
 
 
 def test_a_request_that_needs_no_figure_is_finished_untouched() -> None:
-    """FR-1.7: the ordinary case, where the model asks for something and promises nothing."""
     conclusion = a_conclusion(
         body="Please send a photo of the outer shipping box.",
         recommendation=Recommendation.REQUEST_INFO,
@@ -356,7 +319,6 @@ def test_a_request_that_needs_no_figure_is_finished_untouched() -> None:
 
 
 def test_naturally_reworded_requests_are_not_appended_a_second_time() -> None:
-    """The safety net recognizes the same ask despite harmless wording differences."""
     details = (
         "A photograph of the outer box the order arrived in, even if it appears undamaged",
         "The two image files referenced in the customer's email about the L Carnitine, "
@@ -382,7 +344,6 @@ Once we have these, we will continue our review."""
 
 
 def test_a_genuinely_omitted_request_is_still_appended() -> None:
-    """Fuzzy duplicate detection must not weaken the complete-request guarantee."""
     missing = "a photograph of the damaged Blue Razz Liquid Carnitine"
 
     email = finish_email(
@@ -400,17 +361,13 @@ def test_a_genuinely_omitted_request_is_still_appended() -> None:
 
 
 def test_every_piece_of_evidence_has_merchant_facing_wording() -> None:
-    """FR-1.7: a request names the specific gap, so a fifth kind cannot arrive unworded."""
     assert set(MISSING_EVIDENCE_WORDING) == set(EvidenceKind)
     for wording in MISSING_EVIDENCE_WORDING.values():
-        # Each one has to drop into "this claim is missing ...", so it reads as a
-        # fragment of a sentence rather than as a sentence of its own.
         assert wording != ""
         assert wording[0].islower()
 
 
 def test_a_gap_is_named_rather_than_summed_up_as_more_information() -> None:
-    """FR-1.7: "a photo of the outer shipping box" is actionable; "more information" is not."""
     findings = (
         *(
             EvidenceFinding(kind=kind, state=State.PRESENT, observed="Seen.", attachment_id="a")
@@ -430,7 +387,6 @@ def test_a_gap_is_named_rather_than_summed_up_as_more_information() -> None:
 
 
 def test_an_unusable_photo_is_asked_for_again_alongside_a_missing_one() -> None:
-    """FR-1.7: a photo too dark to use is something the merchant can send again."""
     findings = (
         EvidenceFinding(kind=EvidenceKind.INVOICE, state=State.PRESENT, observed="Seen."),
         EvidenceFinding(
@@ -449,8 +405,6 @@ def test_an_unusable_photo_is_asked_for_again_alongside_a_missing_one() -> None:
         ),
     )
 
-    # Always in the fixed reporting order, whatever order the findings arrived in, so
-    # two requests to two merchants read the same way.
     assert name_what_is_missing(findings) == (
         MISSING_EVIDENCE_WORDING[EvidenceKind.CUSTOMER_CONFIRMATION],
         MISSING_EVIDENCE_WORDING[EvidenceKind.DAMAGED_PRODUCT_PHOTO],
@@ -458,7 +412,6 @@ def test_an_unusable_photo_is_asked_for_again_alongside_a_missing_one() -> None:
 
 
 def test_evidence_we_could_not_read_ourselves_is_never_asked_for() -> None:
-    """FR-1.7: a merchant cannot act on our own download failing, so they are not asked to."""
     findings = (
         *(
             EvidenceFinding(kind=kind, state=State.PRESENT, observed="Seen.", attachment_id="a")
@@ -477,7 +430,6 @@ def test_evidence_we_could_not_read_ourselves_is_never_asked_for() -> None:
 
 
 def test_nothing_is_asked_for_when_all_four_pieces_of_evidence_are_in_hand() -> None:
-    """FR-1.6: a complete claim has no gaps, and an empty request is not sent."""
     findings = tuple(
         EvidenceFinding(kind=kind, state=State.PRESENT, observed="Seen.", attachment_id="a")
         for kind in REQUIRED_EVIDENCE
@@ -487,7 +439,6 @@ def test_nothing_is_asked_for_when_all_four_pieces_of_evidence_are_in_hand() -> 
 
 
 def test_the_same_wording_always_finishes_the_same_way() -> None:
-    """NFR-1: nothing here reads a clock or a model, so two runs agree."""
     conclusion = a_conclusion(body="We have approved your claim.")
 
     first = finish_email(

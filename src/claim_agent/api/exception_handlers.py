@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -11,11 +13,11 @@ logger = get_logger(__name__)
 
 async def handle_claim_agent_error(_: Request, exc: Exception) -> JSONResponse:
     """Render a deliberate failure using the status and code it carries."""
-    assert isinstance(exc, ClaimAgentError)  # noqa: S101 — registered for this type only
-    logger.warning("request_failed", code=exc.code, message=exc.message, details=exc.details)
+    error = cast(ClaimAgentError, exc)
+    logger.warning("request_failed", code=error.code, message=error.message, details=error.details)
     return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": {"code": exc.code, "message": exc.message, "details": exc.details}},
+        status_code=error.status_code,
+        content={"error": {"code": error.code, "message": error.message, "details": error.details}},
     )
 
 

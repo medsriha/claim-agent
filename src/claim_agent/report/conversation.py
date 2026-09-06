@@ -60,12 +60,7 @@ _COULD_NOT_READ_THE_CLAIM = (
     "This claim's records could not be read from ShipBob, so I could not answer properly and "
     "nothing in the report has changed. Send it back again to try once more."
 )
-"""What a representative is told when the claim cannot be re-read.
-
-Written as the agent would say it, because from where they sit it *is* the agent answering.
-It names what they can do next, because being told only that something failed leaves somebody
-stuck (NFR-4).
-"""
+"""What a representative is told when the claim cannot be re-read."""
 
 _NO_MODEL = (
     "The model that would answer you could not be reached, so nothing in this report has "
@@ -89,28 +84,7 @@ async def answer_the_representative(
     threads: PassThreads | None = None,
     events: EventStream | None = None,
 ) -> Report:
-    """Give a representative's message to the agent, and write down what came back.
-
-    Args:
-        parked: The report as it stands, with their message already recorded on it.
-        feedback: What they said, in their own words, kept exactly as written.
-        at: When this is happening. Handed in rather than read from a clock, so the same
-            message writes the same version twice (NFR-1).
-        shipbob: Reads the case, parcel and order only when the message changes findings.
-        evidence: Reads images and prices the shipment only for a full findings rework.
-        fetcher: Downloads an image only when a full findings rework needs to inspect it.
-        models: A way to build the models, asked for only once there is something to answer.
-        memory: What a representative has corrected for this merchant, read again when a claim
-            is investigated afresh.
-        precedent_store: The closed claims this service has handled (FR-S.5).
-        policy: The thresholds this claim is judged by (FR-0.7).
-        threads: The conversations of investigations this process has run. An investigated
-            report is answered by continuing its own investigation's thread where that is
-            still held (FR-R.2). `None` keeps no threads.
-
-    Returns:
-        The next version of the report. Never raises for anything that can happen to a claim.
-    """
+    """Give a representative's message to the agent, and write down what came back."""
     active_events = events if events is not None else EventStream()
     await active_events.emit(
         EventKind.REVISION_STARTED,
@@ -243,17 +217,7 @@ async def _ask_the_agent(
     threads: PassThreads | None,
     events: EventStream,
 ) -> ClaimFindingsRevision | ClaimRevision | EmailRevision | AnswerRevision:
-    """Put the message to the agent, in the shape this kind of report calls for.
-
-    The three shapes are genuinely different questions, which is why they are three prompts
-    rather than one with branches in it: what an investigated claim's report may become, what
-    an unsettled claim may become, and what a stopped claim may become have almost nothing in
-    common.
-
-    `chat` is only used by the findings rework, which runs the tool-use loop. The other two ask
-    one question and hold no tools, because there is nothing they could look at that would
-    change their answer.
-    """
+    """Put the message to the agent, in the shape this kind of report calls for."""
     content = parked.content
 
     if isinstance(content, InvestigationReportContent):
@@ -272,11 +236,6 @@ async def _ask_the_agent(
                 case=record.case,
                 lines=content.lines,
                 policy=policy,
-                # The three that describe the parcel, exactly as a first pass supplies them.
-                # The report has settled all four by now, and handing over the fourth would
-                # make a rework search on a different pattern from the investigation that
-                # preceded it — so the same claim could be shown different past claims for no
-                # stated reason.
                 shared_evidence=tuple(
                     finding for finding in content.evidence if finding.kind in SHARED_EVIDENCE
                 ),
@@ -349,23 +308,7 @@ async def _look_into_what_they_settled(
     threads: PassThreads | None,
     events: EventStream,
 ) -> Report:
-    """Look into the products a representative just named, and nothing else (FR-1a.4).
-
-    **This is what a representative naming a product should cost: one pass.** The heavy
-    alternative — investigating the whole claim again — re-reads every image, re-splits the
-    claim and re-judges everything, and on a claim nobody could split it very often comes back
-    unable to split it a second time. A representative who has just answered that exact
-    question should not be made to wait for the system to fail at it again.
-
-    So their answer is turned straight into claim lines, matched against the order the way the
-    split would have matched them, and the claim is investigated with all of them in hand.
-    Their instruction travels with it: if they said to pay the claim, the run comes back
-    approved, with the figure, because the rules that would withhold it encode the agent's
-    uncertainty and they have just corrected it.
-
-    The findings become this report's next version, so the conversation that produced them
-    stays attached (FR-R.13).
-    """
+    """Look into the products a representative just named, and nothing else (FR-1a.4)."""
     lines = build_claim_lines(
         parked.case_id,
         tuple(
@@ -388,8 +331,6 @@ async def _look_into_what_they_settled(
         precedent=precedent_for_claim(
             store=precedent_store, case=record.case, lines=lines, policy=policy
         ),
-        # No thread to continue: a claim nobody could split was never investigated. The
-        # pass starts one, so the rounds that follow it can.
         threads=threads,
     )
 
@@ -401,8 +342,6 @@ async def _look_into_what_they_settled(
     )
 
     if looked_into.findings is None:
-        # The run could not answer. Their message is still recorded and answered, and the
-        # report keeps the clarification it had, so they can try again (NFR-4).
         return build_revised_report(
             parked,
             answered.model_copy(update={"reply": _also(answered.reply, looked_into.reply)}),
@@ -440,17 +379,7 @@ async def _pay_the_report_as_directed(
     policy: Policy,
     events: EventStream,
 ) -> Report:
-    """Approve an investigated report because the representative said to (FR-2.8).
-
-    **This is what an approval should cost: one invoice read.** The report already names its
-    products and holds everything the investigation established; the representative has read
-    it and decided. Investigating it again to confirm what they said would make them wait for
-    the system to agree with them, and the findings it came back with would be theirs anyway.
-
-    So the products are priced from the invoice, every finding is carried forward as it
-    was, and the approval email is finished with the figure. The rules that would have
-    withheld the payment are recorded as waived on the report, not silently dropped.
-    """
+    """Approve an investigated report because the representative said to (FR-2.8)."""
     content = parked.content
     if not isinstance(content, InvestigationReportContent):
         raise TypeError("Only an investigated report can be approved as it stands.")
@@ -501,17 +430,7 @@ async def _pay_what_they_settled(
     policy: Policy,
     events: EventStream,
 ) -> Report:
-    """Pay the products a representative just named, because they said to (FR-1a.4, FR-2.8).
-
-    A representative who names the product *and* says to pay it has settled everything the
-    clarification report was waiting on. Looking into the product anyway — reading its
-    photographs, judging it — would only be the system checking their answer, and on a
-    claim nobody could split it is the slow route to a report that says what they said.
-
-    So their answer is turned straight into claim lines, priced from the invoice, and
-    written up as an approved report with the email finished. Nothing about the evidence
-    is established, and the report says so plainly rather than pretending otherwise.
-    """
+    """Pay the products a representative just named, because they said to (FR-1a.4, FR-2.8)."""
     lines = build_claim_lines(
         parked.case_id,
         tuple(
@@ -577,13 +496,7 @@ def _what_a_directed_payment_changed(paid: ClaimFindings) -> tuple[str, ...]:
 def _nothing_established_yet(
     lines: Sequence[ClaimLine], parked: Report, *, ambiguity: str | None
 ) -> ReportUnderReview:
-    """The claim to look into, with an honest account of what is known about it: nothing.
-
-    A claim nobody could split was never investigated, so there are no findings to carry
-    forward and no figure to start from. Saying that plainly is better than seeding the run
-    with a blank report that looks like one somebody produced — the run reads what it is given
-    as a record of what was seen, and there is nothing to have seen.
-    """
+    """The claim to look into, with an honest account of what is known about it: nothing."""
     return ReportUnderReview(
         lines=tuple(lines),
         context=_context_of(parked),
@@ -625,25 +538,7 @@ async def _investigate_the_claim_again(
     threads: PassThreads | None,
     events: EventStream,
 ) -> Report:
-    """Investigate the claim again, because the representative asked for it.
-
-    This is the slow route from a claim nobody could divide into products to a report somebody
-    can approve. It is a real investigation, not a rewording: the evidence is read again, the
-    claim is split again, and the products are judged on what is actually in the photographs —
-    which is the only way a figure can exist at all (FR-1.21).
-
-    **What the representative said reaches it as a correction against the merchant**, written
-    the moment they sent the report back (FR-R.14), and read back here as starting context
-    (FR-0.5). So the split is settled by their words without any new path being invented for
-    them: the same channel that improves the merchant's *next* claim improves this one.
-
-    A claim that fails the quick checks on the way through is possible in principle — the
-    thresholds can change between one screening and the next (FR-0.7) — and produces nothing
-    new, so the report is carried through with the agent's reply and nothing else.
-
-    Returns:
-        The report's next version, carrying whatever the investigation established.
-    """
+    """Investigate the claim again, because the representative asked for it."""
     try:
         screening = await run_preflight(
             case_id=parked.case_id,
@@ -701,27 +596,7 @@ def _findings_became_the_next_version(
     at: UtcDatetime,
     reinvestigated: bool = True,
 ) -> Report:
-    """Make freshly investigated findings the next version of the report they replace.
-
-    **Writing them as version 1 instead would be the destructive mistake.** Every build
-    produces a version 1 under the claim's own report name, and writing that would land on top
-    of the version the representative was looking at, taking its conversation and the record of
-    what has already been decided on it with it (FR-R.13, FR-C.1).
-
-    So the version, the conversation and the review history come from the report that was sent
-    back, and everything the investigation established comes from the build. The two halves are
-    copied together, because a report whose recommendation disagreed with its own content could
-    be written down and then never read back.
-
-    **That last sentence is the whole reason for the guard below.** Copying fields onto a report
-    does not re-run the checks that a report is internally consistent — those run when one is
-    built, and when one is read out of the store. So an impossible combination written here
-    would be stored successfully and blow up later, when a representative asked for the report
-    back. A claim the quick checks stopped is the one combination the checks forbid: it has no
-    products, and findings about products cannot be folded into it. It is unreachable today,
-    because a stopped claim is never investigated, and it is refused rather than trusted to
-    stay that way.
-    """
+    """Make freshly investigated findings the next version of the report they replace."""
     revised = build_revised_report(
         parked, revision, feedback=feedback, at=at, reinvestigated=reinvestigated
     )
@@ -741,15 +616,7 @@ def _findings_became_the_next_version(
 
 
 def _what_it_produced(built: Report) -> str:
-    """One sentence saying what investigating the claim actually turned up.
-
-    **The agent's reply is written before the investigation runs**, so on its own it can only
-    say what is about to happen. Left at that, a representative reads "I am investigating this
-    again", waits, and then has to work out from the report whether anything came of it —
-    which is exactly what made the first version of this read as broken.
-
-    So the outcome is added afterwards, by code, because code is the only thing that knows it.
-    """
+    """One sentence saying what investigating the claim actually turned up."""
     if not built.product_names:
         return (
             "I had the claim investigated again, and it still could not establish which "
@@ -769,22 +636,12 @@ def _also(reply: str, added: str) -> str:
 
 
 def _only_a_reply(parked: Report, said: str, *, feedback: str, at: UtcDatetime) -> Report:
-    """The next version of a report that nothing could change, carrying what was said.
-
-    Used where the agent was never reached at all. The report keeps every finding it had and
-    the representative is told why, so they can send it back again or decide on it as it
-    stands (NFR-4).
-    """
+    """The next version of a report that nothing could change, carrying what was said."""
     return build_revised_report(parked, AnswerRevision(reply=said), feedback=feedback, at=at)
 
 
 def what_has_been_said(report: Report) -> tuple[EarlierExchange, ...]:
-    """Every earlier round of this report going back and forth, oldest first (FR-R.12).
-
-    Empty the first time, which is the usual case. From the second onwards it is what stops the
-    agent undoing an earlier correction while answering a later one — the only thing that
-    distinguishes one pass from the next, since it is the same agent every time.
-    """
+    """Every earlier round of this report going back and forth, oldest first (FR-R.12)."""
     return tuple(
         EarlierExchange(feedback=turn.feedback, reply=turn.reply, changed=turn.changed)
         for turn in report.revisions

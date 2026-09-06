@@ -20,12 +20,10 @@ BEST_PAW_NUTRITION = "334430"
 
 @pytest.fixture
 def database(tmp_path: Path) -> Path:
-    """This test's own throwaway database file."""
     return tmp_path / "claims.db"
 
 
 def fill_every_store(database: Path) -> None:
-    """Put one record in each of the four stores, so emptying them has something to remove."""
     MerchantMemory(database).record_correction(
         MerchantCorrection(
             user_id=BEST_PAW_NUTRITION,
@@ -40,7 +38,6 @@ def fill_every_store(database: Path) -> None:
 
 
 def test_everything_the_service_remembers_goes_in_one_call(database: Path) -> None:
-    """A demonstration starts fresh only if every store starts empty, not just the corrections."""
     fill_every_store(database)
 
     cleared = empty_every_store(database)
@@ -58,7 +55,6 @@ def test_everything_the_service_remembers_goes_in_one_call(database: Path) -> No
 
 
 def test_every_version_of_a_report_goes_not_only_the_latest(database: Path) -> None:
-    """FR-R.13: the back-and-forth *is* the earlier versions, so leaving them is leaving it."""
     reports = ReportStore(database)
     reports.record(a_report(version=1))
     reports.record(a_report(version=2))
@@ -70,7 +66,6 @@ def test_every_version_of_a_report_goes_not_only_the_latest(database: Path) -> N
 
 
 def test_a_forgotten_past_claim_is_no_longer_found_by_a_search(database: Path) -> None:
-    """The words a claim is found by live apart from the claim, and would outlive it."""
     store = PrecedentStore(database)
     store.record(a_record())
 
@@ -82,7 +77,6 @@ def test_a_forgotten_past_claim_is_no_longer_found_by_a_search(database: Path) -
 def test_emptying_a_machine_that_has_never_run_the_service_answers_with_zeroes(
     database: Path,
 ) -> None:
-    """All zeroes is an ordinary answer: there was nothing there, which is not a failure."""
     cleared = empty_every_store(database)
 
     assert (cleared.corrections, cleared.reports, cleared.decisions, cleared.past_claims) == (
@@ -94,7 +88,6 @@ def test_emptying_a_machine_that_has_never_run_the_service_answers_with_zeroes(
 
 
 def test_a_store_that_cannot_be_reached_fails_loudly_and_removes_nothing(tmp_path: Path) -> None:
-    """NFR-4: a database that will not open must not read as a system that had nothing in it."""
     blocking_file = tmp_path / "in-the-way"
     blocking_file.write_text("not a directory")
 

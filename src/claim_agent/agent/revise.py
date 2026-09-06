@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import replace
+from typing import TypeVar
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, ConfigDict
 
 from claim_agent.agent.budget import RunBudget
@@ -43,7 +45,7 @@ from claim_agent.domain.evidence import EvidenceFinding
 from claim_agent.domain.models import Attachment, DraftedEmail
 from claim_agent.domain.outcome import Recommendation
 from claim_agent.domain.reimbursement import AmountDerivation
-from claim_agent.errors import ClaimAgentError
+from claim_agent.errors import ClaimAgentError, ModelAnswerDidNotFitError
 from claim_agent.observability import get_logger
 from claim_agent.policy import Policy
 from claim_agent.preflight.models import CaseRecord, ClaimContext
@@ -52,18 +54,55 @@ from claim_agent.storage.precedent_store import PrecedentSet
 
 logger = get_logger(__name__)
 
-# What the run is asked once it has stopped looking at things.
+
+AnyForm = TypeVar("AnyForm", bound=BaseModel)
+
+
 CLOSING_REQUEST = (
     "Now give the reworked report for this claim: all four pieces of evidence, the four "
     "questions where the evidence is there, every product that should be paid for, your next "
     "action, the merchant email where that action addresses them, what you changed, what you "
     "left alone, and your reply to the representative."
 )
-# What a representative is told when the run did not reach an answer.
+
 _COULD_NOT_REWORK = (
     "This report could not be reworked, so nothing in it has changed. Send it back again to "
     "try once more, or decide on it as it stands."
 )
+
+
+async def _ask_once_more_if_it_did_not_fit(
+    structured: StructuredModel,
+    form: type[AnyForm],
+    messages: list[BaseMessage],
+    *,
+    events: EventStream,
+) -> AnyForm:
+    """Ask for a form, and when the answer does not fit, ask once more saying what was wrong."""
+    try:
+        return await structured.ask(form, messages)
+    except ModelAnswerDidNotFitError as did_not_fit:
+        logger.info("reply_repair_asked", form=form.__name__, problems=did_not_fit.problems)
+        await events.emit(
+            EventKind.THINKING,
+            "The answer did not fit the form; asking once more with what was wrong.",
+        )
+        problems = "\n".join(f"- {problem}" for problem in did_not_fit.problems)
+        return await structured.ask(
+            form,
+            [
+                *messages,
+                HumanMessage(
+                    content=(
+                        "Your previous answer did not fit the form, for these reasons:\n"
+                        f"{problems}\n\n"
+                        "Answer the same question again, filling in the same form exactly. "
+                        "Lists are lists of short strings, one item each; leave a list empty "
+                        "rather than writing it as a sentence, and add no fields of your own."
+                    )
+                ),
+            ],
+        )
 
 
 class ReportUnderReview(BaseModel):
@@ -116,12 +155,7 @@ class EmailRevision(Reply):
 
 
 class DirectedApproval(Reply):
-    """The representative told the agent to approve the report as it stands (FR-2.8).
-
-    Nothing on the report changes here. The caller prices its products from the invoice
-    and finishes the approval email with what is carried in `directed`; this is the reply
-    and the instruction, kept together so the words the agent said reach the report.
-    """
+    """The representative told the agent to approve the report as it stands (FR-2.8)."""
 
     directed: DirectedPayment
 
@@ -151,11 +185,7 @@ class ClaimRevision(Reply):
 
     @property
     def reworked(self) -> bool:
-        """Whether anything about the report actually changed.
-
-        A directed payment counts: the report stops asking and starts recommending, once
-        the settled products have been priced.
-        """
+        """Whether anything about the report actually changed."""
         return (
             self.recommendation is not None
             or self.ambiguity is not None
@@ -172,18 +202,14 @@ async def plan_report_reply(
     structured: StructuredModel,
     events: EventStream,
 ) -> AnswerRevision | EmailRevision | DirectedApproval | None:
-    """Answer cheaply when the stored report suffices; return none when evidence must be reworked.
-
-    A `DirectedApproval` means the representative told the agent to approve the claim as it
-    stands. Nothing about the evidence needs looking at again for that: the caller prices the
-    report's products and drafts the email, with the wording carried here (FR-2.8).
-    """
+    """Answer cheaply when the stored report suffices; return none when evidence must be reworked."""
     await events.emit(
         EventKind.THINKING,
         "Checking whether this message requires another evidence review.",
     )
     try:
-        plan = await structured.ask(
+        plan = await _ask_once_more_if_it_did_not_fit(
+            structured,
             RevisionPlan,
             build_revision_plan_messages(
                 claim_lines=under_review.lines,
@@ -196,6 +222,7 @@ async def plan_report_reply(
                 feedback=feedback,
                 conversation=under_review.conversation,
             ),
+            events=events,
         )
     except ClaimAgentError as failure:
         return AnswerRevision(reply=f"{failure.message} {_COULD_NOT_REWORK}")
@@ -264,24 +291,9 @@ async def rework_claim_findings(
     threads: PassThreads | None = None,
     thread_id: str | None = None,
 ) -> ClaimFindingsRevision:
-    """Rework a claim's report around what a representative said (FR-R.1 to FR-R.11).
-
-    Two ways in, and the first is the one this exists for. When the investigation that
-    wrote the report is still held as a thread, the rework **continues that conversation**:
-    the note is appended after everything the investigation saw and said, and the model
-    answers from its own work — no image is re-read, no tool result is retold (FR-R.2).
-    When the thread is gone — a restart, or a report written before threads existed — the
-    rework rebuilds its context from the report, exactly as it always did, and starts a
-    thread of its own so the next round can continue.
-
-    Args:
-        threads: The registry of conversations, or `None` to keep none.
-        thread_id: The thread the report says it came from, or `None` when it names none.
-    """
+    """Rework a claim's report around what a representative said (FR-R.1 to FR-R.11)."""
     lines = under_review.lines
-    # One budget and one record per run, built here rather than taken as arguments, so a
-    # rework can never end up sharing an allowance with the investigation that preceded it
-    # (FR-1.3).
+
     budget = RunBudget(policy)
     ledger = RunLedger()
     cache = ObservationCache()
@@ -360,9 +372,6 @@ async def rework_claim_findings(
     investigated = settle_conclusion(
         replace(outcome, answer=reworked),
         lines=lines,
-        # Nothing is pinned from the claim's shared evidence, which is the point of a
-        # rework: FR-R.5's own example of feedback is a correction to a shared finding, and
-        # pinning them would make that the one correction impossible to make.
         shared_evidence=(),
         invoice=invoice,
         policy=policy,
@@ -403,13 +412,7 @@ async def rework_claim_findings(
 async def _thread_for_the_rework(
     threads: PassThreads | None, *, thread_id: str | None, case_id: str
 ) -> tuple[PassThread | None, bool]:
-    """Pick the thread a rework writes to, and say whether it continues an earlier one.
-
-    Continues the report's own thread when the registry still holds it. Otherwise a fresh
-    thread is started for this rework, so that *its* successor can continue it, and the
-    caller is told to rebuild the context from the report. No registry means no thread at
-    all, which is the pass exactly as it was before threads existed.
-    """
+    """Pick the thread a rework writes to, and say whether it continues an earlier one."""
     if threads is None:
         return None, False
     if thread_id is not None and await threads.remembers(thread_id):
@@ -494,7 +497,8 @@ async def rework_claim_report(
     )
 
     try:
-        answered = await structured.ask(
+        answered = await _ask_once_more_if_it_did_not_fit(
+            structured,
             RevisedClaimReport,
             build_claim_revision_messages(
                 case=case_record.case,
@@ -509,6 +513,7 @@ async def rework_claim_report(
                 feedback=feedback,
                 conversation=conversation,
             ),
+            events=events,
         )
     except ClaimAgentError as failure:
         return _a_reply_that_could_not_be_written(failure, case_id=case_record.case.case_id)
@@ -521,9 +526,6 @@ async def rework_claim_report(
     )
 
     if answered.representative_directed_payment and answered.settled_products:
-        # The representative named what to pay for and said to pay it. The email fields
-        # hold the approval wording rather than a request, so nothing below applies: the
-        # caller prices the products and finishes that email with the figure (FR-2.8).
         return ClaimRevision(
             **said.model_dump(),
             settled=answered.settled_products,
@@ -535,9 +537,6 @@ async def rework_claim_report(
         )
 
     if answered.representative_directed_payment:
-        # They said to pay, but not what. Nothing can be priced, so the report asks them
-        # which product — and keeps the approval draft they can adjust while it waits,
-        # rather than pushing back with nothing in hand (FR-2.8).
         return ClaimRevision(
             **said.model_dump(exclude={"needs_reply"}),
             needs_reply=True,
@@ -549,9 +548,6 @@ async def rework_claim_report(
         )
 
     if not _anything_to_change(answered):
-        # The agent answered without changing the report — a question, or a request to
-        # investigate instead. Filling in what the model left blank would drop a merchant
-        # email nobody asked to drop.
         return ClaimRevision(
             **said.model_dump(),
             settled=answered.settled_products,
@@ -561,9 +557,7 @@ async def rework_claim_report(
     email = _the_merchant_email(
         answered, contact_email=case_record.case.contact_email, existing=drafted_email
     )
-    # A claim that names no product can only ever ask for something. It cannot recommend
-    # paying, because nothing on it has been priced, and the rules that would withhold such a
-    # recommendation are in a function that needs a product to run at all (FR-1a.4).
+
     asks_the_merchant = bool(answered.requested_details) and email is not None
     return ClaimRevision(
         **said.model_dump(),
@@ -574,9 +568,6 @@ async def rework_claim_report(
         ),
         ambiguity=answered.ambiguity,
         requested_details=answered.requested_details,
-        # Nothing goes to a merchant who is not being asked for anything. A report that asks a
-        # representative to resolve something carries no merchant wording (FR-2.7), except
-        # the approval draft kept for a payment they directed, handled above.
         email=email if asks_the_merchant else None,
         settled=answered.settled_products,
         reinvestigate=answered.needs_fresh_investigation,
@@ -601,7 +592,8 @@ async def rework_screening_report(
     )
 
     try:
-        answered = await structured.ask(
+        answered = await _ask_once_more_if_it_did_not_fit(
+            structured,
             RevisedClaimReport,
             build_screening_revision_messages(
                 case=case_record.case,
@@ -611,6 +603,7 @@ async def rework_screening_report(
                 feedback=feedback,
                 conversation=conversation,
             ),
+            events=events,
         )
     except ClaimAgentError as failure:
         return _a_reply_that_could_not_be_written(failure, case_id=case_record.case.case_id)
@@ -627,9 +620,6 @@ async def rework_screening_report(
         changed=answered.changed,
         left_unchanged=answered.left_unchanged,
         needs_reply=answered.needs_more_from_representative,
-        # Dropped rather than merely discouraged: a stopped claim recommends nothing, asks
-        # the merchant for nothing, and is never investigated again, whatever the model
-        # wrote (FR-0.6, FR-R.8).
         email=reworded if reworded != drafted_email else None,
     )
 

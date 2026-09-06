@@ -1,16 +1,3 @@
-/**
- * One claim threshold on the policy panel: what it is called, what it means, and the
- * control that changes it.
- *
- * Which control appears is decided by the `kind` the service sent, never by the name of
- * the value or by anything this screen knows about claims. Add a threshold to the policy
- * and it turns up here with the right control and the service's own explanation under it.
- *
- * Nothing here judges a value. What is typed is sent as typed, and the service is the only
- * thing that decides whether a value is allowed — including whether it is a number at all,
- * which is why every box is an ordinary text box rather than a number box that would round
- * or reject on its own.
- */
 import { humanise } from "../display";
 import type { PolicyValue } from "../api/policyTypes";
 import type { ValueProblem } from "../api/failure";
@@ -18,7 +5,6 @@ import type { ValueProblem } from "../api/failure";
 const INTERNAL_REQUIREMENT_REFERENCES =
   /\s*\((?:N?FR-[A-Za-z0-9.]+)(?:,\s*N?FR-[A-Za-z0-9.]+)*\)/g;
 
-/** Keep implementation bookkeeping out of the representative-facing policy copy. */
 function displayDescription(description: string): string {
   return description
     .replace(INTERNAL_REQUIREMENT_REFERENCES, "")
@@ -28,13 +14,13 @@ function displayDescription(description: string): string {
 }
 
 interface PolicyValueRowProps {
-  /** The value as the panel currently holds it, including anything typed into it. */
+
   value: PolicyValue;
-  /** The service's complaints about this value, if it refused a change to it. */
+
   problems: readonly ValueProblem[];
-  /** True while a request is in flight, so the controls can be held still. */
+
   busy: boolean;
-  /** Called with the whole value, edited. Never called with a different kind. */
+
   onChange: (value: PolicyValue) => void;
 }
 
@@ -52,9 +38,7 @@ export function PolicyValueRow({
         <label className="policy-value-name" htmlFor={controlId}>
           {humanise(value.name)}
         </label>
-        {/* The service's own flag: this is what is in force, and it is no longer what the
-            service started with. A box that has been typed into but not saved is not
-            marked here — the save button is what says that. */}
+
         {value.changed && <span className="policy-value-changed">Changed</span>}
       </div>
 
@@ -75,8 +59,6 @@ export function PolicyValueRow({
         </label>
       )}
 
-      {/* Picked, not typed. The service says which values work this way and supplies the
-          choices, so the panel never holds a list of claim types of its own. */}
       {value.kind === "choice" && (
         <select
           id={controlId}

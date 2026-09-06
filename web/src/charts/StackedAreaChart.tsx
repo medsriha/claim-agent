@@ -1,13 +1,3 @@
-/**
- * How a whole was divided up, week by week, as bands stacked on one another.
- *
- * The bands are drawn in one hue getting darker, because what they show is *ordered*: how far a
- * representative went in changing what was recommended, from not at all to sending it back. A
- * reader should see the order in the colour rather than have to learn four unrelated ones.
- *
- * Each band's top edge arrives already added up by the service, so nothing here sums two shares
- * together. Four shares that must come to exactly one are not something to trust a browser with.
- */
 import { ChartFrame } from "./ChartFrame";
 import type { Surface, TipRow } from "./ChartFrame";
 import { PLOT, bandPath, bottom, crisp, left, right, scaleX } from "./plot";
@@ -15,7 +5,7 @@ import type { StackedChart } from "../api/analysisTypes";
 
 interface StackedAreaChartProps {
   chart: StackedChart;
-  /** One theme token per band, palest first. */
+
   tokens: readonly string[];
   height: number;
 }
@@ -66,7 +56,6 @@ export function StackedAreaChart({
   );
 }
 
-/** The week a position belongs to, in the service's own words. */
 function weekLabel(chart: StackedChart, index: number): string {
   return chart.bands[0]?.points[index]?.label ?? "";
 }

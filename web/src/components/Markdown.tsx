@@ -1,36 +1,9 @@
-/**
- * Showing text the way it was written, when what wrote it writes markdown.
- *
- * The investigation's own remarks arrive as plain text, and a model writing plain text
- * writes markdown without being asked: a dash at the start of a line for a bullet, `**`
- * around a word it wants stressed, backticks around an identifier. Printed as one
- * unbroken line, that reads as a paragraph with stray punctuation in it, and the list the
- * model wrote stops looking like a list.
- *
- * So this reads the small part of markdown a model actually writes — headings, bullet and
- * numbered lists, code blocks, bold, italics, inline code — and draws each piece as the
- * thing it describes.
- *
- * **It adds nothing and removes nothing.** Every character that arrived is shown. Anything
- * this does not recognise, including markdown it has never heard of, is shown exactly as
- * it was written rather than guessed at or dropped — an odd-looking sentence can still be
- * read, while a missing one cannot.
- *
- * **Nothing here becomes markup.** Each piece of the text is turned into an element
- * directly and the text is never handed to the browser as HTML, so text that looks like
- * markup puts those characters on screen and can do nothing else.
- *
- * Links are deliberately not read. One written as markdown shows as the characters that
- * were typed, because deciding where it is safe to send somebody is a decision worth
- * making on purpose rather than in passing.
- */
-
 import { Fragment } from "react";
 
 interface MarkdownProps {
-  /** The text as it was written. */
+
   text: string;
-  /** A class for the element everything is drawn inside. */
+
   className?: string;
 }
 
@@ -45,12 +18,6 @@ export function Markdown({ text, className }: MarkdownProps): React.JSX.Element 
   );
 }
 
-/**
- * One run of lines that means one thing on screen.
- *
- * A paragraph keeps its lines apart rather than joining them: a model that put a line
- * break in meant it, and running the lines together is the thing this file exists to stop.
- */
 type Block =
   | { readonly kind: "paragraph"; readonly lines: string[] }
   | { readonly kind: "heading"; readonly level: number; readonly text: string }
@@ -287,10 +254,10 @@ function Heading({ level, text }: { level: number; text: string }): React.JSX.El
 const INLINE = new RegExp(
   [
     "`([^`]+)`", // `code`
-    "\\*\\*(\\S(?:[^*]*\\S)?)\\*\\*", // **bold**
-    "\\*(\\S(?:[^*]*\\S)?)\\*", // *italic*
-    "(?<![A-Za-z0-9_])__(\\S(?:[^_]*\\S)?)__(?![A-Za-z0-9_])", // __bold__
-    "(?<![A-Za-z0-9_])_(\\S(?:[^_]*\\S)?)_(?![A-Za-z0-9_])", // _italic_
+    "\\*\\*(\\S(?:[^*]*\\S)?)\\*\\*",
+    "\\*(\\S(?:[^*]*\\S)?)\\*",
+    "(?<![A-Za-z0-9_])__(\\S(?:[^_]*\\S)?)__(?![A-Za-z0-9_])",
+    "(?<![A-Za-z0-9_])_(\\S(?:[^_]*\\S)?)_(?![A-Za-z0-9_])",
   ].join("|"),
   "g",
 );
@@ -305,8 +272,6 @@ function Inline({ text }: { text: string }): React.JSX.Element {
       pieces.push(<span key={plainFrom}>{text.slice(plainFrom, at)}</span>);
     }
 
-    // Whichever of the five ways of writing it matched. Only one ever does, so the first
-    // one with anything in it is the one that was written.
     const [, code, starBold, starItalic, underscoreBold, underscoreItalic] = match;
     const bold = starBold ?? underscoreBold;
     if (code !== undefined) {

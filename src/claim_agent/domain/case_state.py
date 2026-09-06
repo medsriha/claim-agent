@@ -10,12 +10,7 @@ from claim_agent.policy import Policy
 
 
 class ConcernKind(StrEnum):
-    """The ways a claim can be in a state that makes answering it questionable.
-
-    Ordered as they are reported, strongest first. A closed case is the most likely to
-    make the whole exercise pointless; a missing identifier is the most likely to be
-    ordinary.
-    """
+    """The ways a claim can be in a state that makes answering it questionable."""
 
     STATUS = "status"
     INTERNAL_CONTACT = "internal_contact"
@@ -24,14 +19,7 @@ class ConcernKind(StrEnum):
 
 
 class StateConcern(BaseModel):
-    """One reason this claim may not be worth answering.
-
-    Attributes:
-        kind: Which kind of concern this is.
-        found: What was actually on the record, in plain words, so a representative can
-            check it rather than take it on trust.
-        what_it_means: What it means for somebody about to act on a recommendation.
-    """
+    """One reason this claim may not be worth answering."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -41,13 +29,7 @@ class StateConcern(BaseModel):
 
 
 class CaseStateReview(BaseModel):
-    """Everything about this claim's state that is worth a second look.
-
-    Attributes:
-        concerns: What was found, in a fixed order so two runs of the same claim read the
-            same way (NFR-1). Empty is the ordinary answer and means nothing was found.
-        summary: One plain sentence, ready to put in front of a representative.
-    """
+    """Everything about this claim's state that is worth a second look."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -56,43 +38,12 @@ class CaseStateReview(BaseModel):
 
     @property
     def is_worth_answering(self) -> bool:
-        """True when nothing was found that makes answering this claim questionable.
-
-        A convenience for a caller that wants one answer. It is deliberately not a
-        decision: a claim with concerns is still answered, by a person who has read them.
-        """
+        """True when nothing was found that makes answering this claim questionable."""
         return not self.concerns
 
 
 def review_case_state(case: Case, policy: Policy) -> CaseStateReview:
-    """List every reason this claim may not be in a state worth answering.
-
-    Runs four checks, in the order they are reported. Each is a plain reading of the case
-    record — there is no AI here and no threshold that is not a policy value (FR-0.6,
-    FR-0.7).
-
-    1. **Status.** Compared against the statuses policy calls unanswerable, ignoring case
-       and surrounding spaces so `closed` and `Closed ` are one status.
-    2. **The contact address.** Anything at the domain policy names as internal reaches
-       ShipBob rather than a merchant. Plus-addressing is seen through, so
-       `sakukreja+4@shipbob.com` is recognised as one person's mailbox — worth saying,
-       because four of the five sample claims share it and that is what test data looks
-       like.
-    3. **A case opened before its own delivery date.** Reported here rather than in the
-       day counter, which hands back a negative number and declines to interpret it.
-    4. **Missing identifiers.** No shipment, no order or no merchant, each named
-       separately so a reader knows which.
-
-    Args:
-        case: The claim's record, as ShipBob returned it.
-        policy: Read for the unanswerable statuses and the internal mail domain, so both
-            are settings rather than values buried here (FR-0.7, NFR-7).
-
-    Returns:
-        The concerns found, in a fixed order, and a sentence summing them up. An empty
-        list is the ordinary answer. Never raises: every one of these is an observation
-        about ordinary data, not a fault (NFR-4).
-    """
+    """List every reason this claim may not be in a state worth answering."""
     concerns: list[StateConcern] = []
 
     status = _status_concern(case, policy)
@@ -132,12 +83,7 @@ def _status_concern(case: Case, policy: Policy) -> StateConcern | None:
 
 
 def _contact_concern(case: Case, policy: Policy) -> StateConcern | None:
-    """Whether a drafted merchant email would reach ShipBob's own staff instead.
-
-    Plus-addressing is seen through deliberately. Four of the five sample claims are
-    plus-addresses on one mailbox, which is a strong hint that these are test records
-    rather than real merchants — worth telling a person rather than quietly emailing.
-    """
+    """Whether a drafted merchant email would reach ShipBob's own staff instead."""
     if case.contact_email is None:
         return None
     address = case.contact_email.strip()
@@ -187,11 +133,7 @@ def _ordering_concern(case: Case) -> StateConcern | None:
 
 
 def _missing_detail_concerns(case: Case) -> list[StateConcern]:
-    """One concern per identifier the case does not carry.
-
-    Named separately rather than rolled into one, because they lead different places: no
-    shipment means nothing can be priced, and no merchant means nobody can be written to.
-    """
+    """One concern per identifier the case does not carry."""
     missing = [
         (case.shipment_id, "shipment", "nothing can be priced and no invoice can be asked for"),
         (case.order_id, "order", "there is no record of what was bought"),

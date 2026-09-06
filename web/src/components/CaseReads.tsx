@@ -1,17 +1,6 @@
-/**
- * What the screening read from ShipBob: the merchant's claim, the parcel, and the order.
- *
- * Three separate pieces because the screening makes three separate reads, and the screen
- * reports each one as it happened rather than lumping them together.
- *
- * The order lines show a price and a quantity and stop there. Multiplying them out on
- * screen is the obvious next step and is exactly what this project forbids — money is
- * worked out once, by the service. What the order came to is reported with the numbers.
- */
 import { formatMoment, formatMoney } from "../display";
 import type { Case, Order, Shipment } from "../api/types";
 
-/** The merchant's claim, and their own account of what happened. */
 export function ClaimRead({ supportCase }: { supportCase: Case }): React.JSX.Element {
   return (
     <>
@@ -30,12 +19,6 @@ export function ClaimRead({ supportCase }: { supportCase: Case }): React.JSX.Ele
   );
 }
 
-/**
- * How the parcel travelled, and whether it was insured.
- *
- * A missing parcel record is a real answer, not an error: ShipBob had nothing to give us,
- * and two of the four checks have to reckon with that.
- */
 export function ParcelRead({ shipment }: { shipment: Shipment | null }): React.JSX.Element {
   if (shipment === null) {
     return <p className="empty">No parcel record.</p>;
@@ -52,7 +35,6 @@ export function ParcelRead({ shipment }: { shipment: Shipment | null }): React.J
   );
 }
 
-/** The products the parcel was meant to contain, at the price each was sold for. */
 export function OrderRead({ order }: { order: Order | null }): React.JSX.Element {
   if (order === null) {
     return <p className="empty">No order record.</p>;

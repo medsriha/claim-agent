@@ -21,8 +21,6 @@ from claim_agent.domain.models import Case, OrderLineItem, Shipment
 from claim_agent.policy import Policy
 from claim_agent.shipbob.evidence_client import EvidenceClient
 
-# --- What the tools are called ---------------------------------------------
-
 LIST_ATTACHMENTS: Final = "list_attachments"
 INSPECT_IMAGE: Final = "inspect_image"
 GENERATE_INVOICE: Final = "generate_invoice"
@@ -35,7 +33,7 @@ CHECK_EVIDENCE_IS_ENOUGH: Final = "check_evidence_is_enough"
 MATCH_DAMAGED_PRODUCT: Final = "match_damaged_product"
 READ_REQUESTED_REMEDY: Final = "read_requested_remedy"
 
-# The triage pass reads and identifies; it does not price or judge (FR-1a.1).
+
 TRIAGE_TOOL_NAMES: Final = (
     LIST_ATTACHMENTS,
     INSPECT_IMAGE,
@@ -43,7 +41,7 @@ TRIAGE_TOOL_NAMES: Final = (
     MATCH_DAMAGED_PRODUCT,
 )
 
-# Every tool an investigation has.
+
 TOOL_NAMES: Final = (
     LIST_ATTACHMENTS,
     INSPECT_IMAGE,
@@ -58,19 +56,16 @@ TOOL_NAMES: Final = (
     READ_REQUESTED_REMEDY,
 )
 
-# What the model is told when it calls a tool with arguments that will not parse.
+
 ARGUMENTS_DID_NOT_FIT: Final = (
     "That call did not fit this tool's arguments. Read the tool's arguments again and "
     "make the call properly."
 )
 
-# Memo keys for the per-claim cache (NFR-8). Each names its question completely.
+
 ATTACHMENTS_MEMO: Final = "attachments:{case_id}"
 INVOICE_MEMO: Final = "invoice:{shipment_id}"
 IMAGE_MEMO: Final = "image:{attachment_id}:{question}"
-
-
-# --- What a tool hands back -------------------------------------------------
 
 
 class ToolOutcome(BaseModel):
@@ -194,9 +189,6 @@ class RemedyRequested(ToolOutcome):
     tool: str = READ_REQUESTED_REMEDY
     remedies: tuple[str, ...] = ()
     reason: str | None = None
-
-
-# --- What the model may pass to a tool --------------------------------------
 
 
 class ReceiptLineArgument(BaseModel):
@@ -362,9 +354,6 @@ class ComputeReimbursementArguments(BaseModel):
     )
 
 
-# --- What each image turned out to be, as the run looks at it (FR-1.4) --------
-
-
 class AttachmentClassification(BaseModel):
     """What one image the run looked at turned out to be."""
 
@@ -378,12 +367,7 @@ class AttachmentClassification(BaseModel):
 
 
 class ImageLog:
-    """Every image a run has looked at, noted as it happens and announced on the stream.
-
-    The triage pass reads this after its run to settle the claim's shared evidence. It
-    replaces a callback that used to be attached to every tool: the inspect tool now
-    writes here directly, which is plainer and survives tools running at the same time.
-    """
+    """Every image a run has looked at, noted as it happens and announced on the stream."""
 
     def __init__(self, events: EventStream) -> None:
         """Start an empty log that announces each image on `events`."""
@@ -417,7 +401,6 @@ class ImageLog:
 def classification_of(inspection: ImageInspection) -> AttachmentClassification | None:
     """What one inspection established about an image, or `None` when nothing was seen."""
     if inspection.state is EvidenceState.UNREADABLE:
-        # Ours, not the merchant's: nothing was seen, only that we could not look (NFR-4).
         return AttachmentClassification(
             attachment_id=inspection.attachment_id,
             state=EvidenceState.UNREADABLE,
@@ -447,9 +430,6 @@ def what_the_image_was(classified: AttachmentClassification) -> str:
     return f"Image {classified.attachment_id}: {classified.kind.value.replace('_', ' ')}."
 
 
-# --- What a tool needs to answer a question ---------------------------------
-
-
 @dataclass(frozen=True)
 class ToolContext:
     """Everything the tools need, handed in when the run is built."""
@@ -471,14 +451,8 @@ class ToolContext:
 
 
 class NoImageAnalysisLeftError(Exception):
-    """Raised inside the memo when the run may look at no more images.
+    """Raised inside the memo when the run may look at no more images."""
 
-    Not a `ClaimAgentError`: those read as "we could not read this image" and send the
-    claim to a person. Running out of allowance is answered to the model in words.
-    """
-
-
-# --- Writing every call down ------------------------------------------------
 
 OutcomeT = TypeVar("OutcomeT", bound=ToolOutcome)
 

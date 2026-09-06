@@ -17,14 +17,10 @@ from claim_agent.settings import Settings
 
 logger = get_logger(__name__)
 
-# The only protocols an attachment may be fetched over. `file:` is the reason this list
-# exists: without it, an address in an upstream payload could ask this process to read a
-# file off our own disk and hand it to a model.
+
 _FETCHABLE_SCHEMES = frozenset({"http", "https"})
 
-# The first few bytes of the image formats a model can be shown. Every one of these is a
-# marker the format writes at the very start of the file, which is why it can be trusted
-# where a filename cannot (FR-1.4).
+
 _PNG_MARKER = b"\x89PNG\r\n\x1a\n"
 _JPEG_MARKER = b"\xff\xd8\xff"
 _GIF_MARKERS = (b"GIF87a", b"GIF89a")
@@ -90,13 +86,8 @@ class ImageFetcher:
             ) from exc
 
         try:
-            # Redirects are off whatever the shared client is set to: following one
-            # would take us to a host nobody approved. `stream=True` hands back headers
-            # before the body, so an oversized file can be abandoned part-way.
             response = await self._http.send(request, stream=True, follow_redirects=False)
         except httpx.TransportError as exc:
-            # Covers running out of time as well: httpx counts a request that timed out
-            # as one kind of transport failure, alongside a refused or dropped connection.
             logger.warning(
                 "attachment_unreachable",
                 attachment_id=attachment.attachment_id,
@@ -177,16 +168,12 @@ class ImageFetcher:
         if path is None:
             return None
 
-        # On a worker thread: reading a file blocks, and claim lines are investigated
-        # alongside each other, so a slow disk must not stall the others.
         data = await asyncio.to_thread(_read_cached_bytes, path, self._max_bytes)
         if data is None:
             return None
 
         media_type = _sniff_media_type(data)
         if media_type is None:
-            # Something is on disk that is not an image: a write cut short by a crash,
-            # or a file somebody else put there. Fetching again is always safe.
             logger.warning("attachment_cache_not_an_image", attachment_id=attachment_id)
             return None
 
@@ -212,8 +199,6 @@ def _check_the_address_is_one_we_will_fetch(
     try:
         parts = urlsplit(url)
     except ValueError as exc:
-        # A malformed address, such as an unclosed bracket. Reading it is the one thing
-        # here that can fail on the address itself rather than on what it points at.
         logger.warning("attachment_address_unreadable", attachment_id=attachment_id)
         raise UpstreamError(
             "The attachment's address could not be read.",
@@ -234,8 +219,6 @@ def _check_the_address_is_one_we_will_fetch(
 
     host = parts.hostname
     if host is None or not _host_is_allowed(host, allowed_hosts):
-        # The host is safe to log and is the useful part; the rest of the address is
-        # not, because it carries a signature that acts as a password for the file.
         logger.warning(
             "attachment_address_refused",
             attachment_id=attachment_id,
@@ -263,8 +246,7 @@ def _sniff_media_type(data: bytes) -> str | None:
         return "image/jpeg"
     if data.startswith(_GIF_MARKERS):
         return "image/gif"
-    # WebP writes its name four bytes in, inside a wrapper it shares with sound and
-    # video files, so the opening bytes alone do not settle it.
+
     if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
         return "image/webp"
     return None
@@ -302,8 +284,6 @@ def _read_cached_bytes(path: Path, max_bytes: int) -> bytes | None:
             return None
         return path.read_bytes()
     except FileNotFoundError:
-        # Nothing cached for this attachment yet. The ordinary case on a first run, and
-        # not worth a line in the logs.
         return None
     except OSError as exc:
         logger.warning("attachment_cache_unreadable", cache_file=path.name, reason=str(exc))
@@ -319,8 +299,6 @@ def _write_cached_bytes(path: Path, data: bytes) -> None:
         partial.replace(path)
     except OSError as exc:
         logger.warning("attachment_not_cached", cache_file=path.name, reason=str(exc))
-        # Whatever was written before the failure is not a usable cache entry, so it is
-        # taken back out. If even that fails there is nothing further worth trying, and
-        # nothing depends on it.
+
         with suppress(OSError):
             partial.unlink(missing_ok=True)

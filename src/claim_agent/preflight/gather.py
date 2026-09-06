@@ -10,8 +10,6 @@ from claim_agent.errors import NotFoundError
 from claim_agent.preflight.models import CaseRecord
 from claim_agent.shipbob.client import ShipBobClient
 
-# The kind of record being fetched — a parcel or an order. Naming it lets one helper
-# serve both reads and still hand each caller back the right type.
 Record = TypeVar("Record", bound=BaseModel)
 
 
@@ -34,5 +32,4 @@ async def _read_if_named(
     try:
         return await read(record_id)
     except NotFoundError:
-        # Only a definite 404 means the referenced information is absent.
         return None

@@ -24,39 +24,7 @@ async def run_preflight(
     policy: Policy,
     evaluated_at: datetime,
 ) -> PreflightResult:
-    """Screen one claim and say whether it can be processed at all (FR-0.3).
-
-    Reads the claim, checks it against the four eligibility rules, and gathers the
-    starting facts. A claim that clears all four is passed on for investigation. A
-    claim that fails any of them stops here and comes back with a write-up for a
-    support representative, which includes a drafted email to the merchant that
-    nothing sends on its own (FR-0.4, FR-0.5).
-
-    Args:
-        case_id: The support case to screen, for example `CASE-1001`.
-        client: The reader for the ShipBob API.
-        memory: What representatives have corrected on this merchant's earlier claims.
-        policy: The thresholds every check judges against, kept in one named place so
-            they can be changed without touching this code (FR-0.7).
-        evaluated_at: When this screen was asked for. The caller supplies it; this
-            layer never reads a clock. No rule uses it — it is a stamp for the record,
-            saying when the answer was produced. Keeping the single impure moment out
-            at the edge of the system is what makes the promise of determinism
-            something a test can check: the same claim screened today, tomorrow, or in
-            ten years gives an identical result apart from this stamp (FR-0.6).
-
-    Returns:
-        The verdict, all four check results whichever way it went, everything that was
-        read, the starting facts, and — only on a stopped claim — the write-up for the
-        representative.
-
-    Raises:
-        NotFoundError: ShipBob has no case with this id.
-        UpstreamError: ShipBob could not be reached or could not be understood, or the
-            store of past corrections could not be read. Every one of those stops the
-            screen with an error a person sees, rather than a verdict resting on
-            information we do not actually have (NFR-4).
-    """
+    """Screen one claim and say whether it can be processed at all (FR-0.3)."""
     record = await gather_case_record(case_id, client)
     delivery = resolve_delivered_date(record)
     gates = evaluate_gates(record, delivery, policy)
@@ -76,8 +44,6 @@ async def run_preflight(
         terminal_reasons=[reason.value for reason in reasons],
     )
     return PreflightResult(
-        # The id comes from the record we actually read rather than the one we asked
-        # for, so the result and the write-up inside it can never name different cases.
         case_id=record.case.case_id,
         verdict=verdict,
         terminal_reasons=reasons,

@@ -6,26 +6,11 @@ from functools import lru_cache
 from pydantic import Field, JsonValue
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The claim types ShipBob is known to use. Exactly one, because exactly one is quoted in
-# REQUIREMENTS.md, and the document listing the rest is not in this repository. There are
-# certainly others; we do not know what they are, so they are not listed here. Adding a
-# guess would put a claim type on screen that nobody has confirmed exists.
-#
-# This constrains the choice offered on the admin panel and nothing else. The value itself
-# stays free text, so `POLICY_DAMAGED_IN_TRANSIT_SUB_CATEGORY` can still be set to a claim
-# type absent from this list — which is how a real one would be configured before anyone
-# gets round to adding it here. A list this short must not be able to make a real claim
-# type impossible to handle.
 KNOWN_CLAIM_SUB_CATEGORIES = ("Claim | Damaged in Transit",)
 
 
 NOT_ON_PANEL: dict[str, JsonValue] = {"editable_in_panel": False}
-"""Marks a value the admin panel neither shows nor accepts a change to.
-
-Written beside the value it applies to, rather than kept as a list somewhere
-else, so that a reader of this file can see which values reach a screen and the
-two can never drift apart.
-"""
+"""Marks a value the admin panel neither shows nor accepts a change to."""
 
 
 class Policy(BaseSettings):
@@ -38,14 +23,12 @@ class Policy(BaseSettings):
         extra="ignore",
     )
 
-    # Stated by REQUIREMENTS.md.
     reimbursement_cap_usd: Decimal = Field(
         default=Decimal("100.00"),
         description="Maximum reimbursement for one claim, however many products are on it "
         "(FR-1.20).",
     )
 
-    # Provisional — not specified by ShipBob.
     max_claim_age_days: int = Field(
         default=60,
         description="Age gate: days from delivery to case creation (FR-0.2). PROVISIONAL.",
@@ -67,9 +50,6 @@ class Policy(BaseSettings):
     damaged_in_transit_sub_category: str = Field(
         default="Claim | Damaged in Transit",
         description="Claim-type prefix handled here (FR-0.2). PROVISIONAL.",
-        # Offered as a choice on the panel rather than typed, because a claim type is
-        # matched from this prefix and a typo here turns every claim away. Still a plain
-        # string, so the environment can set one this list has never seen.
         json_schema_extra={"options": list(KNOWN_CLAIM_SUB_CATEGORIES)},
     )
     min_description_length: int = Field(
@@ -79,8 +59,7 @@ class Policy(BaseSettings):
         "(FR-0.2). PROVISIONAL.",
         json_schema_extra=NOT_ON_PANEL,
     )
-    # The investigation settings below are provisional and deliberately absent from the
-    # policy panel until their operational values have been agreed.
+
     max_agent_steps: int = Field(
         default=12,
         gt=0,
@@ -121,12 +100,6 @@ class Policy(BaseSettings):
         json_schema_extra=NOT_ON_PANEL,
     )
 
-    # --- Values the investigation's reading tools use ----------------------
-    # Every value below is INVENTED. REQUIREMENTS.md does not mention currency, does
-    # not say what to do when ShipBob's price and the customer's receipt disagree, and
-    # does not say which case statuses are too far gone to answer. The defaults are our
-    # reading of the mock data, not ShipBob's rules, and they need sign-off before any
-    # of them decides real money. DESIGN.md records each one and what it costs.
     usd_conversion_rates: dict[str, Decimal] = Field(
         default={
             "USD": Decimal("1.00"),
@@ -212,9 +185,5 @@ class Policy(BaseSettings):
 
 @lru_cache
 def get_policy() -> Policy:
-    """Return the claim policy for this process.
-
-    Cached like the settings: read once, so a threshold cannot change midway through
-    judging a claim.
-    """
+    """Return the claim policy for this process."""
     return Policy()

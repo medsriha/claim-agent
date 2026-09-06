@@ -1,13 +1,3 @@
-/**
- * A handful of named things, each with one figure.
- *
- * One use on this screen: how often a representative accepted the advice in each band of stated
- * confidence, with what the system claimed shaded behind each bar.
- *
- * **Every bar is the same colour**, because the bars are one measure across named groups rather
- * than several things being compared. Colouring each one differently would spend the channel that
- * carries identity on information the bar's length already shows.
- */
 import { ChartFrame } from "./ChartFrame";
 import type { Surface, TableTwin, TipRow } from "./ChartFrame";
 import {
@@ -24,7 +14,6 @@ import {
 import type { Point } from "../api/analysisTypes";
 import { humanise } from "../display";
 
-/** A range to shade behind a bar, for showing what was claimed against what happened. */
 export interface Reference {
   readonly low: number;
   readonly high: number;
@@ -36,21 +25,14 @@ interface BandBarChartProps {
   bars: readonly Point[];
   domain: { minimum: number; maximum: number };
   gridlines: readonly { at: number; label: string }[];
-  /** One per bar, or `null` for no shading. Same length as `bars` when given. */
+
   references: readonly Reference[] | null;
   token: string;
   height: number;
   table: TableTwin;
-  /** What the shaded range means, when there is one. Empty for no legend. */
+
   legend: readonly { name: string; token: string }[];
-  /**
-   * A second line under each category name, or `null`.
-   *
-   * This is how a second measure is shown without a second scale. How many decisions a band held
-   * matters for reading the bar above it, but a count and a rate must never share an axis — the
-   * point where two such lines crossed would be an accident of scaling that a reader would take
-   * for meaning. So the count is written, not drawn.
-   */
+
   sublabels: readonly string[] | null;
 }
 
@@ -135,8 +117,7 @@ function Bars({
 
         return (
           <g key={bar.label}>
-            {/* What the system claimed, shaded behind what actually happened. Not a series, so
-                it takes the page's own background rather than a colour of its own. */}
+
             {reference !== undefined && (
               <rect
                 x={centre - slot * 0.34}
@@ -189,7 +170,6 @@ function Bars({
               </text>
             )}
 
-            {/* The target is the whole slot, so nobody has to land on a thin bar. */}
             <rect
               x={centre - slot / 2}
               y={plot.padTop}

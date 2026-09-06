@@ -102,7 +102,6 @@ async def triage_claim(
         count=str(len(attachments)),
     )
 
-    # The inspect tool notes what each image turned out to be here, as it happens.
     images = ImageLog(events)
     tools = investigation_tools(
         case_id=case.case_id,
@@ -136,7 +135,6 @@ async def triage_claim(
         events=events,
     )
 
-    # Settled from what the pass observed, even when it gave up before concluding (FR-1.16).
     classifications = images.classifications()
     shared = _settle_shared_evidence(classifications)
     await _say_what_the_evidence_showed(events, shared)
@@ -171,7 +169,7 @@ def _settle_shared_evidence(
     classifications: Sequence[AttachmentClassification],
 ) -> tuple[EvidenceFinding, ...]:
     """Settle the three pieces of evidence that describe the parcel, once (FR-1a.3)."""
-    # An image we could not read might have been any of the three, so it bears on all.
+
     something_unreadable = any(
         classified.state is EvidenceState.UNREADABLE for classified in classifications
     )

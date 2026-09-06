@@ -78,11 +78,7 @@ __all__ = [
 def build_image_classification_messages(
     *, image_url: str, question: str | None = None
 ) -> list[BaseMessage]:
-    """Ask what one image is, and whether it can be relied on (FR-1.4, FR-1.5).
-
-    No file name and no file type go with it (FR-1.4). The wording is marked to be kept
-    warm and the picture is not, since what repeats across a claim's images is the text.
-    """
+    """Ask what one image is, and whether it can be relied on (FR-1.4, FR-1.5)."""
     instruction = IMAGE_CLASSIFICATION_PROMPT
     if question is not None:
         instruction = "\n\n".join(
@@ -123,11 +119,7 @@ def build_investigation_messages(
     shared_evidence: Sequence[EvidenceFinding] = (),
     precedent: PrecedentSet | None = None,
 ) -> list[BaseMessage]:
-    """Ask what should happen to one claim and every product on it (FR-1b.1, FR-1b.2).
-
-    `precedent` of `None` means nobody looked and shows no section; a set that was looked
-    up and found nothing says so, because the two are different facts (FR-S.13).
-    """
+    """Ask what should happen to one claim and every product on it (FR-1b.1, FR-1b.2)."""
     sections = [
         INVESTIGATION_PROMPT,
         render_case(case, context),
@@ -158,11 +150,7 @@ def build_revision_messages(
     conversation: Sequence[EarlierExchange] = (),
     precedent: PrecedentSet | None = None,
 ) -> list[BaseMessage]:
-    """Ask for a report to be reworked, rebuilding the claim's context from the report (FR-R.2).
-
-    Used when the investigation's own conversation thread is no longer held. The claim is
-    rendered as on a first pass, then the report as it stands, the earlier rounds, and the note.
-    """
+    """Ask for a report to be reworked, rebuilding the claim's context from the report (FR-R.2)."""
     sections = [
         REVISION_PROMPT,
         render_case(case, context),
@@ -228,12 +216,7 @@ def build_revision_turn_messages(
     feedback: str,
     conversation: Sequence[EarlierExchange] = (),
 ) -> list[BaseMessage]:
-    """One new turn on the investigation's own thread after a send-back (FR-R.2).
-
-    The claim, order, images and precedent are already in that conversation, so only the
-    report as it stands, the earlier rounds and the note are new. No system message: the
-    rules are already the first message on the thread.
-    """
+    """One new turn on the investigation's own thread after a send-back (FR-R.2)."""
     sections = [
         REVISION_TURN_PROMPT,
         render_report_as_it_stands(
@@ -293,11 +276,7 @@ def build_screening_revision_messages(
     feedback: str,
     conversation: Sequence[EarlierExchange] = (),
 ) -> list[BaseMessage]:
-    """Answer a representative about a claim the quick checks turned away (FR-0.6, FR-R.8).
-
-    The order and the images are deliberately absent: nothing was investigated and nothing
-    will be, so the run is not shown evidence about a claim it cannot reopen.
-    """
+    """Answer a representative about a claim the quick checks turned away (FR-0.6, FR-R.8)."""
     sections = [
         SCREENING_REVISION_PROMPT,
         render_case(case, context),

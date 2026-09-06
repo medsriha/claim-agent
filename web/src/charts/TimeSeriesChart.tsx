@@ -1,10 +1,3 @@
-/**
- * Something plotted week by week, as one or two lines.
- *
- * A week with nothing in it breaks the line rather than dropping it to the floor. That is the
- * whole reason a gap is drawn as a gap: a week in which nobody decided anything has no rate at
- * all, and joining across it would draw a claim nobody made.
- */
 import { ChartFrame } from "./ChartFrame";
 import type { Surface, TipRow } from "./ChartFrame";
 import { PLOT, bottom, coord, crisp, left, linePath, nearestIndex, right, scaleX, scaleY } from "./plot";
@@ -12,7 +5,7 @@ import type { TimeChart } from "../api/analysisTypes";
 
 interface TimeSeriesChartProps {
   chart: TimeChart;
-  /** One theme token per line, in the order the service sent the series. */
+
   tokens: readonly string[];
   height: number;
 }
@@ -118,7 +111,6 @@ function Marks({ chart, tokens, surface, count }: MarksProps): React.JSX.Element
         />
       ))}
 
-      {/* A marker only where something is picked out. Fifty-two of them at once is a smear. */}
       {active !== null &&
         chart.series.map((series, position) => {
           const value = series.points[active.index]?.value;
@@ -138,7 +130,6 @@ function Marks({ chart, tokens, surface, count }: MarksProps): React.JSX.Element
           );
         })}
 
-      {/* The whole plot is the target, so a reader aims at a week rather than at a 2px line. */}
       <rect
         x={left(plot)}
         y={plot.padTop}

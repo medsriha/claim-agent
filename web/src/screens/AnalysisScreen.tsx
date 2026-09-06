@@ -1,32 +1,3 @@
-/**
- * How the system has been doing, for the business.
- *
- * The other two screens are about one claim. This one is about all of them: over a year, how
- * often a representative took the advice exactly as it stood, how far they changed it when they
- * did, **which kinds of claim come back ready and which need a person**, how long it took, what
- * that was worth, and whether the system's own statement of how sure it was turns out to predict
- * whether anyone agreed with it.
- *
- * One year, and no way to ask for another. The service can report on shorter periods and the
- * shape it answers in still carries the choice, but a screen that carries its own figures would
- * have to carry a set for every period on offer, and three sets nobody switches between is weight
- * in the page for nothing.
- *
- * **Every figure on this screen is invented**, and nothing on screen says so. There is no real
- * history to draw, because the stage where a person decides a claim is not built. See
- * `analysis/demoFigures.ts`, which is where that is written down.
- *
- * **The screen still works nothing out.** Each figure arrives already worked out, carried twice —
- * once as a value to place a mark and once as the words to read. Nothing here divides to make a
- * percentage, adds a column up, decides where an axis stops, or turns an amount of money into a
- * number. That was worth keeping even with the figures held locally: it is what stops a chart and
- * the sentence beside it ever disagreeing.
- *
- * **Nothing here is a control.** Every panel reports and none of them offers anything to change:
- * no switch, no threshold to set, nothing to approve. The requirements say a person approving a
- * report is the only way a claim is ever released (FR-2.9, FR-3.1), and no figure on this screen
- * changes that. What it can do is say which claims tend to need that person and which do not.
- */
 import { DEMO_FIGURES } from "../analysis/demoFigures";
 import { BandBarChart } from "../charts/BandBarChart";
 import { StackedAreaChart } from "../charts/StackedAreaChart";
@@ -41,11 +12,8 @@ import {
 import { ReadinessPanel } from "../components/ReadinessPanel";
 import { formatMoment } from "../display";
 
-/** The four ways a decision can go. Four hues rather than four shades of one, so they can be
- *  told apart in a stack; the legend carries which is which. */
 const MIX_TOKENS = ["--sb-chart-1", "--sb-chart-2", "--sb-chart-3", "--sb-chart-4"];
 
-/** Everything drawn as a single series. */
 const ONE_SERIES = ["--sb-chart-1"];
 
 export function AnalysisScreen(): React.JSX.Element {

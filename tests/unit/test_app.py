@@ -14,8 +14,6 @@ def test_app_uses_the_settings_and_policy_it_was_built_with() -> None:
     app = create_app(settings, policy)
 
     assert app.state.settings is settings
-    # FR-0.7: the policy it was built with is the one in force, and the one a reset
-    # goes back to. The app holds the changeable policy rather than a bare one,
-    # because the admin panel can replace it while the service runs.
+
     assert app.state.live_policy.current() is policy
     assert app.state.live_policy.startup_policy is policy

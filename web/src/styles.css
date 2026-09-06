@@ -1,10 +1,3 @@
-/**
- * How the screen is laid out.
- *
- * Every colour is a name from the theme file next door — there is not one literal colour
- * in here, so a wrong shade is correctable in one place.
- */
-
 *,
 *::before,
 *::after {
@@ -41,8 +34,6 @@ p {
   flex-direction: column;
   height: 100dvh;
 }
-
-/* --- Header ------------------------------------------------------------- */
 
 .header {
   background: var(--sb-surface);
@@ -85,16 +76,9 @@ p {
   color: var(--sb-ink-soft);
 }
 
-/* --- Page --------------------------------------------------------------- */
-
-/*
- * Every screen sits in the same column. The shell is the height of the window, so a screen
- * scrolls inside it rather than growing the page — which keeps the header in place.
- */
 .screen {
   flex: 1;
-  /* Without this a flex child refuses to shrink below its contents, so it would grow the
-     shell instead of scrolling inside it. */
+
   min-height: 0;
   overflow-y: auto;
   width: 100%;
@@ -103,19 +87,12 @@ p {
   padding: 24px 20px 48px;
 }
 
-/*
- * The conversation does its own scrolling instead: the messages scroll, and the row of
- * claims stays put at the bottom. So this screen never scrolls as a whole, and it drops the
- * page padding because the parts inside it space themselves.
- */
 .screen-chat {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 0 20px;
 }
-
-/* --- Picking a claim ---------------------------------------------------- */
 
 .lookup-input {
   flex: 1;
@@ -175,11 +152,9 @@ p {
   cursor: not-allowed;
 }
 
-/* Sits below the conversation and stays put while it scrolls. */
 .picker {
   display: flex;
-  /* Never squashed by a long conversation: the row of claims is the way out of whatever is
-     on screen, so it has to keep its height whatever the thread above it is doing. */
+
   flex: none;
   flex-wrap: wrap;
   gap: 8px;
@@ -217,14 +192,11 @@ p {
   border-color: var(--sb-brand);
 }
 
-/* The claim on screen, so it is clear which conversation belongs to which button. */
 .chip-picked {
   color: var(--sb-on-brand);
   background: var(--sb-brand);
   border-color: var(--sb-brand);
 }
-
-/* --- States ------------------------------------------------------------- */
 
 .working {
   margin-top: 18px;
@@ -271,7 +243,6 @@ p {
   }
 }
 
-/* Before any claim is picked. Deliberately not a box: there is no content to frame. */
 .intro {
   display: flex;
   flex: 1;
@@ -298,8 +269,6 @@ p {
   max-width: 68ch;
   font-weight: 600;
 }
-
-/* --- Panels ------------------------------------------------------------- */
 
 .panel {
   padding: 20px;
@@ -328,8 +297,6 @@ p {
   font-style: italic;
   max-width: 68ch;
 }
-
-/* --- Gates -------------------------------------------------------------- */
 
 .gate {
   background: var(--sb-surface);
@@ -495,8 +462,6 @@ p {
   overflow-wrap: anywhere;
 }
 
-/* --- Facts -------------------------------------------------------------- */
-
 .facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -548,8 +513,6 @@ p {
   color: var(--sb-ink-faint);
 }
 
-/* --- Report and email --------------------------------------------------- */
-
 .findings {
   margin: 0;
   padding-left: 20px;
@@ -575,8 +538,6 @@ p {
   color: var(--sb-ink-soft);
   max-width: 72ch;
 }
-
-/* --- Order lines -------------------------------------------------------- */
 
 .table-scroll {
   margin-top: 10px;
@@ -613,14 +574,11 @@ p {
   font-family: var(--sb-font-mono);
 }
 
-/* --- The conversation --------------------------------------------------- */
-
-/* The one region that scrolls. Everything above and below it stays where it is. */
 .thread {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  /* Reaching the end of the conversation must not start scrolling the page behind it. */
+
   overscroll-behavior: contain;
   padding: 24px 0 8px;
 }
@@ -653,15 +611,12 @@ p {
   }
 }
 
-/* The pacing itself is skipped in the code; this is the movement of a single message
-   arriving, which has to go too. */
 @media (prefers-reduced-motion: reduce) {
   .turn {
     animation: none;
   }
 }
 
-/* What the rep did, set apart from what the system answered. */
 .turn-rep {
   align-items: flex-end;
 }
@@ -682,7 +637,6 @@ p {
   box-shadow: var(--sb-shadow);
 }
 
-/* A step that has not reported yet. Sized so the message does not jump when it settles. */
 .bubble-working {
   display: flex;
   align-items: center;
@@ -706,10 +660,6 @@ p {
   font-size: 13.5px;
 }
 
-/*
- * The screen's own words, marked so nobody mistakes them for the system's. Dashed on
- * purpose — it is the one thing on screen that did not come out of the service.
- */
 .note {
   padding: 14px 16px;
   background: var(--sb-flag-tint);
@@ -728,10 +678,6 @@ p {
   color: var(--sb-flag);
 }
 
-/*
- * Something turning, to say a step is being worked on. The ring is one border with a
- * single side coloured in, which is what makes the rotation visible.
- */
 .spinner {
   display: inline-block;
   flex: none;
@@ -754,18 +700,12 @@ p {
   }
 }
 
-/*
- * Nothing should be turning for someone who asked for less movement — and they never see
- * one anyway, because the conversation settles all at once for them. Belt and braces.
- */
 @media (prefers-reduced-motion: reduce) {
   .spinner,
   .working-wave > span {
     animation: none;
   }
 }
-
-/* --- Narrow screens ----------------------------------------------------- */
 
 @media (width <= 620px) {
   .observed-key,
@@ -775,12 +715,10 @@ p {
 
 }
 
-/* --- Policy panel -------------------------------------------------------- */
-
 .header-nav {
   display: flex;
   gap: 4px;
-  /* Pushed to the right-hand end of the header, where the demo badge used to sit. */
+
   margin-left: auto;
 }
 
@@ -810,7 +748,6 @@ p {
   outline: 2px solid var(--sb-brand);
   outline-offset: 2px;
 }
-
 
 .policy-force {
   margin-top: 10px;
@@ -868,11 +805,6 @@ p {
   color: var(--sb-ink-soft);
 }
 
-/*
- * A value picked rather than typed. It borrows the text box's look so the two kinds of
- * control sit together, and keeps the arrow a browser draws on a select so it is obvious
- * which one it is.
- */
 .policy-select {
   margin-top: 10px;
   max-width: 340px;
@@ -941,8 +873,6 @@ p {
   border-top: 1px solid var(--sb-line);
 }
 
-/* The warning above a control that throws history away. Set in the notice colour rather than
-   the muted one: it is the only thing on this screen that destroys something. */
 .policy-note {
   max-width: 68ch;
   margin: 0;
@@ -951,8 +881,6 @@ p {
   border-radius: var(--sb-radius-small);
   color: var(--sb-flag);
 }
-
-/* --- The past claims that resemble this one ------------------------------ */
 
 .similar-list {
   display: flex;
@@ -968,8 +896,6 @@ p {
   border-left: 3px solid var(--sb-line);
 }
 
-/* The shut state, and all a rep needs to judge consistency at a glance: which claim,
-   which product, what it closed on. Everything else waits behind the fold. */
 .similar-summary {
   display: flex;
   flex-wrap: wrap;
@@ -991,8 +917,6 @@ p {
   color: var(--sb-ink-soft);
 }
 
-/* Every past claim shown was closed by a representative, so there is one style here
-   rather than two: no record needs marking out as weaker than another. */
 .similar-closed {
   margin-left: auto;
   padding: 1px 8px;
@@ -1026,9 +950,6 @@ p {
   margin: 0;
   color: var(--sb-ink-soft);
 }
-
-/* --- The investigation's live activity --------------------------------- */
-/* The bar shows the latest action; opening it reveals the complete SSE history. */
 
 .step {
   overflow: hidden;
@@ -1175,8 +1096,6 @@ p {
   font-family: var(--sb-font-mono);
 }
 
-/* Markdown used only inside the live activity panel. */
-
 .md-paragraph {
   margin: 0 0 0.4rem;
 }
@@ -1284,7 +1203,6 @@ p {
   line-height: 1.5;
 }
 
-/* The findings the summary sentence does not carry, one per line under it. */
 .line-findings {
   margin: 0.5rem 0 0;
   padding-left: 1.1rem;
@@ -1401,9 +1319,6 @@ p {
   font-size: 0.85rem;
 }
 
-/* --- How the amount was worked out -------------------------------------- */
-/* Every figure here is text the service sent. The steps are shown, never recomputed. */
-
 .amount-items {
   margin: 0.4rem 0 0;
   padding: 0;
@@ -1454,8 +1369,6 @@ p {
   font-size: 0.8rem;
 }
 
-/* --- Evidence and the four questions ------------------------------------ */
-
 .evidence,
 .judgement {
   display: flex;
@@ -1487,8 +1400,6 @@ p {
   color: var(--sb-stop);
 }
 
-/* Our own failure to read an image, which is not the merchant's to fix. Marked apart from
-   evidence they never sent, because only one of the two can be asked for again. */
 .evidence-unreadable .evidence-state {
   color: var(--sb-flag);
 }
@@ -1512,7 +1423,6 @@ p {
   font-size: 0.76rem;
 }
 
-/* The account of why a figure, which is the whole of what makes it reviewable. */
 .amount-reasoning {
   margin: 0.5rem 0 0;
   color: var(--sb-ink-soft);
@@ -1520,18 +1430,10 @@ p {
   line-height: 1.5;
 }
 
-/* --- How the agent is doing --------------------------------------------- */
-/* A dashboard, which is a different shape from the other two screens: they show one claim, this
-   one shows a year of them. Every figure on it was worked out in the service — the screen sizes a
-   mark and prints a string, and does no arithmetic of its own. */
-
-/* Wider than the other two screens, which are set to a reading measure on purpose. Widening
-   `.screen` itself would silently reflow both of them. */
 .screen-wide {
   max-width: 1180px;
 }
 
-/* Which stretch of time everything below covers. */
 .analysis-period {
   font-size: 12.5px;
   color: var(--sb-ink-faint);
@@ -1580,19 +1482,10 @@ p {
   color: var(--sb-ink-faint);
 }
 
-/* Deliberately no colour on the verdict. Three states would need the pass, flag and stop
-   colours, and flag against stop is very nearly indistinguishable with the commonest form of
-   colour blindness — and a green "meets bar" would read as a recommendation, which this screen
-   is not making. */
-
-/* --- Which claims come back ready --------------------------------------- */
-
 .readiness-group {
   margin-top: 0.9rem;
 }
 
-/* How far apart a group's parts are, beside its name. It is the point of the group, so it sits
-   with the heading rather than under the bars where it would read as a footnote. */
 .readiness-spread {
   margin-left: 0.6rem;
   font-weight: 400;
@@ -1609,8 +1502,6 @@ p {
   list-style: none;
 }
 
-/* Label, bar, figure, count. The bar takes whatever is left, so every row's figures line up
-   however long the longest name is. */
 .readiness-row {
   display: grid;
   grid-template-columns: 19rem 1fr 3rem 7.5rem;
@@ -1629,8 +1520,6 @@ p {
   border-radius: 3px;
 }
 
-/* The width is worked out by the browser from a share the service sent. Nothing in the page
-   turns one into the other. */
 .readiness-bar {
   display: block;
   height: 100%;
@@ -1661,8 +1550,6 @@ p {
     grid-column: 1 / -1;
   }
 }
-
-/* --- The charts --------------------------------------------------------- */
 
 .chart-card {
   display: flex;
@@ -1703,15 +1590,11 @@ p {
   border-radius: 2px;
 }
 
-/* The word beside a mark is ink, never the mark's colour. A pale fill is illegible as type, and
-   the coloured square next to it is what carries the identity. */
 .legend-word {
   font-size: 0.85rem;
   color: var(--sb-ink-soft);
 }
 
-/* The height is set from the component and already includes the band the x-axis labels sit in,
-   so this box never grows a scrollbar of its own. */
 .chart-plot {
   position: relative;
   width: 100%;
@@ -1721,8 +1604,6 @@ p {
   display: block;
 }
 
-/* Sizes are set here, in rem, and never as an attribute on the drawing — the drawing is rendered
-   at its measured size so this is the size that actually appears. */
 .chart-label {
   font-size: 0.72rem;
   fill: var(--sb-ink-faint);
@@ -1754,8 +1635,6 @@ p {
   stroke-width: 1;
 }
 
-/* One focus stop for the whole chart; the arrow keys walk the points. A stop per point would be
-   hundreds of them between the top of this page and the table at the bottom. */
 .chart-focus {
   position: absolute;
   inset: 0;
@@ -1807,8 +1686,6 @@ p {
   color: var(--sb-ink);
 }
 
-/* The tooltip in words. It is also how a chart's figures are reachable without hovering at all,
-   alongside the table. */
 .chart-readout {
   min-height: 1.3rem;
   max-width: 78ch;
@@ -1816,18 +1693,12 @@ p {
   color: var(--sb-ink-soft);
 }
 
-/* The tooltip moves, and it does not have to. Everything it carries is still there. */
 @media (prefers-reduced-motion: reduce) {
   .chart-tip {
     transition: none;
   }
 }
 
-/* --- A report a representative decides on (FR-2.1, FR-2.8) ---------------- */
-/*
- * One framed review surface. The document inside is constructed from the service's structured
- * fields and given room because it is what a representative actually reads.
- */
 .report-card {
   padding: 0.9rem 1rem;
   background: var(--sb-surface);
@@ -1900,7 +1771,6 @@ p {
   color: var(--sb-flag);
 }
 
-/* The report is compact by default; its supporting sections expand in place when needed. */
 .report-document {
   margin: 0.8rem 0;
   padding: 0.8rem;
@@ -1963,7 +1833,6 @@ p {
   gap: 0.6rem;
 }
 
-/* Figures read as figures, so a changed one is legible beside the one it replaced. */
 .report-amount-input {
   width: 9rem;
   padding: 0.5rem 0.6rem;
@@ -2022,12 +1891,6 @@ p {
   font-size: 0.85rem;
 }
 
-/* The conversation between a representative and the agent about one report (FR-R.13).
-
-   Drawn as a chat rather than a table, because that is what it is. The representative's
-   messages sit right and the agent's left, so which of them said a thing is read from where
-   it is rather than from a label in front of it. */
-
 .revision-thread {
   display: flex;
   flex-direction: column;
@@ -2065,9 +1928,6 @@ p {
   border-bottom-left-radius: 2px;
 }
 
-/* A round where nothing about the report changed. Marked rather than hidden: a report left
-   alone because a run failed and one left alone because it was already right look identical
-   otherwise, and only one of them is worth writing back about. */
 .revision-bubble.is-agent.is-unchanged {
   border-left: 3px solid var(--sb-flag);
 }
@@ -2098,16 +1958,12 @@ p {
   font-style: italic;
 }
 
-/* A report produced by investigating the claim again, nested inside the conversation that
-   caused it. Set in from the card it came from so the causal order reads: you wrote back, the
-   agent had the claim looked at again, and these are what it found. */
 .report-card .report-card {
   margin-top: 0.9rem;
   margin-left: 0.9rem;
   border-left: 3px solid var(--sb-brand-tint);
 }
 
-/* What went, store by store, after everything the service remembers was thrown away. */
 .cleared-stores {
   margin: 0;
   padding: 0;

@@ -16,24 +16,7 @@ router = APIRouter(prefix="/precedent", tags=["precedent"])
 
 
 class PrecedentSearch(BaseModel):
-    """What a caller describes about the claim they want precedent for.
-
-    Deliberately the same handful of things the investigation compares on, so that
-    what this address answers is what the investigation would be shown for the same
-    claim. A search that scored differently from the real thing would be worse than
-    no search, because a representative would be checking the wrong answer.
-
-    **Nothing is required.** Similarity is a matter of degree and every signal is
-    optional: a description alone is a valid search, and so is a product name alone.
-    A signal left out is left out of the comparison rather than counted against every
-    candidate (FR-S.4).
-
-    `unit_price` arrives as text — `"52.00"` — and never as a JSON number, so no
-    amount in this system passes through a floating-point value (FR-1.21, NFR-2).
-
-    `evidence` says which of the four pieces of evidence were present, missing or
-    unusable, as far as the caller knows. Pieces left out are simply not compared.
-    """
+    """What a caller describes about the claim they want precedent for."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -65,19 +48,7 @@ class PrecedentSearch(BaseModel):
     )
 
     def to_query(self) -> PrecedentQuery:
-        """Turn the request into the question the store understands.
-
-        The evidence states become findings so that the one comparison in the domain
-        serves both this address and the investigation. Each carries a note saying it
-        was described by a caller rather than read off a photograph, because a finding
-        with no account of where it came from would be indistinguishable from one the
-        system established itself.
-
-        Raises:
-            InvalidRequestError: The price is not a number. Caught here rather than by
-                the model so the complaint names the field and says what was wrong
-                with it.
-        """
+        """Turn the request into the question the store understands."""
         return PrecedentQuery(
             merchant_account=self.merchant_account,
             product_name=self.product_name,
@@ -91,18 +62,7 @@ class PrecedentSearch(BaseModel):
 
 
 def _price(value: str | None) -> Decimal | None:
-    """Read a price given as text, or `None` when none was given.
-
-    Args:
-        value: An amount written out, such as `"52.00"`. `None` when the caller does
-            not know the price, which is ordinary — a product that matched no line on
-            the order has none.
-
-    Raises:
-        InvalidRequestError: The text is not an amount. Answered as a 400 rather than
-            being quietly treated as an unknown price, which would silently drop a
-            signal the caller meant to supply.
-    """
+    """Read a price given as text, or `None` when none was given."""
     if value is None:
         return None
     try:
@@ -120,27 +80,7 @@ async def search_precedent(
     store: PrecedentStoreDep,
     policy: PolicyDep,
 ) -> PrecedentSet:
-    """Answer with the past claims most like the one described, and why each is alike.
-
-    Ranked most alike first. Where two are equally alike, one a representative
-    actually decided comes before one nobody has looked at, because an unreviewed
-    record is evidence only of what this system once suggested (FR-S.7).
-
-    Args:
-        search: What is known about the claim in hand. Everything is optional.
-        store: The record of claims already investigated.
-        policy: Read for how many records to return and how alike is alike enough,
-            unless the request overrides them (FR-0.7, NFR-7).
-
-    Returns:
-        The records found, each with its score and the reasons behind it; how many
-        candidates were considered; and whether the store could be read at all. An
-        empty answer is a success either way, and `was_read` says which kind of empty
-        it is (FR-S.13).
-
-    Raises:
-        InvalidRequestError: The price was not an amount. Answered as a 400.
-    """
+    """Answer with the past claims most like the one described, and why each is alike."""
     return store.similar_to(
         search.to_query(),
         limit=search.limit if search.limit is not None else policy.precedent_results_per_product,
@@ -154,28 +94,7 @@ async def search_precedent(
 
 @router.get("/{precedent_id}", summary="Read one past claim")
 async def read_precedent(precedent_id: str, store: PrecedentStoreDep) -> PrecedentRecord:
-    """Answer with one stored claim, so a cited precedent can be looked at in full.
-
-    Withdrawn records are returned here. Withdrawal takes a record out of *searches*
-    (FR-S.14); somebody naming one is asking for that one, and hiding it would make a
-    withdrawn record impossible to inspect or put right. The record says plainly that
-    it is withdrawn.
-
-    Args:
-        precedent_id: The record's name, such as `PREC-CASE-1001-L01`.
-        store: The record of claims already investigated.
-
-    Returns:
-        Everything kept about that claim line: the merchant's words, the product and
-        its price, the evidence, the four judgements, what was recommended, what it
-        would have paid, and what a representative did about it.
-
-    Raises:
-        NotFoundError: No such record. Answered as a 404.
-        StorageError: The store could not be read. Answered as a 500 — unlike a
-            search, there is no partial answer worth giving to somebody who named one
-            record.
-    """
+    """Answer with one stored claim, so a cited precedent can be looked at in full."""
     record = store.get(precedent_id)
     if record is None:
         raise NotFoundError(

@@ -21,8 +21,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     json_logs: bool = False
 
-    # ShipBob mock API. Defaults to a local stub so the service boots without
-    # credentials; unreachable upstreams surface as handled errors (NFR-6).
     shipbob_base_url: str = "http://localhost:8080"
     shipbob_timeout_seconds: float = 10.0
     shipbob_max_attempts: int = Field(
@@ -31,13 +29,8 @@ class Settings(BaseSettings):
         description="Tries per ShipBob read before giving up, first attempt included (NFR-6).",
     )
 
-    # Where merchant memory is kept. One SQLite file, created on first use.
     database_path: Path = Path("claim_agent.db")
 
-    # Fetching the images a merchant attached. These are URLs handed to us by ShipBob
-    # and fetched by us, so the bounds are deliberate rather than defensive: a limit on
-    # size stops one enormous file exhausting the process, and an allowed-host list stops
-    # a URL in an upstream payload aiming our requests at somewhere of its choosing.
     attachment_timeout_seconds: float = 20.0
     attachment_max_bytes: int = Field(
         default=20 * 1024 * 1024,
@@ -50,14 +43,8 @@ class Settings(BaseSettings):
         "without a request being made.",
     )
     attachment_cache_dir: Path | None = Path(".attachment-cache")
-    """Where downloaded images are kept so the same one is never fetched twice.
+    """Where downloaded images are kept so the same one is never fetched twice."""
 
-    ShipBob's attachment links are signed until 2036, so caching them locally is what
-    lets the system be demonstrated with no network at all (NFR-6). `None` turns caching
-    off, which is what the tests use so that one test cannot see another's downloads.
-    """
-
-    # LLM access. Absent key is a handled state, not a crash at import time.
     anthropic_api_key: SecretStr | None = None
     model: str = "claude-opus-5"
     model_timeout_seconds: float = 120.0
@@ -71,9 +58,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return the settings for this process.
-
-    Cached, so the environment is read once at startup instead of on every request,
-    and every caller sees the same values.
-    """
+    """Return the settings for this process."""
     return Settings()

@@ -26,13 +26,7 @@ _ASK_FOR: dict[EvidenceKind, str] = {
         "a photograph of the outer box the order arrived in, even if the box itself looks fine"
     ),
 }
-"""What to ask the merchant for, per kind of evidence — specific enough to send as-is.
-
-The packaging line spells out that the box need not itself be damaged, because
-`evidence.py` is explicit that an intact box around a broken product is still a
-legitimate claim (FR-1.11); a rep copying this sentence should not accidentally imply
-otherwise to the merchant.
-"""
+"""What to ask the merchant for, per kind of evidence — specific enough to send as-is."""
 
 _LABEL: dict[EvidenceKind, str] = {
     EvidenceKind.INVOICE: "the invoice",
@@ -40,32 +34,11 @@ _LABEL: dict[EvidenceKind, str] = {
     EvidenceKind.DAMAGED_PRODUCT_PHOTO: "a photograph of the damaged product",
     EvidenceKind.OUTER_PACKAGING_PHOTO: "a photograph of the outer box",
 }
-"""Short names for each kind of evidence, for the one-sentence summary rather than the
-specific request — `_ASK_FOR` is what gets sent to a merchant, this is what a rep reads.
-"""
+"""Short names for each kind of evidence, for the one-sentence summary rather than the"""
 
 
 class SufficiencyAssessment(BaseModel):
-    """Whether the evidence gathered so far can support a recommendation, and what to do next.
-
-    Attributes:
-        is_supportable: True only when all four required kinds of evidence are present
-            and usable. False for any other reason at all — a recommendation built on an
-            incomplete set is not one anyone should trust, so this is deliberately an
-            all-or-nothing reading rather than a percentage (FR-1.6).
-        missing_or_unusable: The kinds of evidence the merchant can still fix, in the
-            fixed reporting order — never includes anything unreadable, since that is not
-            the merchant's gap to close.
-        requests: One specific, ready-to-send sentence per kind in `missing_or_unusable`.
-            Named exactly, such as "a photograph of the outer box", never "more evidence".
-        unreadable: The kinds of evidence we could not read ourselves, in the fixed
-            reporting order. Any entry here means a person has to look at this claim
-            regardless of how good everything else is (NFR-4).
-        needs_rep_clarification: True whenever `unreadable` is not empty. Kept as its own field
-            rather than asking a caller to check `unreadable` for emptiness, since missing
-            this check is exactly how a merchant would end up asked to fix our mistake.
-        reason: One or two plain sentences summarising the verdict for a representative.
-    """
+    """Whether the evidence gathered so far can support a recommendation, and what to do next."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -78,24 +51,7 @@ class SufficiencyAssessment(BaseModel):
 
 
 def assess_evidence_sufficiency(findings: Sequence[EvidenceFinding]) -> SufficiencyAssessment:
-    """Read what was found for each kind of evidence, and say what a rep should do about it.
-
-    This adds no new judgement about any single piece of evidence — `evidence.py` already
-    decided whether each one is present, missing, unusable, or unreadable. It only
-    assembles those decisions into a verdict: can a recommendation stand on this evidence,
-    and if not, exactly what should happen next for each gap.
-
-    Args:
-        findings: What was found for each of the four required kinds, in any order. A
-            kind entirely absent from this sequence — CASE-1005's zero attachments, for
-            instance — counts as missing, the same as `evidence.py`'s own helpers already
-            treat it; an empty sequence is a real claim, not a caller's mistake.
-
-    Returns:
-        Whether the evidence supports a recommendation, exactly what to ask the merchant
-        for where they can still help, and which kinds need a person instead because the
-        gap is on our side.
-    """
+    """Read what was found for each kind of evidence, and say what a rep should do about it."""
     indexed = findings_by_kind(findings)
     to_ask = gaps_the_merchant_can_fill(findings)
     unreadable = gaps_we_caused(findings)
@@ -113,13 +69,7 @@ def assess_evidence_sufficiency(findings: Sequence[EvidenceFinding]) -> Sufficie
 
 
 def _request_for(kind: EvidenceKind, finding: EvidenceFinding | None) -> str:
-    """One sentence asking the merchant for exactly the thing that is missing or unusable.
-
-    Named specifically rather than as "more evidence", so a rep can send this straight to
-    a merchant. When something was sent but could not be relied on, the sentence names
-    what was wrong with it, quoting the reason already recorded against that finding
-    rather than inventing a fresh one.
-    """
+    """One sentence asking the merchant for exactly the thing that is missing or unusable."""
     noun = _ASK_FOR[kind]
     if finding is not None and finding.state is EvidenceState.UNUSABLE:
         problem = finding.problem or "could not be relied on"
@@ -142,8 +92,7 @@ def _reason_for(
     sentences: list[str] = []
     if unreadable:
         labels = _and_list([_LABEL[kind] for kind in unreadable])
-        # "could", not "is"/"are": the modal verb does not change for a singular or a
-        # plural subject, so there is no agreement to get wrong here.
+
         sentences.append(
             f"{labels} could not be read on our side, so this claim needs a person "
             "regardless of anything else here."

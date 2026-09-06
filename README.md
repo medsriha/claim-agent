@@ -6,7 +6,7 @@ report plus a drafted merchant email. The agent recommends and a representative 
 ## Run it
 
 ```bash
-cp .env.example .env      # add ANTHROPIC_API_KEY
+cp .env.example .env
 docker compose up --build
 ```
 
@@ -22,7 +22,7 @@ takes a few minutes; after that it starts in seconds.
 ## Stop it
 
 ```bash
-docker compose down       # add -v to drop what the service remembered
+docker compose down
 ```
 
 ## Tests

@@ -23,27 +23,7 @@ async def read_performance(
         description="Which stretch of time to cover. An unknown one falls back to the default.",
     ),
 ) -> AnalysisView:
-    """Answer with every figure the analysis screen draws.
-
-    The period is named rather than given as two dates, so the screen never works out a date
-    boundary of its own and two people asking for "12 months" on the same day always get the same
-    window. An unrecognised name falls back to the default instead of failing: a way of looking at
-    the past is not the kind of thing where being wrong is dangerous, and an error page teaches a
-    reader nothing.
-
-    Args:
-        store: The record of what representatives decided.
-        period: One of the keys the reply itself lists under `presets`.
-
-    Returns:
-        The tiles, the charts, the candidate rules and the assumptions behind the money. Every
-        number arrives twice — once as a value to draw and once as the words to read — so nothing
-        in the browser has to work anything out (FR-1.21, NFR-2).
-
-    Raises:
-        StorageError: The record of decisions could not be read. This fails the whole request
-            rather than coming back as an empty period, because the two mean opposite things.
-    """
+    """Answer with every figure the analysis screen draws."""
     now = datetime.now(UTC)
     starts_at, ends_at = window_for(period, now)
     decisions = store.decided_between(starts_at, ends_at)

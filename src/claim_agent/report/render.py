@@ -23,11 +23,7 @@ _RECOMMENDATION_IN_WORDS: dict[Recommendation, str] = {
         "Representative clarification needed — resolve what is incorrect or ambiguous"
     ),
 }
-"""Each recommendation as a heading a representative reads, rather than as its stored name.
-
-Reshaping only. Every one of them says the same thing the stored value says, so a report and the
-list it appears in can never describe one outcome two ways.
-"""
+"""Each recommendation as a heading a representative reads, rather than as its stored name."""
 
 _ACTION_IN_WORDS: dict[RepAction, str] = {
     RepAction.APPROVED: "approved this report as it stood",
@@ -43,21 +39,7 @@ def render_investigated_claim(
     context: ClaimContext,
     case: Case,
 ) -> str:
-    """Write the report for a claim that was investigated (FR-2.1 to FR-2.7).
-
-    Args:
-        findings: Everything the claim's investigation established — the damaged products, the
-            evidence, the four questions, what stands after the rules ran, the working behind
-            the figure, the concerns and the drafted email.
-        context: What was worked out before the AI ran: what the order was worth, whether it
-            counts as high value, and what this merchant has been corrected about before (FR-0.5).
-        case: The claim itself, read for the merchant's name and the claim's own identifier.
-
-    Returns:
-        The whole report as markdown. Never empty, and never missing a section: a piece of
-        evidence nobody found and a question nobody answered are both written down as such,
-        because a gap a representative cannot see is a gap they will not check (FR-2.5).
-    """
+    """Write the report for a claim that was investigated (FR-2.1 to FR-2.7)."""
     sections = [
         _title(f"Damaged: {_products(findings)}", case),
         _what_is_recommended(findings),
@@ -72,20 +54,7 @@ def render_investigated_claim(
 
 
 def render_stopped_claim(report: TerminalReport, *, case: Case) -> str:
-    """Write the report for a claim the quick checks turned away (FR-0.4, FR-2.5).
-
-    A stopped claim has no damaged products in it, so there is no evidence to show, no question to
-    answer and no figure to explain. What it has instead is the reasons it was stopped and the
-    four checks that produced them.
-
-    Args:
-        report: The write-up the quick checks produced — every reason, one plain sentence per
-            failed check, all four checks, and the merchant's email where there is one.
-        case: The claim itself, read for the merchant's name.
-
-    Returns:
-        The whole report as markdown.
-    """
+    """Write the report for a claim the quick checks turned away (FR-0.4, FR-2.5)."""
     sections = [
         _title("Claim stopped before investigation", case),
         _why_the_claim_was_stopped(report),
@@ -110,31 +79,7 @@ def render_what_the_representative_decided(
     rep_words: str | None,
     over_the_cap_by: Decimal | None,
 ) -> str:
-    """Write the section added to a report when somebody acts on it (FR-2.8, FR-C.1).
-
-    Added rather than woven in, so that what the system said and what a person then decided stay
-    told apart. A reader can see both, and see which is which.
-
-    Args:
-        review_number: Which review of this report this is, counting from one. A report can go
-            back and forth as often as a representative likes, and every round is added rather
-            than replacing the last — so the heading has to say which round a reader is looking
-            at, or three identical headings tell them nothing about the order they happened in.
-        action: Which of the review actions was taken.
-        recommended: What the system advised.
-        decided: What the representative settled on. Equal to `recommended` unless they changed it.
-        edited_email: The merchant's email as the representative reworded it, or `None` if
-            they left it alone. Shown in full rather than merely reported, because FR-2.7 asks
-            for the exact wording that would be sent and after a rewording that is theirs.
-        rep_words: Anything they said, in their own words. `None` when they said nothing.
-        over_the_cap_by: How far a representative's own figure exceeds the most the system may
-            recommend, or `None` when it does not. **Written down rather than refused**: the limit
-            is on what the system recommends and no rule says a person may not exceed it, so the
-            decision stands and the report says plainly that it went over (FR-1.20, FR-R.8).
-
-    Returns:
-        The section as markdown, ready to be added to the end of a report.
-    """
+    """Write the section added to a report when somebody acts on it (FR-2.8, FR-C.1)."""
     lines = [
         f"## Review {review_number} — what the representative decided",
         "",
@@ -183,9 +128,6 @@ def render_what_the_representative_decided(
     return "\n".join(lines)
 
 
-# --- The sections, in the order a representative reads them -------------------
-
-
 def _title(heading: str, case: Case) -> str:
     """Say which claim this is and whose it is, before anything else (FR-2.9a)."""
     merchant = case.account_name or "an unnamed merchant"
@@ -200,12 +142,7 @@ def _products(findings: ClaimFindings) -> str:
 
 
 def _what_is_recommended(findings: ClaimFindings) -> str:
-    """Lead with the recommendation, the figure, and how the rules got there (FR-2.1, NFR-3).
-
-    Written as something a representative is deciding on rather than as something that has
-    happened, because nothing here has happened: no email has gone and no money has moved
-    (FR-1.17, FR-3.1).
-    """
+    """Lead with the recommendation, the figure, and how the rules got there (FR-2.1, NFR-3)."""
     recommended = _RECOMMENDATION_IN_WORDS[findings.outcome.recommendation]
     lines = ["## Recommendation", "", f"**{recommended}.**"]
 
@@ -230,12 +167,7 @@ def _what_is_recommended(findings: ClaimFindings) -> str:
 
 
 def _concerns(concerns: Sequence[str]) -> str:
-    """Say what is weak, conflicting or uncertain, or say plainly that nothing was (FR-2.5).
-
-    Never left out. The requirement treats silence here as a defect rather than a clean result,
-    and a heading with a sentence under it is the difference between "nothing worried us" and
-    "nobody thought to look".
-    """
+    """Say what is weak, conflicting or uncertain, or say plainly that nothing was (FR-2.5)."""
     if not concerns:
         return "## Concerns\n\nNothing was flagged as weak, conflicting or uncertain."
     listed = "\n".join(f"- {concern}" for concern in concerns)
@@ -243,16 +175,7 @@ def _concerns(concerns: Sequence[str]) -> str:
 
 
 def _claim_context(context: ClaimContext, *, considered: Sequence[str]) -> str:
-    """Surface what a representative should know before approving (FR-2.6).
-
-    Three things: what the order was worth and whether that makes it one to take more care over,
-    how long the merchant took to file, and what this merchant has been corrected about before.
-
-    `considered` names the earlier claims whose corrections the investigation says actually
-    changed its conclusion. It names *which*, and cannot say *how* — the investigation is asked
-    for case identifiers and nothing more — so the third part of FR-2.6 is only half answered
-    here, and TODO.md says so rather than this pretending otherwise.
-    """
+    """Surface what a representative should know before approving (FR-2.6)."""
     lines = ["## The claim in context", ""]
 
     if context.order_value_usd is None:
@@ -275,12 +198,7 @@ def _claim_context(context: ClaimContext, *, considered: Sequence[str]) -> str:
 def _merchant_corrections(
     corrections: Sequence[MerchantCorrection], *, considered: Sequence[str]
 ) -> str:
-    """List what representatives have already corrected for this merchant (FR-2.6, FR-3.8).
-
-    An empty list is written out rather than left blank: a merchant new to us and a merchant whose
-    claims have never needed correcting read the same here, and both are worth a representative
-    knowing.
-    """
+    """List what representatives have already corrected for this merchant (FR-2.6, FR-3.8)."""
     if not corrections:
         return "**Past corrections for this merchant:** none on file."
 
@@ -292,11 +210,7 @@ def _merchant_corrections(
 
 
 def _evidence(findings: Sequence[EvidenceFinding]) -> str:
-    """Show all four pieces of evidence, each naming the image it came from (FR-2.2).
-
-    The image identifier is what makes a finding checkable: a representative can open the very
-    photograph the system looked at rather than taking the sentence on trust.
-    """
+    """Show all four pieces of evidence, each naming the image it came from (FR-2.2)."""
     rows = [
         "| Evidence | Found? | From image | What was seen | Problem |",
         "| --- | --- | --- | --- | --- |",
@@ -313,13 +227,7 @@ def _evidence(findings: Sequence[EvidenceFinding]) -> str:
 
 
 def _assessments(assessments: Sequence[Assessment]) -> str:
-    """Show each question the investigation answered, and why (FR-2.3).
-
-    **A question missing from this table was never answered**, which is a different thing from
-    one answered no — an unfinished investigation rather than a finding against the claim. The
-    note below the table says so, because a reader counting four rows and finding three would
-    otherwise have to guess which it was.
-    """
+    """Show each question the investigation answered, and why (FR-2.3)."""
     if not assessments:
         return (
             "## The four questions\n\n"
@@ -348,16 +256,7 @@ def _assessments(assessments: Sequence[Assessment]) -> str:
 
 
 def _how_the_amount_was_reached(amount: AmountDerivation, recommended: Recommendation) -> str:
-    """Show which items at which prices, from which document, and what the cap did (FR-2.4).
-
-    Written even where nothing would be paid, because "nothing, and here is why" is an answer a
-    representative can act on — they can chase a missing invoice, or query a product that matched
-    nothing on the order.
-
-    **The figure is the investigation's judgement of what the damage is worth**, not a sum of the
-    prices below. The prices are what the items cost, shown so the judgement can be weighed
-    against them (FR-1.21).
-    """
+    """Show which items at which prices, from which document, and what the cap did (FR-2.4)."""
     lines = ["## How the amount was reached", ""]
 
     if recommended.is_approval:
@@ -411,16 +310,7 @@ def _how_the_amount_was_reached(amount: AmountDerivation, recommended: Recommend
 def _the_merchant_email(
     email: DraftedEmail | None, *, needs_rep_clarification: bool = False
 ) -> str:
-    """Show the exact wording that would go to the merchant, and nothing else (FR-2.7).
-
-    Inside a fenced block, so that a reader's markdown cannot reinterpret a character of what a
-    merchant would receive.
-
-    `None` means there is nothing to send: the run gave up before writing anything, what it wrote
-    was refused, or — on a stopped claim — the only reason is one no email explains. The section
-    still appears, saying which, because a missing email is something a representative has to
-    know rather than something to discover on approving.
-    """
+    """Show the exact wording that would go to the merchant, and nothing else (FR-2.7)."""
     if email is None:
         if needs_rep_clarification:
             return (
@@ -448,11 +338,7 @@ def _the_merchant_email(
 
 
 def _why_the_claim_was_stopped(report: TerminalReport) -> str:
-    """Lead a stopped claim's report with every reason it was stopped (FR-0.3, FR-0.4).
-
-    Every reason, in the order the quick checks report them, because a merchant told about one
-    problem who then hits a second has been dealt with twice.
-    """
+    """Lead a stopped claim's report with every reason it was stopped (FR-0.3, FR-0.4)."""
     reasons = "\n".join(f"- {_in_words(str(reason))}" for reason in report.reasons)
     lines = ["## Why this claim was stopped", "", reasons]
     if report.requires_rep_clarification:
@@ -467,12 +353,7 @@ def _why_the_claim_was_stopped(report: TerminalReport) -> str:
 
 
 def _the_four_checks(gates: Sequence[GateResult]) -> str:
-    """Show all four checks, passed and failed alike (FR-0.3, NFR-3).
-
-    All four, always. A representative seeing only what failed has to infer what passed from
-    silence, and the values each check looked at are what let them verify a finding rather than
-    take it on trust.
-    """
+    """Show all four checks, passed and failed alike (FR-0.3, NFR-3)."""
     rows = ["| Check | Passed? | What it found |", "| --- | --- | --- |"]
     for gate in gates:
         rows.append(
@@ -489,41 +370,20 @@ def _the_four_checks(gates: Sequence[GateResult]) -> str:
     return "## The four checks\n\n" + "\n".join(rows) + "\n" + "\n".join(looked_at)
 
 
-# --- Writing values out -------------------------------------------------------
-
-
 def _money(amount: Decimal | None) -> str:
-    """Write an exact amount as a person would read it.
-
-    Rounded to whole cents on the way out and nowhere else, so the figure shown is the figure
-    held. Never goes near a floating point number (FR-1.21).
-    """
+    """Write an exact amount as a person would read it."""
     if amount is None:
         return "no amount"
     return f"${amount.quantize(CENTS, ROUND_HALF_UP)}"
 
 
 def _in_words(name: str) -> str:
-    """Write a stored name as words: `outer_packaging_photo` as "outer packaging photo".
-
-    Nothing is reworded, only respaced. These are the system's own names, and a representative
-    should see the same ones everywhere rather than wording invented here.
-
-    Written out again rather than shared with the outcome rules next door: the two are the same
-    line by coincidence, and a sentence built for one reader is not a reason to tie two layers
-    together.
-    """
+    """Write a stored name as words: `outer_packaging_photo` as \"outer packaging photo\"."""
     return name.replace("_", " ")
 
 
 def _cell(value: str | None) -> str:
-    """Put a sentence inside a table cell without letting it break the table.
-
-    A vertical bar inside a cell would end it early and shift every column after it, so the one
-    character that can do that is escaped. Nothing else about the sentence is touched — it is the
-    investigation's own wording, and a report that quietly rewrites it is a report that cannot be
-    checked against what was actually said.
-    """
+    """Put a sentence inside a table cell without letting it break the table."""
     if not value:
         return "—"
     return value.replace("|", "\\|").replace("\n", " ")
@@ -535,12 +395,7 @@ def _or_dash(value: str | None) -> str:
 
 
 def _corrections_considered(findings: ClaimFindings) -> tuple[str, ...]:
-    """Which earlier claims' corrections the investigation says changed its conclusion (FR-2.6).
-
-    Empty when none did, and empty when the run never reached a conclusion at all. The two are
-    the same answer here — nothing was carried forward — and neither is worth telling apart on a
-    report.
-    """
+    """Which earlier claims' corrections the investigation says changed its conclusion (FR-2.6)."""
     if findings.conclusion is None:
         return ()
     return findings.conclusion.corrections_considered

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 import httpx
 import pytest
@@ -40,6 +41,7 @@ from claim_agent.agent.schemas import (
 )
 from claim_agent.domain.claim_line import ClaimedProduct, ClaimLine, build_claim_lines
 from claim_agent.domain.evidence import REQUIRED_EVIDENCE, EvidenceState, findings_by_kind
+from claim_agent.domain.models import Invoice
 from claim_agent.domain.outcome import OverrideReason, Recommendation
 from claim_agent.policy import Policy
 
@@ -47,7 +49,6 @@ AMPOULE = "Additional Collagen Ampoule Duo"
 
 
 def an_instruction(**overrides: object) -> DirectedPayment:
-    """What the model read off "approve the refund": approval wording and no figure."""
     fields: dict[str, object] = {
         "email_subject": "Your damage claim has been approved",
         "email_body": "We have reviewed your claim for the damaged collagen and approved it.",
@@ -60,29 +61,24 @@ async def paid(
     *,
     lines: tuple[ClaimLine, ...] | None = None,
     directed: DirectedPayment | None = None,
-    invoice: object = INVOICE,
+    invoice: Invoice | None = INVOICE,
     policy: Policy | None = None,
     events: EventStream | None = None,
-    **carried: object,
+    **carried: Any,
 ) -> ClaimFindings:
-    """Approve one claim as directed, with everything a test does not care about defaulted."""
     return await approve_as_directed(
         lines=lines if lines is not None else (a_claim_for_the_collagen(),),
         directed=directed if directed is not None else an_instruction(),
-        invoice=invoice,  # type: ignore[arg-type]
+        invoice=invoice,
         policy=policy if policy is not None else Policy(),
         contact_email=CASE.contact_email,
         model="scripted",
         events=events if events is not None else EventStream(),
-        **carried,  # type: ignore[arg-type]
+        **carried,
     )
 
 
-# --- The figure (FR-1.20, FR-1.21) --------------------------------------------
-
-
 async def test_a_claim_nobody_investigated_is_priced_at_what_the_invoice_says() -> None:
-    """The representative named no figure, so the invoice decides: one collagen at $52.00."""
     findings = await paid()
 
     assert findings.outcome.recommendation is Recommendation.APPROVE
@@ -92,7 +88,6 @@ async def test_a_claim_nobody_investigated_is_priced_at_what_the_invoice_says() 
 
 
 async def test_a_figure_the_representative_named_is_the_one_paid() -> None:
-    """They said what to pay, and that is what is paid."""
     findings = await paid(directed=an_instruction(amount_usd="30.00"))
 
     assert findings.amount.amount_usd == Decimal("30.00")
@@ -100,7 +95,6 @@ async def test_a_figure_the_representative_named_is_the_one_paid() -> None:
 
 
 async def test_a_figure_the_representative_named_is_still_held_to_the_cap() -> None:
-    """FR-1.20: the cap is the one thing an instruction cannot lift."""
     findings = await paid(directed=an_instruction(amount_usd="450.00"))
 
     assert findings.amount.amount_usd == Policy().reimbursement_cap_usd
@@ -110,7 +104,6 @@ async def test_a_figure_the_representative_named_is_still_held_to_the_cap() -> N
 
 
 async def test_the_reports_own_figure_is_paid_when_it_had_one() -> None:
-    """The investigation judged the damage at $40; the rules withheld it; the rep overruled."""
     findings = await paid(earlier_amount=an_amount("40.00"))
 
     assert findings.amount.amount_usd == Decimal("40.00")
@@ -118,14 +111,12 @@ async def test_the_reports_own_figure_is_paid_when_it_had_one() -> None:
 
 
 async def test_a_figure_that_cannot_be_read_falls_back_to_the_invoice() -> None:
-    """A figure nobody can read exactly is not paid; the invoice is."""
     findings = await paid(directed=an_instruction(amount_usd="fifty bucks"))
 
     assert findings.amount.amount_usd == Decimal("52.00")
 
 
 async def test_nothing_payable_asks_the_representative_instead_of_paying_nothing() -> None:
-    """An instruction cannot conjure a figure: no invoice and no report figure means asking."""
     findings = await paid(invoice=None)
 
     assert findings.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
@@ -133,10 +124,6 @@ async def test_nothing_payable_asks_the_representative_instead_of_paying_nothing
 
 
 async def test_asking_for_the_figure_still_keeps_the_email_for_the_representative() -> None:
-    """The draft is written even without the figure, so the rep adjusts it rather than waits.
-
-    It carries no amount line: the figure is added when they approve at one.
-    """
     findings = await paid(invoice=None)
 
     email = findings.drafted_email
@@ -146,11 +133,7 @@ async def test_asking_for_the_figure_still_keeps_the_email_for_the_representativ
     assert "$" not in email.body
 
 
-# --- The email --------------------------------------------------------------
-
-
 async def test_the_approval_email_carries_the_checked_figure() -> None:
-    """FR-1.21: the figure in the email is the one code worked out."""
     findings = await paid()
 
     assert findings.drafted_email is not None
@@ -160,7 +143,6 @@ async def test_the_approval_email_carries_the_checked_figure() -> None:
 
 
 async def test_wording_the_model_did_not_write_is_replaced_rather_than_failing() -> None:
-    """A decision a person took must not fall over for want of an email."""
     findings = await paid(directed=DirectedPayment())
 
     assert findings.outcome.recommendation is Recommendation.APPROVE
@@ -171,7 +153,6 @@ async def test_wording_the_model_did_not_write_is_replaced_rather_than_failing()
 
 
 async def test_a_figure_the_model_wrote_into_the_email_is_thrown_out() -> None:
-    """FR-1.21: no figure the model wrote reaches a merchant."""
     findings = await paid(directed=an_instruction(email_body="We will refund you $99.00."))
 
     assert findings.drafted_email is not None
@@ -179,11 +160,7 @@ async def test_a_figure_the_model_wrote_into_the_email_is_thrown_out() -> None:
     assert "Approved amount: $52.00" in findings.drafted_email.body
 
 
-# --- The record (NFR-3, NFR-5) -------------------------------------------------
-
-
 async def test_a_claim_nobody_investigated_says_so_on_every_piece_of_evidence() -> None:
-    """The report must not read as though the photographs were looked at."""
     findings = await paid()
 
     by_kind = findings_by_kind(findings.evidence)
@@ -193,7 +170,6 @@ async def test_a_claim_nobody_investigated_says_so_on_every_piece_of_evidence() 
 
 
 async def test_what_an_earlier_report_established_is_carried_forward_untouched() -> None:
-    """An investigated report keeps every finding; only the outcome and the email change."""
     findings = await paid(
         evidence=all_four_findings(outer_packaging_photo=EvidenceState.MISSING),
         assessments=all_four_answers(),
@@ -207,7 +183,6 @@ async def test_what_an_earlier_report_established_is_carried_forward_untouched()
 
 
 async def test_every_rule_set_aside_is_recorded_as_waived() -> None:
-    """NFR-5: a payment a person directed and one the evidence earned must never look alike."""
     findings = await paid()
 
     assert findings.outcome.directed_by_representative
@@ -217,7 +192,6 @@ async def test_every_rule_set_aside_is_recorded_as_waived() -> None:
 
 
 async def test_the_pricing_is_written_into_the_ledger_and_costs_no_steps() -> None:
-    """NFR-3: somebody reading the report can see the figure was priced, not judged."""
     findings = await paid()
 
     assert [entry.name for entry in findings.ledger] == ["price_as_directed"]
@@ -228,7 +202,6 @@ async def test_the_pricing_is_written_into_the_ledger_and_costs_no_steps() -> No
 
 
 async def test_it_narrates_that_it_priced_rather_than_investigated() -> None:
-    """Whoever is watching is told what is happening, and that it is not a second pass."""
     seen: list[RunEvent] = []
 
     async def keep(event: RunEvent) -> None:
@@ -243,7 +216,6 @@ async def test_it_narrates_that_it_priced_rather_than_investigated() -> None:
 
 
 async def test_two_products_are_priced_together_as_one_claim() -> None:
-    """FR-1b.3: one figure across every product the representative named."""
     lines = build_claim_lines(
         CASE.case_id,
         (
@@ -260,11 +232,7 @@ async def test_two_products_are_priced_together_as_one_claim() -> None:
     assert findings.amount.amount_usd == findings.amount.items_total_usd
 
 
-# --- The plan routes an approval here (FR-2.8) ---------------------------------
-
-
 async def test_an_instruction_to_approve_an_investigated_report_skips_the_rework() -> None:
-    """The plan hands back the instruction and the wording, and no evidence pass runs."""
     model = scripted(
         RevisionPlan(
             mode=RevisionMode.APPROVE_AS_DIRECTED,
@@ -295,7 +263,6 @@ async def test_an_instruction_to_approve_an_investigated_report_skips_the_rework
 
 
 def test_the_plan_wording_says_an_instruction_to_pay_is_never_a_rework() -> None:
-    """The router has to be told that approving is cheaper than reinvestigating."""
     asked = build_revision_plan_messages(
         claim_lines=(a_claim_for_the_collagen(),),
         recommendation=Recommendation.REQUEST_INFO,
@@ -313,7 +280,6 @@ def test_the_plan_wording_says_an_instruction_to_pay_is_never_a_rework() -> None
 
 
 def test_an_approve_as_directed_plan_needs_the_email_wording() -> None:
-    """Approval wording is the model's one contribution, so a plan without it is no plan."""
     with pytest.raises(ValidationError):
         RevisionPlan(mode=RevisionMode.APPROVE_AS_DIRECTED, reply_to_representative="Done.")
 
@@ -329,11 +295,7 @@ def test_only_an_approve_as_directed_plan_may_name_a_figure() -> None:
         )
 
 
-# --- A clarification report answered with "pay it" (FR-1a.4, FR-2.8) -----------
-
-
 async def rework_the_clarification(answer: RevisedClaimReport) -> ClaimRevision:
-    """Answer a representative about a claim nobody could split, from a script."""
     model = scripted(answer)
     async with httpx.AsyncClient() as _unused:
         return await rework_claim_report(
@@ -353,7 +315,6 @@ async def rework_the_clarification(answer: RevisedClaimReport) -> ClaimRevision:
 
 
 async def test_naming_a_product_and_saying_pay_it_carries_the_instruction_out() -> None:
-    """The answer carries the products and the instruction, and asks the merchant nothing."""
     revision = await rework_the_clarification(
         RevisedClaimReport(
             reply_to_representative="Taken as read: the collagen. Pricing it now.",
@@ -375,7 +336,6 @@ async def test_naming_a_product_and_saying_pay_it_carries_the_instruction_out() 
 
 
 async def test_an_instruction_to_pay_with_no_product_named_asks_and_keeps_the_draft() -> None:
-    """Nothing can be priced without a product, so the agent asks — and still writes the email."""
     revision = await rework_the_clarification(
         RevisedClaimReport(
             reply_to_representative="Which of the two products do you mean?",
@@ -395,7 +355,6 @@ async def test_an_instruction_to_pay_with_no_product_named_asks_and_keeps_the_dr
 
 
 async def test_an_instruction_to_pay_with_no_product_and_no_wording_only_asks() -> None:
-    """Without wording there is nothing to keep, and the question still goes to the rep."""
     revision = await rework_the_clarification(
         RevisedClaimReport(
             reply_to_representative="Which of the two products do you mean?",
@@ -413,7 +372,6 @@ def test_a_figure_may_only_be_named_alongside_an_instruction_to_pay() -> None:
 
 
 def test_the_claim_wording_tells_the_agent_that_paying_is_not_investigating() -> None:
-    """The prompt has to say that an instruction to pay is priced, not looked into again."""
     asked = build_claim_revision_messages(
         case=CASE,
         order=RECORD.order,

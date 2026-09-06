@@ -57,39 +57,33 @@ from claim_agent.storage.report_store import ReportStore
 
 pytestmark = pytest.mark.integration
 
-# Wide enough to catch every decision a test could take, so a test never has to know when
-# the clock said the request happened.
+
 LONG_AGO = datetime(2000, 1, 1, tzinfo=UTC)
 FAR_AHEAD = datetime(2100, 1, 1, tzinfo=UTC)
 
 
 @pytest.fixture
 def store(settings: Settings) -> ReportStore:
-    """The store the application will read, on this test's own database file."""
     return ReportStore(settings.database_path)
 
 
 @pytest.fixture
 def decisions(settings: Settings) -> DecisionStore:
-    """The record of decisions the application writes to, on the same file."""
     return DecisionStore(settings.database_path)
 
 
 @pytest.fixture
 def app(settings: Settings, store: ReportStore) -> FastAPI:
-    """An application reading the same store the test writes to."""
     return create_app(settings, report_store=store)
 
 
 @pytest.fixture
 async def client(app: FastAPI) -> Any:
-    """An HTTP client bound to that application, no network involved."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http
 
 
 def read_stream(body: str) -> list[tuple[str, dict[str, Any]]]:
-    """Read the named, JSON-valued messages from one server-sent-event response."""
     messages: list[tuple[str, dict[str, Any]]] = []
     for block in body.split("\n\n"):
         lines = [line for line in block.splitlines() if line]
@@ -102,7 +96,6 @@ def read_stream(body: str) -> list[tuple[str, dict[str, Any]]]:
 
 
 async def send_feedback(client: AsyncClient, report_id: str, feedback: str) -> dict[str, Any]:
-    """Send one note through the stream, then read the report state it left behind."""
     response = await client.post(
         f"/reports/{report_id}/send-back",
         headers={"Accept": "text/event-stream"},
@@ -116,7 +109,6 @@ async def send_feedback(client: AsyncClient, report_id: str, feedback: str) -> d
 
 
 def a_claim_of_two_products(**overrides: Any) -> Report:
-    """One claim's report, covering both damaged products on it."""
     fields: dict[str, Any] = {
         "product_names": ("Liposomal Tripeptide Collagen", "Additional Collagen Ampoule Duo"),
     }
@@ -124,13 +116,9 @@ def a_claim_of_two_products(**overrides: Any) -> Report:
     return a_report(**fields)
 
 
-# --- A claim's report (FR-2.9b) ----------------------------------------------
-
-
 async def test_fr_2_9b_a_claim_comes_back_as_its_one_report(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-2.9b: a claim has one report, naming every damaged product on it."""
     store.record(a_claim_of_two_products())
 
     response = await client.get("/cases/CASE-1001/reports")
@@ -143,7 +131,6 @@ async def test_fr_2_9b_a_claim_comes_back_as_its_one_report(
 
 
 async def test_a_claim_nobody_has_asked_about_comes_back_empty(client: AsyncClient) -> None:
-    """FR-2.9b: an empty list is a claim nobody investigated, not a failure."""
     response = await client.get("/cases/CASE-9999/reports")
 
     assert response.status_code == 200
@@ -153,7 +140,6 @@ async def test_a_claim_nobody_has_asked_about_comes_back_empty(client: AsyncClie
 async def test_money_arrives_as_text_rather_than_a_number(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-1.21: a figure that went through a floating point number is one nobody can trust."""
     store.record(a_report())
 
     body = (await client.get("/cases/CASE-1001/reports")).json()
@@ -161,13 +147,9 @@ async def test_money_arrives_as_text_rather_than_a_number(
     assert body["reports"][0]["amount_usd"] == "52.00"
 
 
-# --- One report, naming what the claim covers (FR-2.9a) ----------------------
-
-
 async def test_fr_2_9a_a_report_names_every_damaged_product_on_its_claim(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-2.9a: a rep deciding sees the whole claim rather than inferring what else was on it."""
     store.record(a_claim_of_two_products())
 
     body = (await client.get("/reports/RPT-CASE-1001")).json()
@@ -182,7 +164,6 @@ async def test_fr_2_9a_a_report_names_every_damaged_product_on_its_claim(
 async def test_a_claim_of_one_product_names_just_the_one(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-1a.5: one damaged product goes through exactly the same machinery as five."""
     store.record(a_report())
 
     body = (await client.get("/reports/RPT-CASE-1001")).json()
@@ -191,7 +172,6 @@ async def test_a_claim_of_one_product_names_just_the_one(
 
 
 async def test_a_report_that_does_not_exist_says_so(client: AsyncClient) -> None:
-    """NFR-4: a caller is always left with something they can act on."""
     response = await client.get("/reports/RPT-NOBODY")
 
     assert response.status_code == 404
@@ -199,7 +179,6 @@ async def test_a_report_that_does_not_exist_says_so(client: AsyncClient) -> None
 
 
 async def test_an_earlier_version_can_be_read_back(client: AsyncClient, store: ReportStore) -> None:
-    """FR-R.13: the version a rep was looking at has to survive being superseded."""
     store.record(a_report(version=1))
     store.record(a_report(version=2))
 
@@ -210,27 +189,24 @@ async def test_an_earlier_version_can_be_read_back(client: AsyncClient, store: R
     assert earlier["version"] == 1
 
 
-# --- Approving (FR-2.8, FR-2.9, FR-C.1) --------------------------------------
-
-
 async def test_approving_a_report_leaves_it_approved_and_records_the_decision(
     client: AsyncClient, store: ReportStore, decisions: DecisionStore
 ) -> None:
-    """FR-2.9, FR-C.1: approving is the only way out, and it produces one durable record."""
     store.record(a_report())
 
     response = await client.post("/reports/RPT-CASE-1001/approve", json={})
+    report = store.get("RPT-CASE-1001")
 
     assert response.status_code == 200
     assert response.json()["state"] == "approved"
-    assert store.get("RPT-CASE-1001").state is ReportState.APPROVED  # type: ignore[union-attr]
+    assert report is not None
+    assert report.state is ReportState.APPROVED
     assert decisions.count() == 1
 
 
 async def test_approving_at_a_different_figure_records_both(
     client: AsyncClient, store: ReportStore, decisions: DecisionStore
 ) -> None:
-    """FR-2.1: a report approved at a different figure must not show only the old one."""
     store.record(a_report())
 
     body = (
@@ -250,7 +226,6 @@ async def test_approving_at_a_different_figure_records_both(
 async def test_a_figure_over_the_cap_is_accepted_and_flagged(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-R.8, FR-C.4: losing a decision a person made is worse than recording one to query."""
     store.record(a_report())
 
     body = (
@@ -265,22 +240,22 @@ async def test_a_figure_over_the_cap_is_accepted_and_flagged(
 async def test_a_figure_that_is_not_an_amount_is_refused(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-1.21: treating it as "no change" would approve a figure nobody chose."""
     store.record(a_report())
 
     response = await client.post(
         "/reports/RPT-CASE-1001/approve", json={"amount_usd": "about fifty"}
     )
+    report = store.get("RPT-CASE-1001")
 
     assert response.status_code == 400
     error = response.json()["error"]
     assert error["code"] == "invalid_request"
     assert error["details"]["amount_usd"] == "about fifty"
-    assert store.get("RPT-CASE-1001").state is ReportState.AWAITING_REVIEW  # type: ignore[union-attr]
+    assert report is not None
+    assert report.state is ReportState.AWAITING_REVIEW
 
 
 async def test_a_reworded_email_is_shown_in_full(client: AsyncClient, store: ReportStore) -> None:
-    """FR-2.7: a rep approves wording, so after a rewording the wording is theirs."""
     store.record(a_report())
 
     body = (
@@ -297,7 +272,6 @@ async def test_a_reworded_email_is_shown_in_full(client: AsyncClient, store: Rep
 async def test_a_recipient_cannot_be_sent_from_a_caller(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-3.2: who hears about a claim comes from the claim, not from whoever is reviewing it."""
     store.record(a_report())
 
     response = await client.post(
@@ -311,7 +285,6 @@ async def test_a_recipient_cannot_be_sent_from_a_caller(
 async def test_approving_twice_leaves_one_decision(
     client: AsyncClient, store: ReportStore, decisions: DecisionStore
 ) -> None:
-    """FR-3.5: a double-click must not count as two decisions."""
     store.record(a_report())
 
     first = await client.post("/reports/RPT-CASE-1001/approve", json={})
@@ -325,7 +298,6 @@ async def test_approving_twice_leaves_one_decision(
 async def test_approving_an_approved_report_differently_is_refused(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-2.9: a decision a person took is not something a later request may replace."""
     store.record(a_report())
     await client.post("/reports/RPT-CASE-1001/approve", json={})
 
@@ -338,7 +310,6 @@ async def test_approving_an_approved_report_differently_is_refused(
 async def test_a_claim_the_quick_checks_stopped_can_be_approved(
     client: AsyncClient, store: ReportStore, decisions: DecisionStore
 ) -> None:
-    """FR-0.4, FR-C.1: the cheapest decision in the system still has to be recordable."""
     store.record(a_screening_report())
 
     response = await client.post("/reports/RPT-CASE-1004/approve", json={})
@@ -348,18 +319,9 @@ async def test_a_claim_the_quick_checks_stopped_can_be_approved(
     assert decisions.count() == 1
 
 
-# --- Sending a report back, and what comes back (FR-2.8, FR-R.1 to FR-R.14) ---
-
-
 async def test_sending_a_report_back_records_the_note_in_the_reps_own_words(
     client: AsyncClient, store: ReportStore, decisions: DecisionStore
 ) -> None:
-    """FR-2.8, FR-C.1: the rep says what is wrong in their own words, kept as written.
-
-    Nothing is stood in for here, so nothing reworks the report — ShipBob cannot be reached
-    from a test process. What the note itself does is still the whole of what this checks,
-    and the rework has its own tests below.
-    """
     store.record(a_report())
 
     body = await send_feedback(
@@ -373,12 +335,6 @@ async def test_sending_a_report_back_records_the_note_in_the_reps_own_words(
 async def test_a_note_the_agent_could_not_answer_still_leaves_a_report_to_act_on(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """NFR-4: a rework that could not run must never cost a rep the work they were deciding on.
-
-    No model is configured in this test, so even the inexpensive routing step cannot run. What
-    comes back is recorded on the current version with every finding unchanged and a sentence
-    saying why.
-    """
     before = a_report()
     store.record(before)
 
@@ -394,12 +350,6 @@ async def test_a_note_the_agent_could_not_answer_still_leaves_a_report_to_act_on
 async def test_fr_c_2_approving_at_a_different_figure_is_remembered_against_the_merchant(
     client: AsyncClient, store: ReportStore, settings: Settings
 ) -> None:
-    """FR-C.2, FR-3.8: the commonest correction is changing the number and moving on.
-
-    Until this, only a representative who stopped to write a sentence taught the system anything.
-    An override is a disagreement whether or not anybody explained it, and it is the one the next
-    claim from this merchant most needs to know about.
-    """
     store.record(a_report())
 
     await client.post(
@@ -417,11 +367,6 @@ async def test_fr_c_2_approving_at_a_different_figure_is_remembered_against_the_
 async def test_fr_c_2_approving_as_it_stands_is_remembered_as_nothing(
     client: AsyncClient, store: ReportStore, settings: Settings
 ) -> None:
-    """FR-C.2: a decision that agrees with the recommendation writes no correction.
-
-    A memory of every decision is a memory of nothing — it would fill the next claim's context
-    with confirmations and bury the one correction that mattered.
-    """
     store.record(a_report())
 
     await client.post("/reports/RPT-CASE-1001/approve", json={})
@@ -432,7 +377,6 @@ async def test_fr_c_2_approving_as_it_stands_is_remembered_as_nothing(
 async def test_fr_c_2_rewording_the_email_alone_is_remembered_as_nothing(
     client: AsyncClient, store: ReportStore, settings: Settings
 ) -> None:
-    """FR-2.8, FR-C.2: rewording is about how an email reads, not about what the answer was."""
     store.record(a_report())
 
     await client.post(
@@ -446,7 +390,6 @@ async def test_fr_c_2_rewording_the_email_alone_is_remembered_as_nothing(
 async def test_fr_r_14_what_a_representative_said_is_remembered_against_the_merchant(
     client: AsyncClient, store: ReportStore, settings: Settings
 ) -> None:
-    """FR-R.14, FR-3.8: the system should be better on the merchant's next claim, not just this one."""
     store.record(a_report())
 
     await client.post(
@@ -467,12 +410,6 @@ async def test_fr_r_8_a_stopped_claim_gets_an_answer_and_keeps_its_verdict(
     decisions: DecisionStore,
     a_scripted_reply: list[Any],
 ) -> None:
-    """FR-R.8: feedback cannot overturn a verdict from fixed rules — and is still answered.
-
-    The representative is arguing with the age limit. They get a reply, because being told
-    nothing is the failure this whole feature exists to prevent, and the report keeps every
-    reason it was stopped for.
-    """
     store.record(a_screening_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -495,7 +432,6 @@ async def test_fr_r_8_a_stopped_claim_gets_an_answer_and_keeps_its_verdict(
 async def test_a_stopped_claims_merchant_email_can_still_be_reworded(
     client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
-    """FR-0.4, FR-R.8: the wording is the one thing about a stopped claim that is open."""
     store.record(a_screening_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -515,7 +451,6 @@ async def test_a_stopped_claims_merchant_email_can_still_be_reworded(
 async def test_two_different_notes_on_one_report_are_two_decisions(
     client: AsyncClient, store: ReportStore, decisions: DecisionStore
 ) -> None:
-    """FR-C.1: a rep who says one thing and then another has decided twice."""
     store.record(a_report())
 
     await client.post("/reports/RPT-CASE-1001/send-back", json={"feedback": "One."})
@@ -527,7 +462,6 @@ async def test_two_different_notes_on_one_report_are_two_decisions(
 async def test_a_report_sent_back_can_still_be_approved(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-2.9: a case may cycle any number of times and still needs a person to release it."""
     store.record(a_report())
     await client.post("/reports/RPT-CASE-1001/send-back", json={"feedback": "Look again."})
 
@@ -540,7 +474,6 @@ async def test_a_report_sent_back_can_still_be_approved(
 async def test_an_approved_report_cannot_be_sent_back(
     client: AsyncClient, store: ReportStore
 ) -> None:
-    """FR-3.1: un-approving would undo something that releases execution."""
     store.record(a_report())
     await client.post("/reports/RPT-CASE-1001/approve", json={})
 
@@ -552,19 +485,14 @@ async def test_an_approved_report_cannot_be_sent_back(
 
 
 async def test_acting_on_a_report_that_does_not_exist_says_so(client: AsyncClient) -> None:
-    """NFR-4: a caller is always left with something they can act on."""
     response = await client.post("/reports/RPT-NOBODY/approve", json={})
 
     assert response.status_code == 404
 
 
-# --- A store that cannot be read (NFR-4) -------------------------------------
-
-
 async def test_a_store_that_cannot_be_read_fails_rather_than_reporting_an_empty_claim(
     settings: Settings,
 ) -> None:
-    """NFR-4: a claim whose reports could not be read must not read as a claim with none."""
     settings.database_path.parent.mkdir(parents=True, exist_ok=True)
     settings.database_path.write_text("this is not a database at all")
     app = create_app(settings, report_store=ReportStore(settings.database_path))
@@ -576,11 +504,7 @@ async def test_a_store_that_cannot_be_read_fails_rather_than_reporting_an_empty_
     assert response.json()["error"]["code"] == "storage_unavailable"
 
 
-# --- The rework itself, end to end (FR-R.1, FR-R.9, FR-R.12, FR-R.13) --------
-
-
 def a_reworked_answer(**overrides: Any) -> RevisionConclusion:
-    """What the agent comes back with: the box was never photographed after all."""
     fields: dict[str, Any] = {
         "evidence": (
             EvidenceJudgement(
@@ -605,7 +529,6 @@ def a_reworked_answer(**overrides: Any) -> RevisionConclusion:
 
 
 def a_full_rework_plan() -> RevisionPlan:
-    """Route feedback that disputes the findings back through the evidence workflow."""
     return RevisionPlan(
         mode=RevisionMode.REWORK_REPORT,
         reply_to_representative="I need to revisit the report evidence for that.",
@@ -613,29 +536,18 @@ def a_full_rework_plan() -> RevisionPlan:
 
 
 def queue_full_rework(answers: list[Any], conclusion: RevisionConclusion | None = None) -> None:
-    """Queue the inexpensive routing decision followed by the full rework result."""
     answers.extend((a_full_rework_plan(), conclusion or a_reworked_answer()))
 
 
 @pytest.fixture
 def a_scripted_reply(app: FastAPI, shipbob: respx.Router) -> Iterator[list[Any]]:
-    """Answer the agent from a script, and serve the sample claims from a stand-in ShipBob.
-
-    The list handed back is the queue: append an answer for each message a test will send, in
-    the order it will send them. An investigated report first gets a `RevisionPlan` and, when
-    that selects full rework, a `RevisionConclusion`. A claim-level or stopped claim gets a
-    `RevisedClaimReport`.
-    """
     mock_shipbob(shipbob, case=CASE_1001, shipment=SHIPMENT_1001, order=ORDER_1001)
     mock_shipbob(shipbob, case=CASE_1004, shipment=SHIPMENT_1004, order=ORDER_1004)
-    # A product rework prices the shipment before it starts, the same way an investigation
-    # does, so the stand-in has to answer that too or the request escapes to a name nothing
-    # serves.
+
     shipbob.post("/invoices/generate").respond(200, json=INVOICE_342578703)
     answers: list[Any] = []
 
     def models() -> tuple[object, StructuredModel]:
-        """Both models, from the script, built only once something actually needs them."""
         return (
             scripted(*[AIMessage(content="I have read the note.") for _ in answers]),
             StructuredModel(scripted(*answers), max_attempts=1),
@@ -649,7 +561,6 @@ def a_scripted_reply(app: FastAPI, shipbob: respx.Router) -> Iterator[list[Any]]
 async def test_fr_r_1_a_note_gets_the_report_reworked_and_handed_back(
     client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
-    """FR-R.1, FR-R.9: the rep says what is wrong, and the agent reworks the whole report."""
     store.record(a_report())
     queue_full_rework(a_scripted_reply)
 
@@ -666,7 +577,6 @@ async def test_fr_r_1_a_note_gets_the_report_reworked_and_handed_back(
 async def test_feedback_streams_progress_and_only_returns_a_report_reference(
     client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
-    """The feedback response stays small; changed report data is fetched only if wanted."""
     store.record(a_report())
     queue_full_rework(a_scripted_reply)
 
@@ -692,7 +602,6 @@ async def test_generating_an_email_uses_the_stored_report_without_reopening_evid
     a_scripted_reply: list[Any],
     shipbob: respx.Router,
 ) -> None:
-    """Email wording needs one small model decision, not another evidence investigation."""
     store.record(a_report())
     a_scripted_reply.append(
         RevisionPlan(
@@ -729,7 +638,6 @@ async def test_a_question_uses_the_stored_report_without_creating_a_report_versi
     a_scripted_reply: list[Any],
     shipbob: respx.Router,
 ) -> None:
-    """A stored-report answer neither reopens evidence nor pretends the report changed."""
     store.record(a_report())
     a_scripted_reply.append(
         RevisionPlan(
@@ -757,7 +665,6 @@ async def test_a_question_uses_the_stored_report_without_creating_a_report_versi
 async def test_fr_r_10_the_reworked_report_says_what_changed_and_what_did_not(
     client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
-    """FR-R.10: a rep confirms their feedback was understood without re-reading everything."""
     store.record(a_report())
     queue_full_rework(a_scripted_reply)
 
@@ -776,7 +683,6 @@ async def test_fr_r_10_the_reworked_report_says_what_changed_and_what_did_not(
 async def test_fr_r_11_the_merchant_email_is_rewritten_to_match(
     client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
-    """FR-R.11: a revised recommendation with a stale email is an inconsistent state."""
     store.record(a_report())
     queue_full_rework(a_scripted_reply)
 
@@ -791,7 +697,6 @@ async def test_fr_r_11_the_merchant_email_is_rewritten_to_match(
 async def test_fr_r_13_the_version_the_representative_decided_on_can_still_be_read_back(
     client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
-    """FR-R.13: every version is kept, because it is the record of how a decision was reached."""
     store.record(a_report())
     queue_full_rework(a_scripted_reply)
 
@@ -807,7 +712,6 @@ async def test_fr_r_13_the_version_the_representative_decided_on_can_still_be_re
 async def test_fr_r_12_a_second_note_carries_the_first_one_into_the_rework(
     client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
-    """FR-R.12: each cycle carries the full feedback history, so a correction is not undone."""
     store.record(a_report())
     queue_full_rework(a_scripted_reply)
     queue_full_rework(
@@ -825,7 +729,6 @@ async def test_fr_r_12_a_second_note_carries_the_first_one_into_the_rework(
         client, "RPT-CASE-1001", "Ask for the invoice again while you are there."
     )
 
-    # The second answer adds to the conversation but does not alter the report data again.
     assert body["version"] == 2
     assert [turn["feedback"] for turn in body["revisions"]] == [
         "The packaging photo is wrong.",
@@ -837,7 +740,6 @@ async def test_fr_r_12_a_second_note_carries_the_first_one_into_the_rework(
 async def test_a_reworked_report_can_then_be_approved(
     client: AsyncClient, store: ReportStore, a_scripted_reply: list[Any]
 ) -> None:
-    """FR-2.9: a case may cycle any number of times and still needs a person to release it."""
     store.record(a_report())
     queue_full_rework(a_scripted_reply)
 
@@ -851,11 +753,7 @@ async def test_a_reworked_report_can_then_be_approved(
     assert response.json()["version"] == 2
 
 
-# --- A claim nobody could split into products (FR-1a.4, FR-R.1) --------------
-
-
 def a_clarification_report(**overrides: Any) -> Report:
-    """A claim whose split was never settled, so it names no product at all."""
     fields: dict[str, Any] = {
         "report_id": "RPT-CASE-1002",
         "case_id": "CASE-1002",
@@ -880,7 +778,6 @@ def a_clarification_report(**overrides: Any) -> Report:
 
 @pytest.fixture
 def case_1002(shipbob: respx.Router) -> None:
-    """Serve CASE-1002 and its images from the stand-in, for a claim that has to be re-read."""
     mock_shipbob(shipbob, case=CASE_1002, shipment=SHIPMENT_1002, order=ORDER_1002)
     shipbob.get("/cases/CASE-1002/attachments").respond(200, json=ATTACHMENTS_1002)
 
@@ -891,11 +788,6 @@ async def test_fr_r_1_a_claim_that_names_no_product_still_answers_the_representa
     a_scripted_reply: list[Any],
     case_1002: None,
 ) -> None:
-    """FR-R.1: no report kind swallows a message. The rep asked; the agent answers.
-
-    This is the case the feature was got wrong on first: a report whose whole purpose is to
-    ask the representative a question used to refuse the answer to it.
-    """
     store.record(a_clarification_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -927,11 +819,6 @@ async def test_a_claim_that_names_no_product_can_never_be_given_an_amount(
     a_scripted_reply: list[Any],
     case_1002: None,
 ) -> None:
-    """FR-1.21: nothing on a report that names no product was ever priced, so no figure exists.
-
-    The representative asks outright for a refund. There is no field the answer could put one
-    in, so the report comes back with no amount however the model replies.
-    """
     store.record(a_clarification_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -957,11 +844,6 @@ async def test_an_answer_that_changes_nothing_leaves_the_report_exactly_as_it_wa
     a_scripted_reply: list[Any],
     case_1002: None,
 ) -> None:
-    """A question answered is not a report reworked, and the two must not be confused.
-
-    A form full of blanks would otherwise read as "nothing is unclear, nothing is needed from
-    the merchant, send them nothing" — none of which the agent said.
-    """
     before = a_clarification_report()
     store.record(before)
     a_scripted_reply.append(
@@ -985,14 +867,11 @@ async def test_an_answer_that_changes_nothing_leaves_the_report_exactly_as_it_wa
     assert body["revisions"][-1]["reworked"] is False
 
 
-# --- Investigating the claim again, because the rep settled it (FR-1a.4) -----
-
 BOTANICAL = "CleanBoss Botanical Disinfectant & Cleaner 24oz 2 Pack"
 MULTI_SURFACE = "CleanBoss Multi Surface Cleaner 24oz"
 
 
 def a_settled_split() -> ClaimSplit:
-    """The split the fresh investigation reaches, now that the rep has named the products."""
     return ClaimSplit(
         claimed_products=(
             ClaimedProductProposal(
@@ -1007,7 +886,6 @@ def a_settled_split() -> ClaimSplit:
 
 
 def an_investigated_line() -> InvestigationConclusion:
-    """One product's findings, asking the merchant for the photograph that is still missing."""
     return InvestigationConclusion(
         evidence=(
             EvidenceJudgement(
@@ -1032,11 +910,6 @@ async def test_a_representative_settling_the_split_gets_the_claim_investigated_a
     a_scripted_reply: list[Any],
     case_1002: None,
 ) -> None:
-    """FR-1a.4: the one honest route from "we cannot tell which product" to a report to approve.
-
-    The agent cannot price a claim nobody could split, so when the representative settles it,
-    the claim is investigated properly rather than a figure being invented for it.
-    """
     store.record(a_clarification_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -1064,12 +937,6 @@ async def test_a_fresh_investigation_never_overwrites_the_version_the_rep_was_lo
     a_scripted_reply: list[Any],
     case_1002: None,
 ) -> None:
-    """FR-R.13: the record of how a decision was reached survives the claim being redone.
-
-    A fresh investigation writes its reports as version 1, and the claim-level report shares a
-    name with the one it would produce for a split it still could not settle. Writing that
-    naively would erase the conversation.
-    """
     store.record(a_clarification_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -1098,12 +965,6 @@ async def test_what_the_representative_said_reaches_the_fresh_investigation(
     a_scripted_reply: list[Any],
     case_1002: None,
 ) -> None:
-    """FR-R.14, FR-0.5: their answer travels by the channel that already existed.
-
-    A message is written against the merchant the moment it is sent, and a claim being
-    investigated reads those corrections as starting context — so nothing new had to be
-    invented to get the representative's answer in front of the split.
-    """
     store.record(a_clarification_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -1124,11 +985,7 @@ async def test_what_the_representative_said_reaches_the_fresh_investigation(
     ]
 
 
-# --- Naming a product, without redoing the whole claim (FR-1a.4) -------------
-
-
 def a_directed_approval() -> RevisionConclusion:
-    """What the product's own pass concludes once the representative has directed a payment."""
     return RevisionConclusion(
         evidence=(
             EvidenceJudgement(
@@ -1157,12 +1014,6 @@ async def test_naming_a_product_produces_a_priced_report_without_redoing_the_cla
     a_scripted_reply: list[Any],
     case_1002: None,
 ) -> None:
-    """FR-1a.4: a representative who answers the question should not wait for the whole claim.
-
-    Investigating the claim again re-reads every image, re-splits it, and on a claim nobody
-    could split very often fails to split it a second time — leaving the representative who
-    just answered that exact question with nothing. Naming the product costs one pass.
-    """
     store.record(a_clarification_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -1192,7 +1043,6 @@ async def test_a_directed_payment_says_on_the_report_what_it_set_aside(
     a_scripted_reply: list[Any],
     case_1002: None,
 ) -> None:
-    """NFR-5: a payment a representative directed and one the evidence earned must differ."""
     store.record(a_clarification_report())
     a_scripted_reply.append(
         RevisedClaimReport(
@@ -1213,11 +1063,7 @@ async def test_a_directed_payment_says_on_the_report_what_it_set_aside(
     assert "evidence_incomplete" in outcome["waived"]
 
 
-# --- Approving as directed, without investigating again (FR-2.8) --------------
-
-
 def a_report_asking_the_merchant() -> Report:
-    """The collagen's report as it stands when it went back to the merchant for a photograph."""
     asking = a_report()
     content = asking.content
     assert isinstance(content, InvestigationReportContent)
@@ -1238,7 +1084,6 @@ def a_report_asking_the_merchant() -> Report:
 
 
 def an_approval_as_directed(**overrides: Any) -> RevisedClaimReport:
-    """What the agent reads off "it is the multi surface cleaner; approve the refund"."""
     fields: dict[str, Any] = {
         "reply_to_representative": "Taken as read: the multi surface cleaner. Pricing it now.",
         "settled_products": (SettledProduct(name=MULTI_SURFACE, quantity=2, sku="A00300"),),
@@ -1252,7 +1097,6 @@ def an_approval_as_directed(**overrides: Any) -> RevisedClaimReport:
 
 @pytest.fixture
 def invoice_1002(shipbob: respx.Router) -> None:
-    """Price CASE-1002's shipment from its own order, since that is what pays the claim."""
     shipbob.post("/invoices/generate").respond(
         200, json=invoice_from_order(ORDER_1002, shipment_id="344745459")
     )
@@ -1266,11 +1110,6 @@ async def test_an_instruction_to_pay_a_named_product_is_priced_and_not_investiga
     case_1002: None,
     invoice_1002: None,
 ) -> None:
-    """A representative who has decided should not wait for the system to agree with them.
-
-    The claim is priced from the invoice and the approval email is finished with the figure.
-    No image is read, no tool is called, and no second model answer is needed.
-    """
     store.record(a_clarification_report())
     a_scripted_reply.append(an_approval_as_directed())
 
@@ -1323,7 +1162,6 @@ async def test_approving_an_investigated_report_costs_one_invoice_read(
     a_scripted_reply: list[Any],
     shipbob: respx.Router,
 ) -> None:
-    """ "Approve the refund" on a report that asked for more is an approval, not a rework."""
     store.record(a_report_asking_the_merchant())
     a_scripted_reply.append(
         RevisionPlan(
@@ -1369,7 +1207,6 @@ async def test_a_directed_payment_nobody_can_price_asks_for_the_figure_and_keeps
     shipbob: respx.Router,
     case_1002: None,
 ) -> None:
-    """The agent asks rather than pushes back, and the email waits on the report with it."""
     store.record(a_clarification_report())
     shipbob.post("/invoices/generate").respond(422, json={"error": "invoice_unavailable"})
     a_scripted_reply.append(an_approval_as_directed())

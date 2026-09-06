@@ -9,21 +9,9 @@ from pydantic import BaseModel, ConfigDict
 
 from claim_agent.domain.models import Attachment, BlankToNone, Case, UtcDatetime
 
-# ---------------------------------------------------------------------------
-# Part A — the same photograph, more than once
-# ---------------------------------------------------------------------------
-
 
 class DuplicateEvidenceBasis(StrEnum):
-    """How two attachments were established to be the same file.
-
-    `STORAGE_KEY` means their URLs point at the same stored file — established
-    without downloading anything, and so tried first. `FINGERPRINT` means their
-    downloaded bytes hashed identically, which is stronger evidence but only
-    available when a caller has already fetched and hashed both files. `BOTH`
-    means the two agreed: the cheap check and the expensive check found the same
-    pair.
-    """
+    """How two attachments were established to be the same file."""
 
     STORAGE_KEY = "storage_key"
     FINGERPRINT = "fingerprint"
@@ -31,21 +19,7 @@ class DuplicateEvidenceBasis(StrEnum):
 
 
 class DuplicateEvidenceGroup(BaseModel):
-    """One photograph that appears more than once among the attachments looked at.
-
-    Attributes:
-        attachment_ids: every attachment that is this same file, in the order they
-            were encountered.
-        claim_ids: every claim these attachments were filed under, in the order
-            first seen. Length one means one merchant sent the same picture twice
-            on their own claim. Length more than one means the same picture is on
-            two different merchants' claims — the more serious finding, and the
-            reason `find_duplicate_evidence` reports the two kinds separately
-            rather than folding them into one list.
-        basis: how the match was established.
-        detail: one plain sentence naming the attachments and claims involved,
-            ready to show a representative.
-    """
+    """One photograph that appears more than once among the attachments looked at."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -56,23 +30,7 @@ class DuplicateEvidenceGroup(BaseModel):
 
 
 class DuplicateEvidenceReport(BaseModel):
-    """Every duplicate photograph found among a set of attachments.
-
-    **A duplicate here is a fact, not a finding of fraud.** A merchant re-sending a
-    photo that failed to attach the first time produces exactly the same signal as
-    a photo used to support two unrelated claims; this report cannot and does not
-    try to tell those apart. It is a thing a representative should see and weigh,
-    the same way FR-1.13 already refuses to pick a winner between two ambiguous
-    matches elsewhere in this system.
-
-    Attributes:
-        within_claim_groups: duplicate photographs where every copy was filed
-            under the same claim — most often an accidental double upload.
-        cross_claim_groups: duplicate photographs that span more than one claim —
-            the same picture used on two different merchants' cases. Worth more
-            scrutiny than the within-claim kind, which is why it is kept apart
-            rather than mixed into one list a reader has to filter themselves.
-    """
+    """Every duplicate photograph found among a set of attachments."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -86,41 +44,12 @@ class DuplicateEvidenceReport(BaseModel):
 
 
 def fingerprint(data: bytes) -> str:
-    """Take a byte-exact fingerprint of a file, so two downloads can be compared.
-
-    Returns the sha256 hex digest of `data`. Two files with the same fingerprint
-    are the same bytes, full stop.
-
-    **What this does not catch.** A photograph re-saved by a phone's camera roll,
-    recompressed by a messaging app, or cropped by a single pixel produces
-    completely different bytes and therefore a completely different fingerprint,
-    even though a person looking at both would call them the same picture. Telling
-    those apart needs a *perceptual* hash — one that scores images by how alike
-    they look rather than by whether their bytes match — and that is a real
-    library dependency this project has not taken on for a demo. The cost of
-    skipping it: a merchant (or someone reusing a photograph across two claims)
-    who re-exports the same picture before re-uploading it defeats this check
-    completely, and nothing here will notice. `find_duplicate_evidence` only ever
-    catches the exact-copy case.
-    """
+    """Take a byte-exact fingerprint of a file, so two downloads can be compared."""
     return hashlib.sha256(data).hexdigest()
 
 
 def storage_key(url: str) -> str:
-    """The stable part of a signed storage URL — everything except its signature.
-
-    ShipBob's attachment URLs point at blob storage and carry a signed query
-    string (`?se=...&sp=r&sv=...&sr=b&sig=...`). That signature is minted per
-    request, not stored with the file, so the same picture fetched twice can
-    arrive with two different query strings attached to the very same file.
-    Comparing whole URLs would call those two requests different files; this
-    strips the query string (and anything after it) and keeps the scheme, host
-    and path — the part that actually names where the file lives.
-
-    Two attachments with the same storage key are the same file, and knowing
-    that costs nothing: no download, no network call. That is why
-    `find_duplicate_evidence` tries this before it ever looks at a fingerprint.
-    """
+    """The stable part of a signed storage URL — everything except its signature."""
     parsed = urlsplit(url)
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
@@ -131,49 +60,7 @@ def find_duplicate_evidence(
     *,
     fingerprints_by_id: Mapping[str, str] | None = None,
 ) -> DuplicateEvidenceReport:
-    """Find every photograph that shows up more than once among these attachments.
-
-    Two checks run, in order of how much they cost:
-
-    1. **Storage key.** Any attachments whose URLs share a `storage_key` are the
-       same file. This needs nothing but the URLs already on hand.
-    2. **Fingerprint.** For attachments whose bytes the caller has already
-       downloaded and hashed with `fingerprint`, any that share a hash are the
-       same file too — catching a copy stored at a genuinely different path that
-       the storage-key check alone would miss.
-
-    A pair caught by both checks is not reported twice: it comes back once, with
-    `basis` set to `BOTH`.
-
-    Every attachment must have an entry in `claim_id_by_attachment` mapping its
-    `attachment_id` to the claim (support case) it came from — this module has no
-    other way to know which attachments belong to the same claim and which do
-    not, and inventing that field on `Attachment` was ruled out so as not to
-    touch a shape other code already depends on.
-
-    Args:
-        attachments: every attachment to compare, from however many claims. May
-            span one claim (checking for an accidental double upload) or several
-            (checking whether a photograph has been reused across claims).
-        claim_id_by_attachment: which claim each attachment's `attachment_id`
-            came from.
-        fingerprints_by_id: sha256 hex digests (from `fingerprint`) the caller
-            has already computed, keyed by `attachment_id`. Omit entirely, or
-            leave an attachment out of it, to run the storage-key check alone for
-            that attachment — an ordinary and cheaper outcome, not a failure.
-
-    Returns:
-        Every duplicate found, split into groups confined to one claim and
-        groups that cross claims. An input with no duplicates, or an empty list
-        of attachments, comes back with both lists empty — that is the normal
-        case, not an error (FR-0.6: the same attachments always produce the same
-        report).
-
-    Raises:
-        ValueError: an attachment's id has no entry in `claim_id_by_attachment`.
-            That is a caller wiring mistake, not an ambiguous finding about the
-            evidence, so it is refused rather than guessed at.
-    """
+    """Find every photograph that shows up more than once among these attachments."""
     fingerprints = fingerprints_by_id or {}
     _require_claim_ids(attachments, claim_id_by_attachment)
 
@@ -228,12 +115,7 @@ def find_duplicate_evidence(
 def _require_claim_ids(
     attachments: Sequence[Attachment], claim_id_by_attachment: Mapping[str, str]
 ) -> None:
-    """Refuse to guess which claim an attachment came from.
-
-    A missing entry here is not an ambiguous fact about the evidence — it means
-    the caller never told this function something it needed, so it is reported
-    as a mistake rather than silently skipped or grouped under a made-up claim id.
-    """
+    """Refuse to guess which claim an attachment came from."""
     missing = [
         attachment.attachment_id
         for attachment in attachments
@@ -268,21 +150,8 @@ def _label(attachment: Attachment) -> str:
     return attachment.file_name or attachment.attachment_id
 
 
-# ---------------------------------------------------------------------------
-# Part B — claims connected to this one
-# ---------------------------------------------------------------------------
-
-
 class CaseSummary(BaseModel):
-    """One row of ShipBob's case listing (`GET /cases`) — not the full case record.
-
-    This is deliberately thin, because that is all the endpoint gives back: an
-    id, a case number, a status, a subject line, and when it was filed. It carries
-    no `order_id`, `shipment_id`, `user_id` or `account_name` — nothing this
-    system uses to tell whether one claim is connected to another. Turning a list
-    of these into anything `find_related_claims` can use means reading each case
-    in full, one at a time (no requirement covers this; see DESIGN.md).
-    """
+    """One row of ShipBob's case listing (`GET /cases`) — not the full case record."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -294,26 +163,7 @@ class CaseSummary(BaseModel):
 
 
 class RelationSignal(StrEnum):
-    """One way two claims can turn out to be connected, strongest first.
-
-    The order matters and is not arbitrary:
-
-    - `SAME_SHIPMENT` is the strongest signal there is. Two claims about the same
-      parcel are nearly always the same event reported twice — by the merchant a
-      second time, or by two people at the same merchant — rather than two
-      genuinely separate problems.
-    - `SAME_ORDER` is close behind it. An order can ship in more than one parcel,
-      so two claims on the same order are not guaranteed to be about the same
-      shipment, but they are still about the very same purchase.
-    - `SAME_USER` — the same merchant account filing more than one claim — is
-      ordinary business. Merchants ship a lot of parcels, and more than one of
-      them arriving damaged is unremarkable on its own.
-    - `SAME_ACCOUNT_NAME` is the weakest of the four. It is display text rather
-      than a stable identifier — the same text one merchant used before, but
-      names can change and are not guaranteed unique the way an id is — so it
-      matters most when the merchant id is missing rather than as a replacement
-      for `SAME_USER`.
-    """
+    """One way two claims can turn out to be connected, strongest first."""
 
     SAME_SHIPMENT = "same_shipment"
     SAME_ORDER = "same_order"
@@ -322,16 +172,7 @@ class RelationSignal(StrEnum):
 
 
 class RelatedClaim(BaseModel):
-    """One other claim connected to the claim being looked at.
-
-    Attributes:
-        case_id: the other claim's case id.
-        shared_signals: every kind of match found against it, strongest first.
-        strongest_signal: the first entry of `shared_signals`, named separately
-            so a caller does not have to know the strength ordering itself.
-        detail: one plain sentence naming what is shared, ready to show a
-            representative.
-    """
+    """One other claim connected to the claim being looked at."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -342,20 +183,7 @@ class RelatedClaim(BaseModel):
 
 
 class RelatedClaims(BaseModel):
-    """Every other claim connected to one claim, and what connects them.
-
-    **This reports connections, never a verdict.** Two claims sharing a shipment
-    is a strong hint, not a conclusion — deciding what it means is a
-    representative's judgement, not this function's (FR-1.13's principle applied
-    here: an ambiguous or suggestive finding is reported, never resolved for the
-    reader).
-
-    Attributes:
-        case_id: the claim these connections were found for.
-        related: every other claim that shares at least one signal with it, in
-            the order they were checked. Empty means nothing connected — the
-            ordinary case for most claims, and not a sign anything went wrong.
-    """
+    """Every other claim connected to one claim, and what connects them."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -377,28 +205,7 @@ _SIGNAL_LABELS: dict[RelationSignal, str] = {
 
 
 def find_related_claims(case: Case, others: Sequence[Case]) -> RelatedClaims:
-    """Find every other claim connected to this one by shipment, order or merchant.
-
-    **This takes full case records and does no reading of its own** — a
-    deliberate limit, and an honest one. `GET /cases` only ever returns the thin
-    summary shape `CaseSummary` holds: no `order_id`, `shipment_id`, `user_id` or
-    `account_name`. Relating claims properly therefore means fetching every
-    candidate case in full first — one request per case, N+1 requests for N
-    candidates — and that cost belongs to whoever calls this, not to a function
-    that is supposed to run with no network at all (FR-0.6).
-
-    Args:
-        case: the claim to find connections for.
-        others: every other claim to check it against, already read in full. A
-            case sharing `case.case_id` is skipped rather than reported as
-            connected to itself.
-
-    Returns:
-        Every other claim that shares at least one signal, each carrying every
-        signal it shares and which one to weigh most (see `RelationSignal`).
-        Nothing shared at all is the ordinary outcome and comes back as an empty
-        `related` list, not an error.
-    """
+    """Find every other claim connected to this one by shipment, order or merchant."""
     related: list[RelatedClaim] = []
     for other in others:
         if other.case_id == case.case_id:
@@ -432,12 +239,7 @@ def _shared_signals(case: Case, other: Case) -> tuple[RelationSignal, ...]:
 
 
 def _shared(a: str | None, b: str | None) -> bool:
-    """Two values count as shared only when both are present and identical.
-
-    A claim with no shipment id and another claim with no shipment id are not
-    "the same shipment" — they are two claims that are each missing one. Treating
-    absence as a match would connect every incomplete claim to every other one.
-    """
+    """Two values count as shared only when both are present and identical."""
     return a is not None and b is not None and a == b
 
 
@@ -457,19 +259,8 @@ def _relation_detail(other: Case, signals: tuple[RelationSignal, ...]) -> str:
     return f"{other.case_id} shares {_and_list(parts)} with this claim."
 
 
-# ---------------------------------------------------------------------------
-# Shared
-# ---------------------------------------------------------------------------
-
-
 def _unique_in_order(values: Iterable[str]) -> tuple[str, ...]:
-    """The values, each kept once, in the order they first appeared.
-
-    A plain dictionary rather than a set: a set's iteration order is not
-    guaranteed to be the same between two runs of the same program, and the
-    order these come back in ends up in a report a representative reads, which
-    has to be the same twice for the same input (FR-0.6, NFR-1).
-    """
+    """The values, each kept once, in the order they first appeared."""
     seen: dict[str, None] = {}
     for value in values:
         seen.setdefault(value, None)

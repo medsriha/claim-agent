@@ -23,7 +23,6 @@ CRUSHED_IN_A_BAD_BOX = (
 
 
 def a_case() -> Case:
-    """The claim in hand."""
     return Case(
         case_id="CASE-1001",
         created_date=FILED_AT,
@@ -33,7 +32,6 @@ def a_case() -> Case:
 
 
 def a_line(claim_line_id: str = "CASE-1001-L01") -> ClaimLine:
-    """The one product about to be investigated."""
     return ClaimLine(
         claim_line_id=claim_line_id,
         claimed=ClaimedProduct(name="Liposomal Tripeptide Collagen", quantity=1),
@@ -49,7 +47,6 @@ def a_line(claim_line_id: str = "CASE-1001-L01") -> ClaimLine:
 
 
 def a_record(**overrides: Any) -> PrecedentRecord:
-    """One past claim much like the one in hand."""
     fields: dict[str, Any] = {
         "precedent_id": "PREC-CASE-0900-L01",
         "case_id": "CASE-0900",
@@ -76,7 +73,6 @@ def a_record(**overrides: Any) -> PrecedentRecord:
 def test_the_claim_in_hand_is_given_its_precedent_before_it_is_investigated(
     tmp_path: Path,
 ) -> None:
-    """FR-S.6: precedent arrives with the claim, the way the pre-flight facts do."""
     store = PrecedentStore(tmp_path / "claims.db")
     store.record(a_record())
 
@@ -86,7 +82,6 @@ def test_the_claim_in_hand_is_given_its_precedent_before_it_is_investigated(
 
 
 def test_the_number_of_records_shown_comes_from_the_policy(tmp_path: Path) -> None:
-    """FR-S.5, FR-0.7: how many precedents a run sees is a judgement call, so it is configurable."""
     store = PrecedentStore(tmp_path / "claims.db")
     for index in range(4):
         store.record(a_record(precedent_id=f"PREC-{index}", case_id=f"CASE-{index}"))
@@ -102,7 +97,6 @@ def test_the_number_of_records_shown_comes_from_the_policy(tmp_path: Path) -> No
 
 
 def test_raising_the_bar_for_similarity_leaves_a_weak_match_out(tmp_path: Path) -> None:
-    """FR-S.5, FR-0.7: how close is close enough is a judgement call too."""
     resembling_but_not_identical = a_record(
         product_name="Additional Collagen Ampoule Duo",
         unit_price=Decimal("38.00"),
@@ -124,7 +118,6 @@ def test_raising_the_bar_for_similarity_leaves_a_weak_match_out(tmp_path: Path) 
 
 
 def test_a_claim_being_investigated_again_does_not_find_its_own_record(tmp_path: Path) -> None:
-    """FR-S.5: a claim is not evidence of how claims like it are handled."""
     store = PrecedentStore(tmp_path / "claims.db")
     store.record(a_record(precedent_id="PREC-CASE-1001-L01", claim_line_id="CASE-1001-L01"))
 
@@ -134,7 +127,6 @@ def test_a_claim_being_investigated_again_does_not_find_its_own_record(tmp_path:
 
 
 def test_what_triage_settled_about_the_evidence_shapes_the_search(tmp_path: Path) -> None:
-    """FR-S.5, FR-1a.3: retrieval runs after triage, so it uses what triage found."""
     missing_confirmation = (
         EvidenceFinding(
             kind=EvidenceKind.CUSTOMER_CONFIRMATION,
@@ -158,7 +150,6 @@ def test_what_triage_settled_about_the_evidence_shapes_the_search(tmp_path: Path
 
 
 def test_a_store_that_cannot_be_read_does_not_stop_the_investigation(tmp_path: Path) -> None:
-    """FR-S.13, NFR-4: the investigation goes ahead without precedent, and says so."""
     not_a_database = tmp_path / "claims.db"
     not_a_database.write_text("this is not a database at all")
 
@@ -171,7 +162,6 @@ def test_a_store_that_cannot_be_read_does_not_stop_the_investigation(tmp_path: P
 
 
 def test_an_empty_store_is_an_ordinary_answer(tmp_path: Path) -> None:
-    """FR-S.13: no comparable history is the normal state on the first claim ever filed."""
     found = precedent_for_claim(
         store=PrecedentStore(tmp_path / "claims.db"),
         case=a_case(),
@@ -186,7 +176,6 @@ def test_an_empty_store_is_an_ordinary_answer(tmp_path: Path) -> None:
 def test_fr_s_5_every_product_on_the_claim_is_searched_on_and_the_results_are_one_set(
     tmp_path: Path,
 ) -> None:
-    """FR-S.5 with FR-1b.1: one search per product, one set for the one run that reads it."""
     store = PrecedentStore(tmp_path / "claims.db")
     store.record(a_record())
     store.record(
@@ -210,7 +199,6 @@ def test_fr_s_5_every_product_on_the_claim_is_searched_on_and_the_results_are_on
 
 
 def test_fr_s_5_a_past_claim_two_products_both_turn_up_is_shown_once(tmp_path: Path) -> None:
-    """FR-S.13: one record shown twice would read as two confirmations of the same point."""
     store = PrecedentStore(tmp_path / "claims.db")
     store.record(a_record())
 
@@ -227,7 +215,6 @@ def test_fr_s_5_a_past_claim_two_products_both_turn_up_is_shown_once(tmp_path: P
 def test_fr_s_13_a_store_that_cannot_be_read_is_unreadable_for_the_whole_claim(
     tmp_path: Path,
 ) -> None:
-    """FR-S.13: "we looked and found none" must never stand in for "nobody looked"."""
     not_a_database = tmp_path / "claims.db"
     not_a_database.write_text("this is not a database at all")
 
@@ -242,7 +229,6 @@ def test_fr_s_13_a_store_that_cannot_be_read_is_unreadable_for_the_whole_claim(
 
 
 def test_a_claim_with_no_products_established_has_nothing_to_search_on(tmp_path: Path) -> None:
-    """FR-S.5: retrieval runs after the split, so no split means no query to make."""
     store = PrecedentStore(tmp_path / "claims.db")
     store.record(a_record())
 
@@ -253,7 +239,6 @@ def test_a_claim_with_no_products_established_has_nothing_to_search_on(tmp_path:
 
 
 def an_ampoule_line() -> ClaimLine:
-    """A second damaged product on the same claim, at a different price."""
     return ClaimLine(
         claim_line_id="CASE-1001-L02",
         claimed=ClaimedProduct(name="Additional Collagen Ampoule Duo", quantity=1),

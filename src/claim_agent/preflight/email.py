@@ -21,7 +21,7 @@ MONTH_NAMES = (
     "November",
     "December",
 )
-# Fixed names keep email dates independent of the host locale.
+
 
 _INSURED_NEVER_EMAILED = (
     "An insured shipment is sent for representative clarification to the insurance process, never explained to the "

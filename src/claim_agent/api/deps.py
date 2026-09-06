@@ -30,31 +30,18 @@ def get_settings(request: Request) -> Settings:
 
 
 def get_live_policy(request: Request) -> LivePolicy:
-    """Return the holder of the claim policy in force (FR-0.7).
-
-    Only the admin panel needs this, because only the admin panel changes the
-    policy. Anything that merely judges a claim wants `get_policy` instead.
-    """
+    """Return the holder of the claim policy in force (FR-0.7)."""
     live: LivePolicy = request.app.state.live_policy
     return live
 
 
 def get_policy(request: Request) -> Policy:
-    """Return the claim policy in force at the moment this request arrived.
-
-    Read once per request on purpose: a threshold must not change midway through
-    judging a claim (FR-0.6). The claim after this one sees any change that has
-    landed since.
-    """
+    """Return the claim policy in force at the moment this request arrived."""
     return get_live_policy(request).current()
 
 
 def get_shipbob_client(request: Request) -> ShipBobClient:
-    """Return the reader for ShipBob's cases, shipments and orders.
-
-    One client serves the whole application, so every claim shares the same pool
-    of open connections instead of opening its own (FR-0.1).
-    """
+    """Return the reader for ShipBob's cases, shipments and orders."""
     client: ShipBobClient = request.app.state.shipbob
     return client
 
@@ -66,15 +53,7 @@ def get_merchant_memory(request: Request) -> MerchantMemory:
 
 
 def get_decision_store(request: Request) -> DecisionStore:
-    """Return the record of what representatives decided (FR-C.1).
-
-    Two things reach this. Reviewing a report writes one record per action a representative
-    takes, and the analysis screen counts them afterwards.
-
-    Nothing that *judges* a claim touches it, which is the part worth keeping true: what somebody
-    decided last month has no bearing on the claim in hand, and the thing that does carry forward
-    is a merchant correction, which lives next door.
-    """
+    """Return the record of what representatives decided (FR-C.1)."""
     store: DecisionStore = request.app.state.decision_store
     return store
 
@@ -92,57 +71,25 @@ def get_report_store(request: Request) -> ReportStore:
 
 
 def get_evidence_client(request: Request) -> EvidenceClient:
-    """Return the reader for a case's images and for a priced invoice (FR-1.4, FR-1.18).
-
-    A different client from the one that reads a case, its shipment and its order,
-    and deliberately so: looking at photographs is the expensive part of
-    investigating a claim, and keeping those reads out of the cheap client is what
-    stops the pre-flight screen becoming expensive by accident (NFR-8).
-    """
+    """Return the reader for a case's images and for a priced invoice (FR-1.4, FR-1.18)."""
     client: EvidenceClient = request.app.state.evidence
     return client
 
 
 def get_image_fetcher(request: Request) -> ImageFetcher:
-    """Return the downloader for attachment images (FR-1.4, NFR-6).
-
-    Built on its own HTTP client rather than ShipBob's, because an attachment lives
-    at a storage address that is nothing to do with ShipBob's API — and because
-    sending ShipBob credentials to a storage host would be the wrong thing to do
-    even once.
-    """
+    """Return the downloader for attachment images (FR-1.4, NFR-6)."""
     fetcher: ImageFetcher = request.app.state.image_fetcher
     return fetcher
 
 
 def get_pass_threads(request: Request) -> PassThreads:
-    """Return the conversations of the investigations this process has run (FR-R.2).
-
-    One registry for the whole process, because the point of it is that a send-back is
-    answered by the very investigation that produced the report, and that investigation
-    ran in an earlier request.
-    """
+    """Return the conversations of the investigations this process has run (FR-R.2)."""
     threads: PassThreads = request.app.state.pass_threads
     return threads
 
 
 def get_models(request: Request) -> ModelsFor:
-    """Return a way to build the models, rather than the models themselves.
-
-    A function and not the thing, deliberately, and the reason is NFR-8. Building a
-    model needs an API key; a claim the deterministic screen turns away needs no
-    model at all. A dependency that built one eagerly would refuse a request that
-    was never going to use it — an ineligible claim would fail for want of a
-    credential instead of costing three cheap reads and coming back with its
-    explanation.
-
-    So the caller holds this until it knows it is going on, and only then asks. What
-    it hands back is the chat model with no tools bound yet, and the same model
-    wrapped so an answer either fits its form or fails (NFR-2).
-
-    Overriding this is also how a test drives an investigation with a scripted model
-    and no credentials at all.
-    """
+    """Return a way to build the models, rather than the models themselves."""
     settings = get_settings(request)
 
     def build() -> tuple[BaseChatModel, StructuredModel]:

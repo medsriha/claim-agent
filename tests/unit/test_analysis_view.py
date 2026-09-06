@@ -21,29 +21,15 @@ Drawn = TypeVar("Drawn")
 
 
 def view_of(decisions: Sequence[DecisionRecord]) -> AnalysisView:
-    """Build the screen's reply from a handful of decisions."""
     return build(summarise(decisions, WINDOW_START, WINDOW_END), DEFAULT_PERIOD, GENERATED_AT)
 
 
 def drawn(panel: Panel[Drawn]) -> Drawn:
-    """The panel's contents, failing the test if there are none.
-
-    A panel that should have held something and did not is the failure worth reading, rather than
-    an attribute error twenty lines further down.
-    """
     assert panel.data is not None, f"expected a panel with data, got: {panel.empty_reason}"
     return panel.data
 
 
-# --- Nothing to show is a sentence, not an empty box ---
-
-
 def test_an_empty_period_says_why_every_panel_is_empty() -> None:
-    """An empty box reads as a screen that broke.
-
-    The service is the only thing that knows there is nothing there, so it says so — which is
-    also what keeps these sentences out of the screen's own small list of words.
-    """
     view = view_of([])
 
     assert view.approval_trend.data is None
@@ -53,13 +39,9 @@ def test_an_empty_period_says_why_every_panel_is_empty() -> None:
 
 
 def test_a_rate_over_nothing_is_written_as_a_dash_rather_than_zero_per_cent() -> None:
-    """Nothing happened is not the same as nothing succeeded."""
     view = view_of([])
 
     assert view.hero.value == "—"
-
-
-# --- Every number arrives twice: once to draw, once to read ---
 
 
 def test_every_point_carries_both_a_value_to_draw_and_the_words_to_read() -> None:
@@ -75,10 +57,6 @@ def test_every_point_carries_both_a_value_to_draw_and_the_words_to_read() -> Non
 
 
 def test_a_week_with_nothing_in_it_carries_no_value_so_the_line_breaks() -> None:
-    """A week with no claims is not a week at nought per cent.
-
-    Sending zero would draw the line to the floor and read as a collapse in quality.
-    """
     view = view_of([investigated()])
 
     empty_weeks = [
@@ -89,11 +67,7 @@ def test_a_week_with_nothing_in_it_carries_no_value_so_the_line_breaks() -> None
     assert all(point.text == "—" for point in empty_weeks)
 
 
-# --- The scale is decided in the service ---
-
-
 def test_the_axis_and_its_gridlines_are_sent_rather_than_worked_out_in_the_browser() -> None:
-    """Where an axis stops is a judgement about the measure, not about pixels."""
     view = view_of([investigated()])
 
     chart = drawn(view.approval_trend)
@@ -104,15 +78,7 @@ def test_the_axis_and_its_gridlines_are_sent_rather_than_worked_out_in_the_brows
     assert chart.ticks
 
 
-# --- The stack is added up in the service (NFR-2) ---
-
-
 def test_a_stacked_band_carries_its_cumulative_top_edge_already_added_up() -> None:
-    """Four shares that must come to one cannot be trusted to a browser to add.
-
-    Each band's `upper` counts every band below it, so the screen draws the shape between one
-    edge and the next and never sums anything.
-    """
     decisions = [
         investigated(decision_id="a"),
         investigated(decision_id="b", email_edited=True),
@@ -135,21 +101,13 @@ def test_a_stacked_band_carries_its_cumulative_top_edge_already_added_up() -> No
 
 
 def test_a_week_with_nothing_investigated_leaves_every_band_empty_together() -> None:
-    """All four break at once, so no band is drawn across a week that had nothing in it."""
     bands = drawn(view_of([investigated()]).intervention_mix).bands
     first_week = [band.points[0].upper for band in bands]
 
     assert first_week == [None, None, None, None]
 
 
-# --- The calibration panel states both halves and subtracts neither ---
-
-
 def test_the_calibration_panel_sends_what_was_claimed_and_what_happened_but_not_the_gap() -> None:
-    """The difference is a subtraction, and the screen does not tell people what to conclude.
-
-    Whether the measured bar lands inside the claimed band is left for a reader to see.
-    """
     view = view_of([investigated(stated_confidence=0.9)])
 
     band = next(one for one in drawn(view.calibration).bands if one.stated_low == 0.85)
@@ -162,18 +120,13 @@ def test_the_calibration_panel_sends_what_was_claimed_and_what_happened_but_not_
 
 
 def test_the_volume_plot_has_a_scale_of_its_own_rather_than_sharing_the_rate_axis() -> None:
-    """A rate and a count must never share one scale — the crossing point would mean nothing."""
     view = view_of([investigated()])
 
     assert drawn(view.calibration).domain.maximum == 1.0
     assert drawn(view.calibration).volume_domain.maximum >= 1.0
 
 
-# --- Candidate rules are scored, never offered (FR-2.9, FR-3.1) ---
-
-
 def test_a_candidate_rule_carries_the_services_own_word_for_how_it_scored() -> None:
-    """The word is the service's vocabulary, reshaped to read on screen rather than replaced."""
     view = view_of([investigated()])
 
     assert {row.verdict for row in drawn(view.gates).rows} <= {
@@ -184,21 +137,13 @@ def test_a_candidate_rule_carries_the_services_own_word_for_how_it_scored() -> N
 
 
 def test_the_candidate_rules_carry_a_caveat_saying_meeting_the_bar_is_not_permission() -> None:
-    """FR-2.9 says a person approving is the only way a claim leaves review.
-
-    A screen that scored rules without saying that would read as offering a switch.
-    """
     caveat = drawn(view_of([investigated()]).gates).caveat
 
     assert "FR-2.9" in caveat
     assert "PROVISIONAL" in caveat
 
 
-# --- The money and what it rests on ---
-
-
 def test_every_assumption_behind_the_money_is_shown_and_marked_provisional() -> None:
-    """A total nobody can see the basis of is a total nobody can argue with."""
     view = view_of([investigated()])
 
     assert view.assumptions
@@ -228,11 +173,7 @@ def test_the_dashboard_average_is_an_average_rather_than_the_middle_review() -> 
     assert drawn(view.review_time).summary.startswith("Representatives spent an average of 104 min")
 
 
-# --- The window ---
-
-
 def test_the_window_starts_on_a_week_boundary_so_no_bar_covers_a_part_week() -> None:
-    """A first bar covering two days beside bars covering seven understates every trend."""
     starts_at, ends_at = window_for("four_weeks", datetime(2026, 3, 25, 14, 0, tzinfo=UTC))
 
     assert starts_at == datetime(2026, 3, 2, tzinfo=UTC)
@@ -240,14 +181,12 @@ def test_the_window_starts_on_a_week_boundary_so_no_bar_covers_a_part_week() -> 
 
 
 def test_an_unknown_period_falls_back_to_the_default_rather_than_failing() -> None:
-    """A way of looking at the past is not the kind of thing where being wrong is dangerous."""
     now = datetime(2026, 3, 25, 14, 0, tzinfo=UTC)
 
     assert window_for("last_tuesday", now) == window_for(DEFAULT_PERIOD, now)
 
 
 def test_the_reply_says_which_period_it_used_and_which_ones_it_offers() -> None:
-    """The screen never works out a date, so it needs the service to name what it asked for."""
     view = view_of([screened()])
 
     assert view.period_label.startswith("Data period: ")

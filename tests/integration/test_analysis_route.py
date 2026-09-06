@@ -13,18 +13,12 @@ pytestmark = pytest.mark.integration
 
 
 def recently(days_ago: int) -> datetime:
-    """A moment inside every period the screen offers."""
     return datetime.now(UTC) - timedelta(days=days_ago)
 
 
 async def test_a_service_nobody_has_decided_anything_on_answers_and_says_why(
     client: AsyncClient,
 ) -> None:
-    """An empty period is an ordinary answer, not a failure.
-
-    It comes back as a success with a sentence explaining every empty panel, because a screen
-    full of blank boxes reads as a screen that broke.
-    """
     response = await client.get("/analysis/performance")
 
     assert response.status_code == 200
@@ -37,7 +31,6 @@ async def test_a_service_nobody_has_decided_anything_on_answers_and_says_why(
 async def test_the_reply_carries_every_figure_twice_once_to_draw_and_once_to_read(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """The browser turns a number into a length and does nothing else."""
     store = DecisionStore(settings.database_path)
     for index in range(3):
         store.record(
@@ -58,7 +51,6 @@ async def test_the_reply_carries_every_figure_twice_once_to_draw_and_once_to_rea
 async def test_a_week_with_nothing_in_it_arrives_as_nothing_rather_than_zero(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """A quiet week must break the line, not draw it to the floor."""
     DecisionStore(settings.database_path).record(investigated(decided_at=recently(3)))
 
     body = (await client.get("/analysis/performance")).json()
@@ -71,11 +63,6 @@ async def test_a_week_with_nothing_in_it_arrives_as_nothing_rather_than_zero(
 async def test_the_two_populations_are_reported_apart(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """FR-C.1: a stopped claim and an investigated product are different arguments.
-
-    The reply carries a line for each rather than one blended figure, so nobody can read a rate
-    that was flattered by claims the AI never touched.
-    """
     store = DecisionStore(settings.database_path)
     store.record(screened(decided_at=recently(3)))
     store.record(investigated(decided_at=recently(3)))
@@ -89,7 +76,6 @@ async def test_the_two_populations_are_reported_apart(
 async def test_money_arrives_written_out_so_nothing_in_the_browser_parses_it(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """FR-1.21, NFR-2: the browser half of never letting an amount become a number."""
     DecisionStore(settings.database_path).record(investigated(decided_at=recently(3)))
 
     body = (await client.get("/analysis/performance")).json()
@@ -102,7 +88,6 @@ async def test_money_arrives_written_out_so_nothing_in_the_browser_parses_it(
 async def test_a_shorter_period_covers_less_and_says_which_one_it_used(
     client: AsyncClient,
 ) -> None:
-    """The screen sends a name, never a date, so two people asking get the same window."""
     body = (await client.get("/analysis/performance?period=four_weeks")).json()
 
     assert [one["key"] for one in body["presets"] if one["applied"]] == ["four_weeks"]
@@ -110,7 +95,6 @@ async def test_a_shorter_period_covers_less_and_says_which_one_it_used(
 
 
 async def test_an_unknown_period_falls_back_rather_than_failing(client: AsyncClient) -> None:
-    """A way of looking at the past is not something where being wrong is dangerous."""
     response = await client.get("/analysis/performance?period=since_the_dawn_of_time")
 
     assert response.status_code == 200
@@ -120,11 +104,6 @@ async def test_an_unknown_period_falls_back_rather_than_failing(client: AsyncCli
 async def test_the_candidate_rules_never_offer_anything_to_switch_on(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """FR-2.9 and FR-3.1: a person approving is the only way a claim leaves review.
-
-    The reply scores rules and says so in its own words. Nothing in it is a setting, and the
-    caveat travels with the table so a screen cannot show one without the other.
-    """
     DecisionStore(settings.database_path).record(investigated(decided_at=recently(3)))
 
     body = (await client.get("/analysis/performance")).json()
@@ -137,9 +116,6 @@ async def test_the_candidate_rules_never_offer_anything_to_switch_on(
 async def test_an_unreadable_store_fails_the_request_rather_than_reporting_a_quiet_month(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """The one badly wrong outcome would be telling somebody nothing was decided when nobody
-    looked. A broken store is a failure with its own code, not an empty period.
-    """
     settings.database_path.write_text("this is not a database")
 
     response = await client.get("/analysis/performance")

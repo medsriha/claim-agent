@@ -96,7 +96,6 @@ async def amount_check(
             policy=context.policy,
         )
     except ValueError as refused:
-        # Not money. Told back plainly rather than rounded or guessed at.
         return await finish(
             context, AmountCheck(succeeded=False, summary=str(refused)), asked=asked
         )

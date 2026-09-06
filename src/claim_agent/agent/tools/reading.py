@@ -102,8 +102,6 @@ async def inspect(
             asked=asked,
         )
 
-    # The allowance is checked inside the memo's computation, so a cached answer costs
-    # nothing and two images inspected at once cannot both pass one check (NFR-8).
     memo_key = IMAGE_MEMO.format(attachment_id=attachment_id, question=_as_asked(question))
     try:
         observation = await context.cache.get_or_compute(
@@ -123,7 +121,6 @@ async def inspect(
             asked=asked,
         )
     except ClaimAgentError as failure:
-        # Ours, not the merchant's (NFR-4).
         return await _answer(
             context,
             ImageInspection(
@@ -252,9 +249,6 @@ async def requested_remedy(context: ToolContext, text: str) -> tuple[str, Remedy
     )
 
 
-# --- Shared reads, done once per claim (NFR-8) ------------------------------
-
-
 async def attachments_on_the_case(context: ToolContext) -> tuple[Attachment, ...]:
     """The claim's images, fetched once per claim however many calls ask."""
     return await context.cache.get_or_compute(
@@ -269,9 +263,6 @@ async def invoice_for_the_shipment(context: ToolContext, shipment_id: str, user_
         INVOICE_MEMO.format(shipment_id=shipment_id),
         partial(context.evidence.generate_invoice, shipment_id=shipment_id, user_id=user_id),
     )
-
-
-# --- The work behind inspecting an image ------------------------------------
 
 
 async def _answer(

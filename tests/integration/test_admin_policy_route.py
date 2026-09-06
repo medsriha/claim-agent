@@ -22,12 +22,6 @@ pytestmark = pytest.mark.integration
 async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
     client: AsyncClient,
 ) -> None:
-    """FR-0.7: the panel is offered the values it is meant to change, and no others.
-
-    The seventeen it is not offered are still policy values, still read by whatever
-    reads them, and still set from the environment — they are simply not changeable
-    from a browser while the service runs.
-    """
     response = await client.get("/admin/policy")
 
     assert response.status_code == 200
@@ -66,7 +60,6 @@ async def test_reading_the_policy_lists_the_thresholds_the_panel_offers(
 async def test_a_threshold_the_panel_does_not_offer_is_refused_over_http(
     client: AsyncClient,
 ) -> None:
-    """FR-0.7: the omission is the rule, not just the screen's choice of controls."""
     response = await client.put("/admin/policy", json={"values": {"max_agent_steps": "5"}})
 
     assert response.status_code == 400
@@ -77,11 +70,6 @@ async def test_a_threshold_the_panel_does_not_offer_is_refused_over_http(
 async def test_a_changed_threshold_judges_the_very_next_claim(
     client: AsyncClient, shipbob: respx.Router
 ) -> None:
-    """FR-0.7, NFR-7: this is what the panel is for — a change with no restart.
-
-    The same claim is screened twice, either side of a change to the age limit, and
-    the two answers differ. Nothing else about the request changes.
-    """
     mock_shipbob(shipbob, case=CASE_1001, shipment=SHIPMENT_1001, order=ORDER_1001)
 
     before = await client.post("/cases/CASE-1001/preflight")
@@ -99,12 +87,6 @@ async def test_a_changed_threshold_judges_the_very_next_claim(
 async def test_the_merchant_email_quotes_the_new_limit(
     client: AsyncClient, shipbob: respx.Router
 ) -> None:
-    """FR-0.4, FR-0.7: the explanation a merchant is owed uses the number in force.
-
-    The email tells a merchant the arithmetic, not just the outcome. If it quoted a
-    threshold the claim was not actually judged by, the write-up would be wrong in
-    the one place a person outside ShipBob reads it.
-    """
     mock_shipbob(shipbob, case=CASE_1001, shipment=SHIPMENT_1001, order=ORDER_1001)
     await client.put("/admin/policy", json={"values": {"max_claim_age_days": "5"}})
 
@@ -116,7 +98,6 @@ async def test_the_merchant_email_quotes_the_new_limit(
 
 
 async def test_a_change_is_reported_back_with_what_it_started_as(client: AsyncClient) -> None:
-    """FR-0.7: the reply says what is now in force, so nothing has to be guessed at."""
     response = await client.put("/admin/policy", json={"values": {"max_claim_age_days": "5"}})
 
     body = response.json()
@@ -131,11 +112,6 @@ async def test_a_change_is_reported_back_with_what_it_started_as(client: AsyncCl
 async def test_a_refused_change_leaves_later_claims_alone(
     client: AsyncClient, shipbob: respx.Router
 ) -> None:
-    """NFR-4: a submission with one bad value changes nothing at all.
-
-    Both values are sent together, one of them impossible. Accepting the good one
-    and refusing the other would leave a policy nobody asked for, so neither lands.
-    """
     mock_shipbob(shipbob, case=CASE_1001, shipment=SHIPMENT_1001, order=ORDER_1001)
 
     refused = await client.put(
@@ -156,7 +132,6 @@ async def test_a_refused_change_leaves_later_claims_alone(
 
 
 async def test_a_name_that_is_no_part_of_the_policy_is_refused(client: AsyncClient) -> None:
-    """FR-0.7: an unknown name is an error, not a change that silently does nothing."""
     response = await client.put("/admin/policy", json={"values": {"made_up_value": "5"}})
 
     assert response.status_code == 400
@@ -167,7 +142,6 @@ async def test_a_name_that_is_no_part_of_the_policy_is_refused(client: AsyncClie
 async def test_reset_puts_the_startup_thresholds_back(
     client: AsyncClient, shipbob: respx.Router
 ) -> None:
-    """FR-0.7: whoever is demonstrating this can put it back the way it was."""
     mock_shipbob(shipbob, case=CASE_1001, shipment=SHIPMENT_1001, order=ORDER_1001)
     await client.put("/admin/policy", json={"values": {"max_claim_age_days": "5"}})
 
@@ -181,13 +155,9 @@ async def test_reset_puts_the_startup_thresholds_back(
     assert screened.json()["verdict"] == "proceed"
 
 
-# --- Emptying every store (a demonstration control) --------------------------
-
-
 async def test_an_operator_can_empty_everything_the_service_remembers(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """UI-47: a demonstration sometimes has to start from a system that remembers nothing."""
     memory = MerchantMemory(settings.database_path)
     memory.record_correction(
         MerchantCorrection(
@@ -215,7 +185,6 @@ async def test_an_operator_can_empty_everything_the_service_remembers(
 async def test_the_back_and_forth_on_a_report_goes_with_it(
     client: AsyncClient, settings: Settings
 ) -> None:
-    """UI-47: forgetting the corrections alone left a claim's whole reply history on screen."""
     reports = ReportStore(settings.database_path)
     reports.record(a_report(version=1))
     reports.record(a_report(version=2))
@@ -227,7 +196,6 @@ async def test_the_back_and_forth_on_a_report_goes_with_it(
 
 
 async def test_forgetting_when_there_is_nothing_to_forget_says_so(client: AsyncClient) -> None:
-    """Zero and one look identical on a screen otherwise, and only one needs saying."""
     response = await client.post("/admin/forget-everything")
 
     assert response.status_code == 200

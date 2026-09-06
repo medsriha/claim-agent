@@ -49,34 +49,24 @@ from claim_agent.shipbob.evidence_client import EvidenceClient
 
 SHIPBOB = "http://shipbob.test"
 
-# The host ShipBob really serves its sample images from. Every attachment address in
-# the fixtures points here, so this is the one host the fetcher is told it may use.
+
 IMAGE_HOST = "sa032101pubdevuc.blob.core.windows.net"
 
-# The first eight bytes are the marker every PNG file starts with; the rest stands in
-# for the picture, and is never looked at by anything under test.
+
 PNG_BYTES = b"\x89PNG\r\n\x1a\npretend pixels"
 
-# CASE-1001's four images. Their names say nothing about what they hold, which is why
-# a test may only refer to them by id (FR-1.4).
+
 FIRST_IMAGE = "ATT-CASE-1001-01"
 SECOND_IMAGE = "ATT-CASE-1001-02"
 THIRD_IMAGE = "ATT-CASE-1001-03"
 FOURTH_IMAGE = "ATT-CASE-1001-04"
 
-# The two products on CASE-1001's order, written exactly as the order writes them.
+
 AMPOULE = "Additional Collagen Ampoule Duo"
 COLLAGEN = "Liposomal Tripeptide Collagen"
 
 
-# --- Building a claim to triage ---------------------------------------------
-
-
 def build_settings() -> Settings:
-    """Settings for a test process, with the attachment bounds spelled out.
-
-    Caching is off so that one test can never see another test's downloads.
-    """
     return Settings(
         environment="test",
         log_level="WARNING",
@@ -93,7 +83,6 @@ def a_record(
     order: dict[str, object] | None = ORDER_1001,
     shipment: dict[str, object] | None = SHIPMENT_1001,
 ) -> CaseRecord:
-    """What the pre-flight screen read about a claim — the claim, its parcel, its order."""
     return CaseRecord(
         case=Case.model_validate(case),
         shipment=None if shipment is None else Shipment.model_validate(shipment),
@@ -102,7 +91,6 @@ def a_record(
 
 
 def a_context() -> ClaimContext:
-    """The facts the deterministic screen worked out before any of this ran (FR-0.5)."""
     return ClaimContext(
         order_value_usd=Decimal("90.00"),
         is_high_value=False,
@@ -113,8 +101,6 @@ def a_context() -> ClaimContext:
 
 @dataclass
 class Run:
-    """One triage and the things it wrote to, kept for a test to read afterwards."""
-
     triage: ClaimTriage
     model: ScriptedModel
     cache: ObservationCache
@@ -124,25 +110,18 @@ class Run:
 
 @pytest.fixture
 def api() -> Iterator[respx.Router]:
-    """Stands in for ShipBob and for the image storage, so nothing reaches the network.
-
-    Routes are not required to be called: several tests register one only to show the
-    investigation left it alone.
-    """
     with respx.mock(assert_all_called=False) as router:
         yield router
 
 
 @pytest.fixture
 async def shipbob_http() -> AsyncIterator[httpx.AsyncClient]:
-    """An HTTP client aimed at the stand-in ShipBob, built the way the application builds one."""
     async with httpx.AsyncClient(base_url=SHIPBOB, timeout=1.0) as client:
         yield client
 
 
 @pytest.fixture
 async def images_http() -> AsyncIterator[httpx.AsyncClient]:
-    """An HTTP client for fetching images, which carry their whole address."""
     async with httpx.AsyncClient() as client:
         yield client
 
@@ -154,7 +133,6 @@ def serve(
     attachments: dict[str, object] = ATTACHMENTS_1001,
     images: httpx.Response | None = None,
 ) -> None:
-    """Answer every read a triage can make, so a test only registers what it changes."""
     api.get(f"{SHIPBOB}/cases/{case_id}/attachments").respond(200, json=attachments)
     api.post(f"{SHIPBOB}/invoices/generate").respond(200, json=INVOICE_342578703)
     api.get(host=IMAGE_HOST).mock(
@@ -171,12 +149,6 @@ async def triage(
     steps: int = 12,
     images_allowed: int = 20,
 ) -> Run:
-    """Triage one claim with the model answering from `replies`, and keep what it wrote.
-
-    Retrying is off on the ShipBob client and on the structured asker, so one queued
-    reply answers exactly one question and a test that is not about retrying does not
-    sit through the waits between attempts.
-    """
     model = ScriptedModel(replies=list(replies))
     structured = StructuredModel(model, max_attempts=1)
     cache = ObservationCache()
@@ -199,11 +171,7 @@ async def triage(
     return Run(triage=answer, model=model, cache=cache, budget=budget, events=events)
 
 
-# --- Writing the script -----------------------------------------------------
-
-
 def asks_to_look_at(*attachment_ids: str) -> AIMessage:
-    """A turn in which the pass asks to look at some of the claim's images."""
     return AIMessage(
         content="",
         tool_calls=[
@@ -225,14 +193,12 @@ def an_image_showing(
     legible: bool = True,
     problem: str | None = None,
 ) -> ImageObservation:
-    """What the model says when it has looked at one image."""
     return ImageObservation(shows=shows, kind=kind, is_legible=legible, problem=problem)
 
 
 def a_product(
     name: str, *, quantity: int = 1, sku: str | None = None, damage: tuple[str, ...] = ()
 ) -> ClaimedProductProposal:
-    """One product the pass says was damaged."""
     return ClaimedProductProposal(
         name=name,
         quantity=quantity,
@@ -243,7 +209,6 @@ def a_product(
 
 
 def a_split(*products: ClaimedProductProposal, ambiguity: str | None = None) -> ClaimSplit:
-    """The form the pass ends on: which products the claim is for, or why nobody can tell."""
     return ClaimSplit(
         claimed_products=products,
         is_ambiguous=ambiguity is not None,
@@ -253,11 +218,6 @@ def a_split(*products: ClaimedProductProposal, ambiguity: str | None = None) -> 
 
 
 def a_whole_claim(*products: ClaimedProductProposal) -> list[Any]:
-    """A script in which the pass looks at three images and then names some products.
-
-    The three answers are the three pieces of shared evidence, so a test that is about
-    the split rather than about the evidence gets a complete set without saying so.
-    """
     return [
         asks_to_look_at(FIRST_IMAGE, SECOND_IMAGE, THIRD_IMAGE),
         an_image_showing(EvidenceKind.INVOICE, shows="a photograph of a paper invoice"),
@@ -269,31 +229,20 @@ def a_whole_claim(*products: ClaimedProductProposal) -> list[Any]:
 
 
 def kinds_of(run: Run) -> list[EventKind]:
-    """Everything the run said about itself, in the order it said it."""
     return [event.kind for event in run.events.events()]
 
 
 def events_of(run: Run, kind: EventKind) -> list[RunEvent]:
-    """Everything of one kind the run said about itself, in order."""
     return [event for event in run.events.events() if event.kind is kind]
 
 
 def finding_for(run: Run, kind: EvidenceKind) -> Any:
-    """The claim's settled answer for one piece of shared evidence."""
     return next(finding for finding in run.triage.shared_evidence if finding.kind is kind)
-
-
-# --- Which products the claim is for (FR-1a.1, FR-1a.2, FR-1a.5) ------------
 
 
 async def test_a_claim_for_one_product_becomes_one_claim_line(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1a.5: one damaged product is one claim line, through the ordinary machinery.
-
-    There is deliberately no shortcut for the simple case: the same pass runs, the same
-    matching runs, and what comes out is a list with one line in it.
-    """
     serve(api)
 
     run = await triage(
@@ -312,11 +261,6 @@ async def test_a_claim_for_one_product_becomes_one_claim_line(
 async def test_a_claim_for_two_products_becomes_two_claim_lines(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1a.1: a claim covering two damaged products is split into one line for each.
-
-    Each line carries the photographs the pass tied to that product, so the run that
-    investigates one of them has somewhere to start.
-    """
     serve(api)
 
     run = await triage(
@@ -342,12 +286,6 @@ async def test_a_claim_for_two_products_becomes_two_claim_lines(
 async def test_a_product_that_is_not_on_the_order_is_still_reported(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1a.2: a claim for something the order does not hold is a finding, not an error.
-
-    The line exists, it says plainly that nothing on the order is this product, and it
-    carries no price — because there is none to carry. A representative needs to see
-    that rather than have the line quietly dropped.
-    """
     serve(api)
 
     run = await triage(
@@ -359,24 +297,13 @@ async def test_a_product_that_is_not_on_the_order_is_still_reported(
     assert line.match is MatchOutcome.NOT_ON_ORDER
     assert line.order_line is None
     assert line.unit_price is None
-    # Not knowing which product was meant and knowing it is not on the order are
-    # different things, and only the first stops the claim here.
+
     assert run.triage.is_ambiguous is False
-
-
-# --- Refusing to guess (FR-1a.4, FR-1.13) -----------------------------------
 
 
 async def test_a_split_the_investigation_calls_unclear_is_not_turned_into_an_answer(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1a.4: when the pass says it cannot tell which products, the claim goes to a person.
-
-    This is CASE-1002, the real example: the order holds two different 24oz bottles at
-    different prices and a photograph of a broken bottle does not say which. What is
-    unclear is passed on in the pass's own words, so a representative can settle in
-    seconds what the system was right to refuse to choose.
-    """
     serve(api, case_id="CASE-1002", attachments=ATTACHMENTS_1002)
     unclear = (
         "The photographs show a damaged 24oz bottle, but the order holds two different "
@@ -400,26 +327,13 @@ async def test_a_split_the_investigation_calls_unclear_is_not_turned_into_an_ans
 
     assert run.triage.is_ambiguous is True
     assert run.triage.ambiguity == unclear
-    # The candidate is still reported. It is what the pass was choosing between, and
-    # showing it is what lets a representative see the choice rather than just be told
-    # there was one.
+
     assert len(run.triage.claim_lines) == 1
 
 
 async def test_a_product_matching_two_order_lines_stops_the_claim(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.13: when one claimed product could be either of two order lines, nobody chooses.
-
-    The pass itself was sure here — it is the matching against the order that finds two
-    candidates. The two can carry different prices, so narrowing them to one would
-    invent the payout, and the triage says so instead.
-
-    The order below is ShipBob's CASE-1002 order with a second, cheaper line of the same
-    name added, because no order ShipBob supplies holds two lines with one name. The
-    added line's product code starts with a 9, the marker this project uses for anything
-    it invented.
-    """
     two_lines_alike = order_payload(
         order_id="336431771",
         user_id="283959",
@@ -450,11 +364,6 @@ async def test_a_product_matching_two_order_lines_stops_the_claim(
 async def test_a_split_naming_no_products_at_all_stops_the_claim(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1a.4: naming no products is not an answer to "which products", so a person looks.
-
-    An empty split with nothing said about why is the shape a claim would silently
-    disappear in: no lines to investigate, and nothing to tell anybody.
-    """
     serve(api)
 
     run = await triage(
@@ -467,19 +376,9 @@ async def test_a_split_naming_no_products_at_all_stops_the_claim(
     assert run.triage.claim_lines == ()
 
 
-# --- The shared evidence, settled once (FR-1a.3) ----------------------------
-
-
 async def test_the_shared_evidence_is_settled_once_for_the_whole_claim(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1a.3: the invoice, the confirmation and the box are settled once, for every line.
-
-    A claim covering two products gets one answer about the parcel, not two, so the two
-    products can never disagree about whether the box was photographed. Each image was
-    looked at once (NFR-8), and the photograph of the damaged product is deliberately
-    not among the settled findings: that one belongs to a single product.
-    """
     serve(api)
 
     run = await triage(
@@ -504,12 +403,6 @@ async def test_the_shared_evidence_is_settled_once_for_the_whole_claim(
 async def test_evidence_nobody_sent_is_missing_rather_than_assumed(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1a.3, FR-1.6: a claim with no images at all settles every shared item as missing.
-
-    This is CASE-1005, whose listing really is empty. It must reach the triage as an
-    empty listing rather than as a failure, cost nothing to investigate, and end with
-    all three shared items recorded as missing so the merchant can be asked for them.
-    """
     serve(api, case_id="CASE-1005", attachments=ATTACHMENTS_1005)
 
     run = await triage(
@@ -529,7 +422,7 @@ async def test_evidence_nobody_sent_is_missing_rather_than_assumed(
         EvidenceState.MISSING,
         EvidenceState.MISSING,
     ]
-    # Nothing the merchant can be asked for is recorded as our own failure.
+
     assert all(finding.problem is None for finding in run.triage.shared_evidence)
     assert run.budget.snapshot().image_analyses_used == 0
     assert len(run.triage.claim_lines) == 1
@@ -538,10 +431,6 @@ async def test_evidence_nobody_sent_is_missing_rather_than_assumed(
 async def test_an_image_too_poor_to_rely_on_does_not_satisfy_its_requirement(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.5, FR-1.7: a blurry invoice counts as not having one, and says what to ask for.
-
-    The merchant can fix this, so the reason is kept in words they could act on.
-    """
     serve(api)
 
     run = await triage(
@@ -569,13 +458,6 @@ async def test_an_image_too_poor_to_rely_on_does_not_satisfy_its_requirement(
 async def test_an_image_we_could_not_read_is_never_blamed_on_the_merchant(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """NFR-4: an image this system could not fetch sends the claim to a person, not the merchant.
-
-    Nothing was learned from the image, so nothing can be said about what it held. The
-    unsettled shared items are recorded as unreadable rather than missing, because
-    asking a merchant to send again what our own download lost is a request they cannot
-    act on.
-    """
     serve(api, images=httpx.Response(500))
 
     run = await triage(
@@ -601,12 +483,6 @@ async def test_an_image_we_could_not_read_is_never_blamed_on_the_merchant(
 async def test_the_claim_stops_when_its_images_cannot_even_be_listed(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """NFR-4: ShipBob refusing the listing gives back a triage for a person, not an error.
-
-    Without the listing there is no honest question to ask, because telling the pass
-    that a claim has no images when we simply could not look would invite a split made
-    against evidence nobody checked for.
-    """
     api.get(f"{SHIPBOB}/cases/CASE-1001/attachments").respond(503)
 
     run = await triage(shipbob_http, images_http, replies=[])
@@ -619,24 +495,15 @@ async def test_the_claim_stops_when_its_images_cannot_even_be_listed(
         EvidenceState.UNREADABLE,
         EvidenceState.UNREADABLE,
     ]
-    # The failure is written into the record, so "why is clarification needed?" is
-    # answerable from what the representative is handed (NFR-3).
+
     assert [entry.succeeded for entry in run.triage.ledger] == [False]
-    # Nothing was asked of the model, because there was nothing to ask about.
+
     assert run.model.asked == []
-
-
-# --- The investigation chooses what to look at (FR-1.1, NFR-8) --------------
 
 
 async def test_only_the_images_the_investigation_asked_for_are_looked_at(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.1, NFR-8: nothing classifies every attachment in turn before the pass runs.
-
-    CASE-1001 carries four images and the pass asks about one of them. If the triage
-    were a fixed sequence dressed up as an agent, all four would have been paid for.
-    """
     serve(api)
 
     run = await triage(
@@ -655,17 +522,12 @@ async def test_only_the_images_the_investigation_asked_for_are_looked_at(
         SECOND_IMAGE
     ]
     assert run.budget.snapshot().image_analyses_used == 1
-    assert run.cache.computed_count == 2  # the listing, and the one image
+    assert run.cache.computed_count == 2
 
 
 async def test_one_image_asked_about_twice_is_analysed_once(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """NFR-8: looking at the same photograph again costs nothing and adds nothing.
-
-    The claim's memo answers the second look, so the image is reported once and the
-    expensive work happens once.
-    """
     serve(api)
 
     run = await triage(
@@ -685,18 +547,9 @@ async def test_one_image_asked_about_twice_is_analysed_once(
     assert run.budget.snapshot().image_analyses_used == 1
 
 
-# --- Giving up rather than guessing (FR-1.16, NFR-4) ------------------------
-
-
 async def test_a_pass_that_runs_out_of_steps_hands_over_what_it_found(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1.16, NFR-4: an exhausted allowance requests clarification rather than raising.
-
-    Nothing is invented to fill the gap: there are no claim lines, the reason the pass
-    stopped is what a representative is told, and the one image it did manage to read
-    is still reported.
-    """
     serve(api)
 
     run = await triage(
@@ -714,7 +567,7 @@ async def test_a_pass_that_runs_out_of_steps_hands_over_what_it_found(
     assert run.triage.claim_lines == ()
     assert run.triage.ambiguity is not None
     assert "steps" in run.triage.ambiguity
-    # What the pass did establish is carried forward rather than lost.
+
     assert finding_for(run, EvidenceKind.INVOICE).state is EvidenceState.PRESENT
     assert run.triage.budget.steps_used == 1
 
@@ -722,11 +575,6 @@ async def test_a_pass_that_runs_out_of_steps_hands_over_what_it_found(
 async def test_a_model_that_cannot_be_reached_requests_rep_clarification(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """NFR-4: a provider failure ends in front of a person, never as an exception.
-
-    Nothing was established at all here, so every shared item is settled as missing and
-    the claim carries the reason it stopped.
-    """
     serve(api)
 
     run = await triage(
@@ -739,18 +587,9 @@ async def test_a_model_that_cannot_be_reached_requests_rep_clarification(
     assert run.triage.attachment_classifications == ()
 
 
-# --- Saying what is happening while it happens ------------------------------
-
-
 async def test_the_run_narrates_the_claim_in_the_order_it_worked_on_it(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """The images, then the evidence, then the split — in that order, all three settled.
-
-    A representative watching sees the investigation choosing what to look at, then
-    what each image turned out to be, then all three pieces of shared evidence whether
-    or not they were found, and finally what the claim is for.
-    """
     serve(api)
 
     run = await triage(
@@ -763,8 +602,7 @@ async def test_the_run_narrates_the_claim_in_the_order_it_worked_on_it(
     assert said[0] is EventKind.ATTACHMENTS_LISTED
     assert said[-1] is EventKind.CLAIM_SPLIT
     assert said[-4:-1] == [EventKind.EVIDENCE_SETTLED] * 3
-    # Each image is announced as it is read, so the classifications come before the
-    # evidence they are settled into.
+
     assert said.index(EventKind.IMAGE_CLASSIFIED) < said.index(EventKind.EVIDENCE_SETTLED)
     assert len(events_of(run, EventKind.IMAGE_CLASSIFIED)) == 3
     assert [event.detail["state"] for event in events_of(run, EventKind.EVIDENCE_SETTLED)] == [
@@ -778,7 +616,6 @@ async def test_the_run_narrates_the_claim_in_the_order_it_worked_on_it(
 async def test_a_claim_that_could_not_be_split_still_says_so_out_loud(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """NFR-4: a stream that simply stopped would leave a watcher unable to tell what happened."""
     serve(api)
 
     run = await triage(
@@ -796,19 +633,9 @@ async def test_a_claim_that_could_not_be_split_still_says_so_out_loud(
     assert "Nothing names a product." in split_said[0].summary
 
 
-# --- The same claim, twice (NFR-1) ------------------------------------------
-
-
 async def test_the_same_claim_investigated_twice_gives_the_same_triage(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """NFR-1: two runs over the same claim, answered the same way, produce the same answer.
-
-    Everything a report would be built from is compared: the lines and their
-    identifiers, the settled evidence, what each image was, and the record of the run
-    itself. Nothing here reads a clock or depends on which order two things finished
-    in, so the two are equal outright.
-    """
     serve(api)
     products = (a_product(COLLAGEN, sku="COLLAGEN1"), a_product(AMPOULE, sku="AMP1"))
 
@@ -818,13 +645,9 @@ async def test_the_same_claim_investigated_twice_gives_the_same_triage(
     assert first.triage == second.triage
 
 
-# --- The triage pass holds the tools that read and identify, and no others (FR-1a.1) ---
-
-
 async def test_the_triage_pass_is_offered_the_reading_tools_and_none_that_price(
     api: respx.Router, shipbob_http: httpx.AsyncClient, images_http: httpx.AsyncClient
 ) -> None:
-    """FR-1a.1: a pass that works out what the claim is for cannot spend its steps pricing it."""
     serve(api)
 
     run = await triage(

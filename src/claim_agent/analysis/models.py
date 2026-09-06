@@ -10,13 +10,7 @@ Drawn = TypeVar("Drawn")
 
 
 class Point(BaseModel):
-    """One value on a chart: where to draw it, and what it says.
-
-    `value` exists only to become a coordinate. `text` is the figure a person reads, already
-    written out. `label` names the position — a week, a band, an outcome.
-
-    `value` is `None` when there is nothing to draw. The screen leaves a gap.
-    """
+    """One value on a chart: where to draw it, and what it says."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -35,12 +29,7 @@ class Gridline(BaseModel):
 
 
 class Domain(BaseModel):
-    """Where a chart's up-and-down axis begins and ends.
-
-    Sent rather than worked out in the browser, because where an axis stops is a judgement about
-    the measure. An axis that begins at forty per cent makes a small change look enormous, and
-    that decision belongs with the people who understand the number.
-    """
+    """Where a chart's up-and-down axis begins and ends."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -72,16 +61,7 @@ class TimeChart(BaseModel):
 
 
 class BandPoint(BaseModel):
-    """One week of one band of a stacked chart.
-
-    `upper` is the **cumulative** top edge of this band, counting every band below it — already
-    added up here. The browser draws a shape between one band's edge and the next and never adds
-    anything together, which is what stops four shares that must total one from drifting apart by
-    a pixel.
-
-    `label` names the week, so the screen can say which one is picked out without working it out
-    from a position in a list.
-    """
+    """One week of one band of a stacked chart."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -114,18 +94,7 @@ class StackedChart(BaseModel):
 
 
 class CalibrationBand(BaseModel):
-    """What the system claimed about one band, and what actually happened in it.
-
-    `band` names the range in words — "85 to 95% sure" — and `stated_low` and `stated_high` are
-    the same range as numbers, for drawing the shaded box behind the bar. There is no third field
-    repeating it as prose: the band's own name already says what the system claimed, and two
-    fields saying the same thing is two chances to disagree.
-
-    `agreement` is how often a representative then accepted the advice. Whether it lands inside
-    the claimed range is the whole question, and it is left to the reader to see rather than
-    worked out here — the difference between the two is not sent, because a difference is a
-    subtraction and this screen does not tell people what to conclude.
-    """
+    """What the system claimed about one band, and what actually happened in it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -162,12 +131,7 @@ class BarChart(BaseModel):
 
 
 class ReadinessRow(BaseModel):
-    """One kind of claim: how often it came back ready, and how much of the work it is.
-
-    `ready` is the share that went out exactly as produced — same outcome, same amount, not a word
-    of the email rewritten. `volume` is how many decisions that share was worked out from, so a
-    reader can tell a real pattern from three claims that happened to agree.
-    """
+    """One kind of claim: how often it came back ready, and how much of the work it is."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -177,12 +141,7 @@ class ReadinessRow(BaseModel):
 
 
 class ReadinessGroup(BaseModel):
-    """One way of cutting the claims up, with each part of it.
-
-    `spread_text` says how far apart the readiest and least ready parts are, which is the whole
-    measure of whether this cut is worth anything: a group whose parts all come back ready about
-    as often cannot tell anybody which claims to expect trouble from.
-    """
+    """One way of cutting the claims up, with each part of it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -192,12 +151,7 @@ class ReadinessGroup(BaseModel):
 
 
 class Readiness(BaseModel):
-    """Which kinds of claim come back ready to send, and which need a person.
-
-    Three cuts of the same claims, answering the same question three ways. The point is not any
-    one number but the spread: if some kinds come back ready far more often than others, the work
-    can be told apart in advance, which is the thing worth knowing.
-    """
+    """Which kinds of claim come back ready to send, and which need a person."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -208,15 +162,7 @@ class Readiness(BaseModel):
 
 
 class GateRow(BaseModel):
-    """One candidate rule, scored.
-
-    `verdict` is the service's own word — `meets_bar`, `below_agreement`, `too_few_decisions` —
-    reshaped to read on screen rather than replaced with wording of the screen's own.
-
-    Meeting the bar is not permission. FR-2.9 says a person approving is the only way a claim
-    leaves review, and FR-3.1 calls that a hard invariant, so nothing here is a setting and there
-    is deliberately nothing beside these rows to switch on.
-    """
+    """One candidate rule, scored."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -250,12 +196,7 @@ class Figure(BaseModel):
 
 
 class Assumption(BaseModel):
-    """One number the reporting rests on that nobody has confirmed.
-
-    Shown beside the figures it produces, with the service's own explanation and its own mark
-    saying it is provisional — the same arrangement the rules screen uses, so a reader can see
-    what a total is built on instead of taking it on trust.
-    """
+    """One number the reporting rests on that nobody has confirmed."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -276,12 +217,7 @@ class Preset(BaseModel):
 
 
 class Panel(BaseModel, Generic[Drawn]):
-    """One part of the screen, which may have nothing to show.
-
-    `data` is absent exactly when `empty_reason` is present. The reason is a sentence, because
-    an empty box reads as a screen that broke and the service is the only thing that knows why
-    there is nothing there.
-    """
+    """One part of the screen, which may have nothing to show."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -290,12 +226,7 @@ class Panel(BaseModel, Generic[Drawn]):
 
 
 class AnalysisView(BaseModel):
-    """Everything the analysis screen draws.
-
-    The tiles, the savings and the assumptions are ordered lists the screen renders without
-    knowing what is in them, so another figure can be added here and appear on screen without the
-    screen being touched — the same arrangement that lets a new rule appear on the admin panel.
-    """
+    """Everything the analysis screen draws."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

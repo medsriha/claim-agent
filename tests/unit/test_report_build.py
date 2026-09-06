@@ -49,7 +49,6 @@ COLLAGEN = "Liposomal Tripeptide Collagen"
 
 
 def a_gate(passed: bool) -> GateResult:
-    """One of the four quick checks, so a result can be built without writing all four."""
     return GateResult(
         gate=GateName.AGE,
         passed=passed,
@@ -60,7 +59,6 @@ def a_gate(passed: bool) -> GateResult:
 
 
 def a_stopped_screening(**overrides: Any) -> PreflightResult:
-    """A claim the quick checks turned away."""
     fields: dict[str, Any] = {
         "case_id": CASE.case_id,
         "verdict": Verdict.TERMINAL,
@@ -76,7 +74,6 @@ def a_stopped_screening(**overrides: Any) -> PreflightResult:
 
 
 def a_passing_screening() -> PreflightResult:
-    """A claim the quick checks let through, which carries no write-up of its own."""
     return PreflightResult(
         case_id=CASE.case_id,
         verdict=Verdict.PROCEED,
@@ -88,7 +85,6 @@ def a_passing_screening() -> PreflightResult:
 
 
 def a_triage(*products: tuple[str, str]) -> ClaimTriage:
-    """A settled split into the named products."""
     return ClaimTriage(
         case_id=CASE.case_id,
         claim_lines=tuple(
@@ -109,7 +105,6 @@ def a_triage(*products: tuple[str, str]) -> ClaimTriage:
 
 
 def two_damaged_products() -> tuple[ClaimLine, ...]:
-    """Two products on one claim, matched to the order the way the split matches them."""
     return build_claim_lines(
         CASE.case_id,
         [
@@ -120,11 +115,7 @@ def two_damaged_products() -> tuple[ClaimLine, ...]:
     )
 
 
-# --- A claim the quick checks stopped (FR-0.4, FR-C.1) -----------------------
-
-
 def test_a_stopped_claim_is_written_up_as_a_report_about_the_whole_claim() -> None:
-    """FR-C.1: the split happens later, so a stopped claim has no product to name."""
     report = build_screening_report(a_stopped_screening(), at=A_MOMENT)
 
     assert report is not None
@@ -134,7 +125,6 @@ def test_a_stopped_claim_is_written_up_as_a_report_about_the_whole_claim() -> No
 
 
 def test_a_stopped_claim_recommends_nothing() -> None:
-    """FR-2.1: the three actions are about a damaged product, and there is none."""
     report = build_screening_report(a_stopped_screening(), at=A_MOMENT)
 
     assert report is not None
@@ -144,7 +134,6 @@ def test_a_stopped_claim_recommends_nothing() -> None:
 
 
 def test_a_stopped_claim_carries_the_reasons_it_was_stopped() -> None:
-    """FR-0.4: the report exposes the stopped claim's facts for the UI to render."""
     screening = a_stopped_screening()
     report = build_screening_report(screening, at=A_MOMENT)
 
@@ -157,23 +146,17 @@ def test_a_stopped_claim_carries_the_reasons_it_was_stopped() -> None:
 
 
 def test_a_claim_the_checks_let_through_has_no_screening_report() -> None:
-    """FR-0.4: only a stopped claim produces one; the rest come from the investigation."""
     assert build_screening_report(a_passing_screening(), at=A_MOMENT) is None
 
 
 def test_the_merchant_is_named_by_the_identifier_that_stays_the_same() -> None:
-    """FR-3.8: keyed on user_id, never on the display name."""
     report = build_screening_report(a_stopped_screening(), at=A_MOMENT)
 
     assert report is not None
     assert report.user_id == CASE.user_id
 
 
-# --- One report per claim (FR-2.1, FR-2.9b) ----------------------------------
-
-
 def test_fr_2_9b_a_claim_gets_one_report_naming_every_damaged_product() -> None:
-    """FR-2.9b: a claim is investigated once and approved once, however many products."""
     investigation = ClaimInvestigation(
         case_id=CASE.case_id,
         triage=a_triage((COLLAGEN, "COLLAGEN1")),
@@ -188,7 +171,6 @@ def test_fr_2_9b_a_claim_gets_one_report_naming_every_damaged_product() -> None:
 
 
 def test_a_report_carries_what_was_recommended_and_for_how_much() -> None:
-    """FR-2.1: the list of a claim's reports draws its row from these."""
     investigation = ClaimInvestigation(
         case_id=CASE.case_id, triage=a_triage((COLLAGEN, "COLLAGEN1")), findings=a_line()
     )
@@ -202,7 +184,6 @@ def test_a_report_carries_what_was_recommended_and_for_how_much() -> None:
 
 
 def test_a_report_keeps_findings_separate_from_the_itemized_merchant_request() -> None:
-    """The report summarizes why; the email alone presents every requested item."""
     finding = "The evidence is incomplete and the invoice does not correspond to this shipment."
     detail = "an invoice corresponding to this shipment"
     line = a_line(
@@ -229,7 +210,6 @@ def test_a_report_keeps_findings_separate_from_the_itemized_merchant_request() -
 
 
 def test_a_report_embeds_the_claim_image_urls_for_the_representative() -> None:
-    """FR-2.2: the report is self-contained enough to open every image it references."""
     image = Attachment(
         attachment_id="ATT-CASE-1001-03",
         file_name="damaged-collagen.png",
@@ -250,7 +230,6 @@ def test_a_report_embeds_the_claim_image_urls_for_the_representative() -> None:
 
 
 def test_a_run_that_never_concluded_reports_no_confidence_rather_than_low_confidence() -> None:
-    """FR-1.15: nothing was concluded, so there is nothing to be sure about."""
     investigation = ClaimInvestigation(
         case_id=CASE.case_id,
         triage=a_triage((COLLAGEN, "COLLAGEN1")),
@@ -263,7 +242,6 @@ def test_a_run_that_never_concluded_reports_no_confidence_rather_than_low_confid
 
 
 def test_an_internal_split_ambiguity_produces_a_rep_clarification_report() -> None:
-    """An ambiguity without a concrete merchant request stays with the representative."""
     investigation = ClaimInvestigation(
         case_id=CASE.case_id,
         triage=a_triage().model_copy(update={"ambiguity": "Two products look alike."}),
@@ -279,7 +257,6 @@ def test_an_internal_split_ambiguity_produces_a_rep_clarification_report() -> No
 
 
 def test_a_merchant_resolvable_split_requests_details_and_drafts_the_email() -> None:
-    """An ambiguous split goes to the merchant when the agent knows exactly what to ask."""
     detail = "a clear photograph showing the damaged bottle's front label"
     split = ClaimSplit(
         is_ambiguous=True,
@@ -306,7 +283,6 @@ def test_a_merchant_resolvable_split_requests_details_and_drafts_the_email() -> 
 
 
 def test_an_unsafe_split_email_falls_back_to_the_representative() -> None:
-    """Unsafe merchant wording is never surfaced merely because the split requested details."""
     split = ClaimSplit(
         is_ambiguous=True,
         ambiguity="The photograph does not identify the bottle.",
@@ -329,11 +305,7 @@ def test_an_unsafe_split_email_falls_back_to_the_representative() -> None:
     assert report.content.requested_details == ()
 
 
-# --- The next version, after a representative sent it back (FR-R.9, FR-R.13) ---
-
-
 def a_report_to_rework() -> Report:
-    """One investigated claim's report, as it stands when a note arrives."""
     return build_investigation_report(
         a_passing_screening(),
         ClaimInvestigation(
@@ -346,7 +318,6 @@ def a_report_to_rework() -> Report:
 
 
 def a_rework(**overrides: Any) -> ClaimFindingsRevision:
-    """What a rework produced, with everything a test does not care about defaulted."""
     fields: dict[str, Any] = {
         "findings": a_line(
             outcome=OutcomeDecision(
@@ -366,7 +337,6 @@ def a_rework(**overrides: Any) -> ClaimFindingsRevision:
 
 
 def test_fr_r_13_a_rework_produces_the_next_version_and_leaves_the_last_one_alone() -> None:
-    """FR-R.13: reworking a report must leave the version the rep was looking at intact."""
     before = a_report_to_rework()
 
     after = build_revised_report(before, a_rework(), feedback="Look at the box again.", at=A_MOMENT)
@@ -378,7 +348,6 @@ def test_fr_r_13_a_rework_produces_the_next_version_and_leaves_the_last_one_alon
 
 
 def test_fr_r_13_the_note_and_what_changed_are_kept_as_a_round_of_the_conversation() -> None:
-    """FR-R.13: the feedback that prompted each revision and what changed are both kept."""
     after = build_revised_report(
         a_report_to_rework(), a_rework(), feedback="Look at the box again.", at=A_MOMENT
     )
@@ -394,7 +363,6 @@ def test_fr_r_13_the_note_and_what_changed_are_kept_as_a_round_of_the_conversati
 
 
 def test_fr_r_12_a_second_round_is_added_to_the_first_rather_than_replacing_it() -> None:
-    """FR-R.12: each cycle carries the full feedback history."""
     once = build_revised_report(
         a_report_to_rework(), a_rework(), feedback="Look at the box again.", at=A_MOMENT
     )
@@ -410,7 +378,6 @@ def test_fr_r_12_a_second_round_is_added_to_the_first_rather_than_replacing_it()
 
 
 def test_fr_r_9_the_next_version_carries_the_reworked_findings_and_email() -> None:
-    """FR-R.9, FR-R.11: a full report in the same structure, with its email rewritten."""
     after = build_revised_report(
         a_report_to_rework(), a_rework(), feedback="Look at the box again.", at=A_MOMENT
     )
@@ -423,7 +390,6 @@ def test_fr_r_9_the_next_version_carries_the_reworked_findings_and_email() -> No
 
 
 def test_a_reworked_report_goes_back_to_a_person_to_decide_on() -> None:
-    """FR-2.9: approving is still the only way out, so a reworked report awaits review."""
     after = build_revised_report(
         a_report_to_rework(), a_rework(), feedback="Look at the box again.", at=A_MOMENT
     )
@@ -432,7 +398,6 @@ def test_a_reworked_report_goes_back_to_a_person_to_decide_on() -> None:
 
 
 def test_a_rework_that_did_not_happen_leaves_every_finding_as_it_was() -> None:
-    """NFR-4: a model that could not be reached must not degrade a sound report."""
     before = a_report_to_rework()
 
     after = build_revised_report(
@@ -451,7 +416,6 @@ def test_a_rework_that_did_not_happen_leaves_every_finding_as_it_was() -> None:
 
 
 def test_what_a_representative_already_decided_travels_with_the_next_version() -> None:
-    """FR-C.1: a rework is not a fresh start, and the record of a decision must survive it."""
     before = a_report_to_rework()
     parked = send_back(before, feedback="Look at the box again.", at=A_MOMENT).report
 
@@ -461,11 +425,7 @@ def test_what_a_representative_already_decided_travels_with_the_next_version() -
     assert after.reviews[0].rep_words == "Look at the box again."
 
 
-# --- The same findings always produce the same report (NFR-1) ----------------
-
-
 def test_the_same_claim_always_gets_the_same_report_name() -> None:
-    """FR-C.4: investigating a claim again writes over its report rather than adding a second."""
     investigation = ClaimInvestigation(
         case_id=CASE.case_id, triage=a_triage((COLLAGEN, "COLLAGEN1")), findings=a_line()
     )
@@ -474,13 +434,11 @@ def test_the_same_claim_always_gets_the_same_report_name() -> None:
     again = build_investigation_report(a_passing_screening(), investigation, at=A_MOMENT)
 
     assert first == again
-    # The same name a stopped claim would get, because both are about the claim. The two
-    # can never collide: a claim the checks stopped is never investigated.
+
     assert first.report_id == f"RPT-{CASE.case_id}"
 
 
 def test_a_stopped_claim_always_gets_the_same_report_name() -> None:
-    """FR-C.4: screening a claim again writes over its report rather than adding a second."""
     first = build_screening_report(a_stopped_screening(), at=A_MOMENT)
     again = build_screening_report(a_stopped_screening(), at=A_MOMENT)
 
@@ -489,11 +447,7 @@ def test_a_stopped_claim_always_gets_the_same_report_name() -> None:
     assert first.report_id == f"RPT-{CASE.case_id}"
 
 
-# --- What the merchant said, read out of their own description ---------------
-
-
 def test_what_the_merchant_reported_is_read_out_of_the_description() -> None:
-    """FR-C.1: these are among the few things about a claim known before anybody looks."""
     investigation = ClaimInvestigation(
         case_id=CASE.case_id, triage=a_triage((COLLAGEN, "COLLAGEN1")), findings=a_line()
     )
@@ -505,8 +459,6 @@ def test_what_the_merchant_reported_is_read_out_of_the_description() -> None:
 
 
 def test_who_carried_the_parcel_comes_from_the_shipment_not_the_description() -> None:
-    """FR-C.1: the description and the shipment can name different carriers, and the record
-    keeps the one ShipBob holds rather than the one the merchant wrote."""
     report = build_screening_report(a_stopped_screening(), at=A_MOMENT)
 
     assert report is not None
@@ -514,7 +466,6 @@ def test_who_carried_the_parcel_comes_from_the_shipment_not_the_description() ->
 
 
 def test_a_claim_with_no_shipment_record_names_no_carrier() -> None:
-    """FR-0.5: missing is not the same as empty, and neither is a parcel nobody carried."""
     screening = a_stopped_screening(
         record=CaseRecord(case=CASE, shipment=None, order=ORDER),
         gates=(a_gate(passed=False),),
@@ -527,13 +478,6 @@ def test_a_claim_with_no_shipment_record_names_no_carrier() -> None:
 
 
 def test_a_stopped_claim_never_has_investigated_findings_folded_into_it() -> None:
-    """FR-0.4, NFR-4: a report that cannot be read back is worse than one that never changed.
-
-    Copying fields onto a report does not re-run the checks that it is internally consistent —
-    those run when a report is built, and again when one is read out of the store. So a
-    stopped claim given findings about products would be stored happily and fail the moment a
-    representative asked for it back. It is unreachable today and refused anyway.
-    """
     stopped = build_screening_report(a_stopped_screening(), at=A_MOMENT)
     assert stopped is not None
     investigated = build_investigation_report(
@@ -550,5 +494,5 @@ def test_a_stopped_claim_never_has_investigated_findings_folded_into_it() -> Non
 
     assert after.content.kind == "screening"
     assert after.product_names == ()
-    # Written down and read back, which is where the inconsistency would have surfaced.
+
     assert Report.model_validate(after.model_dump()) == after

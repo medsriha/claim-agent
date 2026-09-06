@@ -37,9 +37,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/claim_agent"]
 
-# ---------------------------------------------------------------------------
-# Lint & format
-# ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
 target-version = "py311"
@@ -47,34 +44,33 @@ src = ["src", "tests", "tools"]
 
 [tool.ruff.lint]
 select = [
-    "E", "W",    # pycodestyle
-    "F",         # pyflakes
-    "I",         # isort
-    "N",         # pep8-naming
-    "UP",        # pyupgrade
-    "B",         # bugbear
-    "C4",        # comprehensions
-    "SIM",       # simplify
-    "RET",       # return
-    "ARG",       # unused arguments
-    "PTH",       # pathlib
-    "ANN",       # type annotations
-    "S",         # bandit (security)
-    "ASYNC",     # async correctness
-    "T20",       # no print() — use structured logging
-    "PT",        # pytest style
-    "RUF",       # ruff-specific
+    "E", "W",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "C4",
+    "SIM",
+    "RET",
+    "ARG",
+    "PTH",
+    "ANN",
+    "S",
+    "ASYNC",
+    "T20",
+    "PT",
+    "RUF",
 ]
 ignore = [
-    "E501",      # line length is enforced by the formatter
+    "E501",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "ANN", "ARG"]   # asserts and fixtures are fine in tests
-# A command-line tool's output is its interface, so printing is the point of it. The rule
-# stays on everywhere else, including the rest of `tools/` — the stand-in API is a server
-# and has no business printing. Granted one file at a time, deliberately.
+"tests/**" = ["S101", "ANN", "ARG"]
+"tools/seed_analysis_history.py" = ["S311", "T201"]
 "tools/seed_merchant_memory.py" = ["T201"]
+"tools/seed_precedents.py" = ["T201"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -82,9 +78,6 @@ convention = "google"
 [tool.ruff.format]
 docstring-code-format = true
 
-# ---------------------------------------------------------------------------
-# Types
-# ---------------------------------------------------------------------------
 [tool.mypy]
 python_version = "3.11"
 files = ["src", "tests", "tools"]
@@ -96,9 +89,13 @@ plugins = ["pydantic.mypy"]
 module = ["langgraph.*", "langchain_anthropic.*"]
 ignore_missing_imports = true
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+[[tool.mypy.overrides]]
+module = [
+    "claim_agent.domain.price_reconciliation",
+    "claim_agent.storage.precedent_store",
+]
+disable_error_code = ["prop-decorator"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

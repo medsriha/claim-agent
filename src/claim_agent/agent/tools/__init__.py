@@ -104,9 +104,6 @@ __all__ = [
     "investigation_tools",
 ]
 
-# --- What the model is told each tool does ---------------------------------
-# Read by the model. Each says what a tool answers and what it costs, and nothing about
-# how it works or about any particular claim.
 
 _DESCRIPTIONS: Final[dict[str, str]] = {
     LIST_ATTACHMENTS: (
@@ -215,12 +212,7 @@ def investigation_tools(
     names: Sequence[str] = TOOL_NAMES,
     images: ImageLog | None = None,
 ) -> list[BaseTool]:
-    """Assemble the tools one run is given, in the fixed order (FR-1.2).
-
-    `names` picks the subset: the investigation takes them all, the triage pass takes
-    `TRIAGE_TOOL_NAMES`. `images` is where the inspect tool notes what each image turned
-    out to be, for a pass that wants to read that back afterwards.
-    """
+    """Assemble the tools one run is given, in the fixed order (FR-1.2)."""
     unknown = set(names) - set(TOOL_NAMES)
     if unknown:
         raise ValueError(f"No such tool(s): {', '.join(sorted(unknown))}.")

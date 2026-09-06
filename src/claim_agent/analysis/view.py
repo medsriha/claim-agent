@@ -48,8 +48,7 @@ _MONTHS = (
 
 _SHORT_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
-# How long each stretch of time the screen can ask for is, in whole weeks, so that every bucket
-# on a chart is a complete week and none of them is a stub.
+
 PERIODS: tuple[tuple[str, str, int], ...] = (
     ("four_weeks", "4 weeks", 4),
     ("thirteen_weeks", "13 weeks", 13),
@@ -70,12 +69,7 @@ _RATE_DOMAIN = Domain(minimum=0.0, maximum=1.0)
 
 
 def _day_text(moment: datetime) -> str:
-    """Write a date the same way on every machine — "4 September 2026".
-
-    The browser's own date formatting changes with how the machine is set up, so the same period
-    would read differently to two people. Every other date this system shows is written out by
-    hand for the same reason.
-    """
+    """Write a date the same way on every machine — \"4 September 2026\"."""
     at_utc = moment.astimezone(UTC)
     return f"{at_utc.day} {_MONTHS[at_utc.month - 1]} {at_utc.year}"
 
@@ -92,11 +86,7 @@ def _count_text(number: int) -> str:
 
 
 def _percent_text(rate: float | None) -> str:
-    """Write a rate as a percentage, or a dash when there is no rate to write.
-
-    A dash rather than "0%": nothing happened is not the same as nothing succeeded, and this is
-    the distinction the whole screen is careful about.
-    """
+    """Write a rate as a percentage, or a dash when there is no rate to write."""
     if rate is None:
         return "—"
     return f"{round(rate * 100)}%"
@@ -112,11 +102,7 @@ def _minutes_text(minutes: float | None) -> str:
 
 
 def _money_text(amount: Decimal) -> str:
-    """Write an amount already worked out, with a currency sign and separators.
-
-    The amount arrives as a `Decimal` that was worked out elsewhere. Nothing here adds, multiplies
-    or rounds it; it is only written down.
-    """
+    """Write an amount already worked out, with a currency sign and separators."""
     return f"${amount:,.2f}"
 
 
@@ -126,12 +112,7 @@ def _hours_text(hours: Decimal) -> str:
 
 
 def _nice_ceiling(largest: float) -> float:
-    """A round number at or above the largest value, for the top of an axis.
-
-    Axes that stop at the largest value leave the highest mark touching the top of the chart,
-    where it reads as clipped. Rounding up to something a person would say out loud — twenty, not
-    18.4 — also makes the gridlines mean something.
-    """
+    """A round number at or above the largest value, for the top of an axis."""
     if largest <= 0:
         return 1.0
     step = 1.0
@@ -156,12 +137,7 @@ def _even_gridlines(maximum: float, count: int, suffix: str) -> tuple[Gridline, 
 
 
 def _month_ticks(week_starts: tuple[datetime, ...]) -> tuple[int, ...]:
-    """Which weeks get a word under them: the first week of every other month.
-
-    Every month would crowd a year of weeks into unreadable overlap, and every week would be far
-    worse. The first and last are always included so a reader can see where the period begins and
-    ends.
-    """
+    """Which weeks get a word under them: the first week of every other month."""
     firsts = [
         position
         for position, start in enumerate(week_starts)
@@ -181,33 +157,13 @@ def _rate_point(part: int, whole: int, label: str) -> Point:
 
 
 def resolve_period(period: str) -> str:
-    """The period actually used, which is the default when the one asked for is not offered.
-
-    Resolved once, here, so that the window and the list of choices can never disagree — the
-    screen showing a year of figures with nothing marked as chosen would leave a reader unable to
-    say what they were looking at.
-    """
+    """The period actually used, which is the default when the one asked for is not offered."""
     known = {key for key, _label, _weeks in PERIODS}
     return period if period in known else DEFAULT_PERIOD
 
 
 def window_for(period: str, now: datetime) -> tuple[datetime, datetime]:
-    """Work out which stretch of time a named period covers.
-
-    The start is pulled back to the beginning of a week so that every bucket on a chart is a whole
-    week. That makes the period slightly longer than its name suggests, which is the right trade:
-    a first bar covering two days sitting beside bars covering seven would understate the start of
-    every trend on the screen.
-
-    Args:
-        period: One of the keys in `PERIODS`. An unknown one falls back to the default rather than
-            failing, because a period is a way of looking at the data and not an instruction that
-            could be dangerous to get wrong.
-        now: The moment the request arrived, in UTC.
-
-    Returns:
-        The first moment covered and the first moment not covered.
-    """
+    """Work out which stretch of time a named period covers."""
     resolved = resolve_period(period)
     weeks = next(count for key, _label, count in PERIODS if key == resolved)
     return week_starting(now - timedelta(weeks=weeks - 1)), now
@@ -221,12 +177,7 @@ def _presets(applied: str) -> tuple[Preset, ...]:
 
 
 def _approval_trend(performance: Performance) -> Panel[TimeChart]:
-    """How often each population went out exactly as the system produced it, week by week.
-
-    Two lines rather than one, because the two populations are the whole argument: a claim the
-    quick checks stopped is decided by fixed rules and almost always accepted, and folding it in
-    with the investigated claims would hide how the advice is really doing.
-    """
+    """How often each population went out exactly as the system produced it, week by week."""
     if performance.totals.overall.decisions == 0:
         return Panel(
             empty_reason=(
@@ -279,9 +230,6 @@ def _approval_trend(performance: Performance) -> Panel[TimeChart]:
     )
 
 
-# The four ways an investigated product can go, bottom to top, each paired with the way to read
-# its count off a tally. Named functions rather than field names looked up by string: a mistyped
-# field would be a chart that silently drew the wrong band.
 _MIX_BANDS: tuple[tuple[str, Callable[[Tally], int]], ...] = (
     ("Accepted without changes", lambda tally: tally.direct_approvals),
     ("Email wording changed only", lambda tally: tally.wording_only),
@@ -291,12 +239,7 @@ _MIX_BANDS: tuple[tuple[str, Callable[[Tally], int]], ...] = (
 
 
 def _intervention_mix(performance: Performance) -> Panel[StackedChart]:
-    """How far representatives went, week by week, as four shares of the whole.
-
-    The four are worked out so that they cover every decision exactly once, and each band's top
-    edge is sent already added up. The browser draws the shapes between the edges and never sums
-    anything, so four shares that must come to one cannot drift apart on screen.
-    """
+    """How far representatives went, week by week, as four shares of the whole."""
     if performance.totals.investigation.decisions == 0:
         return Panel(
             empty_reason=(
@@ -400,12 +343,7 @@ def _calibration(performance: Performance) -> Panel[Calibration]:
 
 
 def _readiness_label(group: str, segment: str) -> str:
-    """What to call one part of a cut.
-
-    Everything but the confidence bands is already ShipBob's own words for a real thing — a
-    carrier, a kind of damage — and is passed through untouched. The bands are ours, and are
-    named by the range they cover so that nobody has to look up what "fair" means.
-    """
+    """What to call one part of a cut."""
     if group == "How sure the system said it was":
         return _confidence_label(segment)
     clearer = {
@@ -427,16 +365,7 @@ def _readiness_group_label(group: str) -> str:
 
 
 def _confidence_label(name: str) -> str:
-    """Name a confidence band by the range it actually covers.
-
-    The bands have short names in the settings — "fair", "high" — and those names mean nothing to
-    anybody reading a screen. "Below the bar" is worse than nothing: it refers to the level below
-    which the rules already refuse to recommend paying (FR-1.15), which is knowledge nobody
-    outside this codebase has.
-
-    So a band is labelled with its own edges. The label is built from the numbers rather than
-    written beside them, which is what stops the two disagreeing if a band is ever moved.
-    """
+    """Name a confidence band by the range it actually covers."""
     for band, low, high in CONFIDENCE_BANDS:
         if band != name:
             continue
@@ -449,11 +378,7 @@ def _confidence_label(name: str) -> str:
 
 
 def _spread_text(spread: float | None) -> str:
-    """Say in words how much a cut separates claims, so a flat one reads as a finding.
-
-    A group whose parts all come back ready about as often is not noise to be squinted at. It is
-    an answer, and the answer is that this way of sorting claims does not help.
-    """
+    """Say in words how much a cut separates claims, so a flat one reads as a finding."""
     if spread is None:
         return "Not enough decisions to compare"
     points = round(spread * 100)
@@ -739,17 +664,7 @@ def _assumptions() -> tuple[Assumption, ...]:
 
 
 def build(performance: Performance, period: str, generated_at: datetime) -> AnalysisView:
-    """Turn the worked-out figures into everything the screen draws.
-
-    Args:
-        performance: The counts and rates, already worked out.
-        period: Which stretch of time was asked for, so the screen can show it as chosen.
-        generated_at: When this was put together, shown so a reader knows how fresh it is.
-
-    Returns:
-        Every tile, chart, table and sentence, with each number carried both as a value to draw
-        and as the words to read.
-    """
+    """Turn the worked-out figures into everything the screen draws."""
     investigated = performance.totals.investigation
     return AnalysisView(
         period_label=(

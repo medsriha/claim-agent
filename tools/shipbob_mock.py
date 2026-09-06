@@ -94,11 +94,7 @@ ORDERS = [
 
 
 def _by_id(records: list[dict[str, object]], id_field: str) -> dict[str, dict[str, object]]:
-    """Index records by the id they carry, so a lookup does not scan the whole list.
-
-    Raises `ValueError` if two records share an id, which would otherwise mean one of
-    them silently became unreachable.
-    """
+    """Index records by the id they carry, so a lookup does not scan the whole list."""
     indexed: dict[str, dict[str, object]] = {}
     for record in records:
         record_id = str(record[id_field])
@@ -112,8 +108,7 @@ CASES_BY_ID = _by_id(CASES, "case_id")
 SHIPMENTS_BY_ID = _by_id(SHIPMENTS, "shipment_id")
 ORDERS_BY_ID = _by_id(ORDERS, "order_id")
 
-# The images ShipBob holds against each of the five sample cases, exactly as it serves
-# them: real ids, real names, and signed addresses that really do fetch the image.
+
 ATTACHMENTS_BY_CASE_ID: dict[str, dict[str, object]] = {
     "CASE-1001": ATTACHMENTS_1001,
     "CASE-1002": ATTACHMENTS_1002,
@@ -122,29 +117,12 @@ ATTACHMENTS_BY_CASE_ID: dict[str, dict[str, object]] = {
     "CASE-1005": ATTACHMENTS_1005,
 }
 
-# What the five constructed cases answer with. ShipBob supplied no images for cases we
-# made up, and inventing addresses for them would put fabricated evidence in front of an
-# investigation — once an image is fetched, nothing distinguishes one we invented from a
-# photograph a merchant really took. An empty listing is the honest answer, and it is an
-# ordinary answer rather than a failure (FR-1.6). It costs four of them nothing: they exist
-# to be turned away by pre-flight, which happens before any image is read.
-#
-# CASE-9005 is the exception and it is meant to be. It passes the gates and is investigated,
-# so an empty listing is what the investigation actually works from and the only honest
-# recommendation is to go back to the merchant. That is enough for what it demonstrates —
-# a correction carried across from the merchant's earlier claim (FR-C.8) — and giving it
-# invented photographs to reach a payment instead is the exact trade this comment refuses.
+
 EMPTY_ATTACHMENT_LISTING = attachments_payload()
 
 
 def _as_money(value: object) -> object:
-    """Turn a price into an exact decimal, keeping its cents.
-
-    The sample records write prices as ordinary Python numbers, where 38.00 and 38.0 are
-    the same thing. ShipBob writes money with its cents, and the system is built to read
-    it that way, so restoring the cents here is what makes the stand-in behave like the
-    real API rather than like a rounded copy of it.
-    """
+    """Turn a price into an exact decimal, keeping its cents."""
     if isinstance(value, float | int):
         return Decimal(str(value)).quantize(Decimal("0.01"))
     return value
@@ -167,17 +145,7 @@ def _with_money_restored(record: dict[str, object]) -> dict[str, object]:
 
 
 def _to_json(value: object) -> str:
-    """Write a record as JSON, with money as a bare number that keeps its cents.
-
-    This exists for one reason: Python's ordinary JSON writer cannot produce `38.00`.
-    Given a float it writes `38.0`, and given an exact decimal it refuses outright. The
-    real API sends money as a plain number *with* its cents, and the system is carefully
-    written to read those cents (see the note in the ShipBob client), so a stand-in that
-    dropped them would quietly stop exercising the thing that matters most about money.
-
-    Everything that is not a decimal is handed to the ordinary writer, so nothing else
-    about the shape of a record changes.
-    """
+    """Write a record as JSON, with money as a bare number that keeps its cents."""
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, dict):
@@ -189,13 +157,7 @@ def _to_json(value: object) -> str:
 
 
 def _delay_seconds() -> float:
-    """How long to hold every answer back, in seconds.
-
-    Zero unless `SHIPBOB_MOCK_DELAY_SECONDS` says otherwise. Set it to see the screen's
-    waiting state, or set it above the system's own timeout to see what a representative
-    sees when ShipBob is too slow to answer (NFR-6). An unreadable value means zero:
-    a development tool refusing to start over a typo helps nobody.
-    """
+    """How long to hold every answer back, in seconds."""
     raw = os.environ.get("SHIPBOB_MOCK_DELAY_SECONDS", "0")
     try:
         return max(0.0, float(raw))
@@ -210,12 +172,7 @@ app = FastAPI(
 
 
 async def _hold_the_answer_back() -> None:
-    """Wait as long as the delay setting asks before answering anything.
-
-    Every address goes through this, so switching the delay on slows the whole stand-in
-    rather than only the reads, and a slow ShipBob looks the same from the screen
-    whichever record it was asked for (NFR-6).
-    """
+    """Wait as long as the delay setting asks before answering anything."""
     delay = _delay_seconds()
     if delay:
         await asyncio.sleep(delay)
@@ -225,15 +182,7 @@ async def _answer(
     record: dict[str, object] | None,
     missing_body: dict[str, object] = CASE_NOT_FOUND_BODY,
 ) -> Response:
-    """Send a record back the way ShipBob would, or say there is no such record.
-
-    A missing record is answered as a proper 404 rather than an error, because a claim
-    for a case that does not exist is a normal thing to demonstrate: the system turns
-    that into "ShipBob has no case with this id" for the representative.
-
-    The body naming the missing resource differs per read, the way ShipBob's does, so
-    the stand-in cannot teach a caller that every 404 looks alike.
-    """
+    """Send a record back the way ShipBob would, or say there is no such record."""
     await _hold_the_answer_back()
     if record is None:
         return Response(
@@ -246,17 +195,7 @@ async def _answer(
 
 @app.get("/cases", summary="List every support case")
 async def list_cases() -> Response:
-    """Return a short entry for every claim, the way ShipBob's own listing does.
-
-    **Only five fields per case, and that is the point.** ShipBob's listing does not carry
-    the order, the shipment, the merchant or the account name, so nothing can work out
-    which claims are related to one another from this alone — each one has to be read in
-    full afterwards. Serving a fuller record here would be more convenient and would
-    teach a caller something untrue about what the real API gives them.
-
-    The order is the order the records are declared in, so two runs of the demo list the
-    claims the same way (NFR-1).
-    """
+    """Return a short entry for every claim, the way ShipBob's own listing does."""
     listing = [
         {
             "case_id": case["case_id"],
@@ -294,14 +233,7 @@ async def get_order(order_id: str) -> Response:
 
 @app.get("/cases/{case_id}/attachments", summary="List the images on one support case")
 async def get_case_attachments(case_id: str) -> Response:
-    """Return the images the merchant uploaded to a case (FR-1.4).
-
-    A case that exists but carries no images answers with an empty list, not a 404. That
-    distinction is the whole of CASE-1005: having sent nothing is a finding about the
-    claim, which ends in a request for information, whereas a 404 means nobody knows
-    (FR-1.6). A case id ShipBob has never heard of is the 404, answered exactly as the
-    other reads answer one.
-    """
+    """Return the images the merchant uploaded to a case (FR-1.4)."""
     if case_id not in CASES_BY_ID:
         return await _answer(None)
     return await _answer(ATTACHMENTS_BY_CASE_ID.get(case_id, EMPTY_ATTACHMENT_LISTING))
@@ -316,19 +248,7 @@ class InvoiceRequest(BaseModel):
 
 @app.post("/invoices/generate", summary="Price what a shipment contained")
 async def generate_invoice(invoice_request: InvoiceRequest) -> Response:
-    """Return the invoice for a shipment, or refuse to price one we have no order for.
-
-    The invoice is the only document a recommended reimbursement may be worked out from
-    (FR-1.18), and its lines are identical to the order's, so it is built from the order
-    the shipment came from rather than written out separately. The two can then never
-    disagree about what the parcel held.
-
-    A shipment this stand-in has never heard of is answered `422 invoice_unavailable`.
-    That is ShipBob refusing to price a particular shipment, which is a settled answer
-    rather than an outage, and handling it is required (FR-1.18). Every sample shipment
-    can be priced, so without this there would be no way at all to see that path run —
-    and a required behaviour nobody can demonstrate is one nobody has checked.
-    """
+    """Return the invoice for a shipment, or refuse to price one we have no order for."""
     await _hold_the_answer_back()
     order = _order_for_shipment(invoice_request.shipment_id)
     if order is None:
@@ -342,11 +262,7 @@ async def generate_invoice(invoice_request: InvoiceRequest) -> Response:
 
 
 def _order_for_shipment(shipment_id: str) -> dict[str, object] | None:
-    """Find the order a shipment came from, or nothing if either is unknown.
-
-    Nothing means the shipment cannot be priced, which is what the invoice endpoint
-    refuses on.
-    """
+    """Find the order a shipment came from, or nothing if either is unknown."""
     shipment = SHIPMENTS_BY_ID.get(shipment_id)
     if shipment is None:
         return None

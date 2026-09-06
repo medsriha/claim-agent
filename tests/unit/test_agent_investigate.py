@@ -55,9 +55,7 @@ from claim_agent.storage.precedent_store import PrecedentSet, RetrievedPrecedent
 
 SHIPBOB = "http://shipbob.test"
 
-# The claim every test works from is CASE-1001, whose case, order, shipment and invoice
-# are ShipBob's own sample records. Its order holds two products: an Additional Collagen
-# Ampoule Duo at $38.00 and a Liposomal Tripeptide Collagen at $52.00.
+
 CASE = Case.model_validate(CASE_1001)
 SHIPMENT = Shipment.model_validate(SHIPMENT_1001)
 ORDER = Order.model_validate(ORDER_1001)
@@ -69,7 +67,6 @@ AMPOULE = "Additional Collagen Ampoule Duo"
 
 
 def images_on_the_claim() -> tuple[Attachment, ...]:
-    """The images CASE-1001 actually carries, as the investigation is handed them."""
     listed = ATTACHMENTS_1001["attachments"]
     assert isinstance(listed, list)
     return tuple(Attachment.model_validate(image) for image in listed)
@@ -86,11 +83,7 @@ CONTEXT = ClaimContext(
 )
 
 
-# --- Building a claim to investigate ----------------------------------------
-
-
 def build_settings() -> Settings:
-    """Settings for a test process, with no credentials and nowhere to cache downloads."""
     return Settings(
         environment="test",
         log_level="WARNING",
@@ -103,19 +96,16 @@ def build_settings() -> Settings:
 
 
 def claim_lines(*claimed: ClaimedProduct, order: Order = ORDER) -> tuple[ClaimLine, ...]:
-    """Split a claim into lines the way the triage pass does, matching against the order."""
     return build_claim_lines(CASE.case_id, claimed, order)
 
 
 def a_claim_for_the_collagen(order: Order = ORDER) -> ClaimLine:
-    """One claim line: the $52.00 collagen, matched to exactly one line on the order."""
     line = claim_lines(ClaimedProduct(name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU), order=order)[0]
     assert line.match is MatchOutcome.MATCHED
     return line
 
 
 def five_other_products() -> tuple[ClaimedProduct, ...]:
-    """Five more damaged products, so a line can be investigated beside a crowd of them."""
     return (
         ClaimedProduct(name=AMPOULE, quantity=1, sku="AMP1"),
         ClaimedProduct(name="Beef Trachea Chews", quantity=2),
@@ -126,23 +116,10 @@ def five_other_products() -> tuple[ClaimedProduct, ...]:
 
 
 def the_collagen_beside(others: Sequence[ClaimedProduct]) -> tuple[ClaimLine, ...]:
-    """Split a claim covering the collagen and some other products (FR-1b.1, FR-1b.2).
-
-    Returns every claim line, which is exactly what one run is given: the whole claim, and
-    one answer covering all of it.
-    """
     return claim_lines(ClaimedProduct(name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU), *others)
 
 
-# --- Writing the answers the model gives ------------------------------------
-
-
 def evidence_all_in_hand(**states: EvidenceState) -> tuple[EvidenceJudgement, ...]:
-    """The model's read on all four pieces of evidence, present unless a test says otherwise.
-
-    A keyword names one of the four and the state to put it in:
-    `evidence_all_in_hand(outer_packaging_photo=EvidenceState.MISSING)`.
-    """
     return tuple(
         EvidenceJudgement(
             kind=kind,
@@ -155,7 +132,6 @@ def evidence_all_in_hand(**states: EvidenceState) -> tuple[EvidenceJudgement, ..
 
 
 def all_four_answered(**passed: bool) -> tuple[AssessmentJudgement, ...]:
-    """The four questions, answered yes unless a test says otherwise."""
     return tuple(
         AssessmentJudgement(
             name=name,
@@ -168,16 +144,6 @@ def all_four_answered(**passed: bool) -> tuple[AssessmentJudgement, ...]:
 
 
 def a_conclusion(**overrides: object) -> InvestigationConclusion:
-    """A well-evidenced conclusion recommending payment for one collagen.
-
-    It names an amount, because the investigation decides what the damage is worth
-    (FR-1.21). $40.00 against a $52.00 item, deliberately: the figure is a judgement about
-    the damage rather than a share of the price, so a test that assumed one could be
-    derived from the other would be asserting a rule that no longer exists.
-
-    Its email writes no amount of its own. Code adds the figure that got past the cap after
-    the model has answered.
-    """
     fields: dict[str, object] = {
         "evidence": evidence_all_in_hand(),
         "assessments": all_four_answered(),
@@ -195,31 +161,18 @@ def a_conclusion(**overrides: object) -> InvestigationConclusion:
 
 
 def test_fr_c_7_a_model_that_asks_for_the_high_value_label_is_read_as_approving() -> None:
-    """FR-C.7: the label is code's, so a model that claims it is asking to approve.
-
-    Read this way rather than refused. The rest of the answer is perfectly good, and every
-    rule that holds an approval back has to run over it — which they only do for an
-    approval the code recognises as one.
-    """
     conclusion = a_conclusion(recommendation=Recommendation.APPROVE_HIGH_VALUE)
 
     assert conclusion.recommendation is Recommendation.APPROVE
 
 
 def an_email_with_no_figure(**overrides: object) -> dict[str, object]:
-    """Email wording that mentions no amount at all, for a conclusion nobody will pay out.
-
-    Non-approval wording names no figure, which lets a test change one thing at a time.
-    """
     fields: dict[str, object] = {
         "email_subject": "About your damaged shipment",
         "email_body": "We have looked at your claim and will be in touch about it.",
     }
     fields.update(overrides)
     return fields
-
-
-# --- Running one investigation ----------------------------------------------
 
 
 async def investigate(
@@ -233,12 +186,6 @@ async def investigate(
     events: EventStream | None = None,
     precedent: PrecedentSet | None = None,
 ) -> ClaimFindings:
-    """Investigate one claim, with everything a test does not care about defaulted.
-
-    The HTTP clients are real ones aimed at a name that only a stand-in answers to, so a
-    request that escaped a test would fail loudly rather than reach a machine. Most tests
-    here never make one: their model never asks for a tool.
-    """
     settings = build_settings()
     async with (
         httpx.AsyncClient(base_url=SHIPBOB, timeout=1.0) as shipbob_http,
@@ -263,12 +210,10 @@ async def investigate(
 
 
 def a_run_that_concludes(conclusion: InvestigationConclusion) -> ScriptedModel:
-    """A model that looks at nothing, says it has seen enough, and fills the form in."""
     return scripted("I have seen enough to answer.", conclusion)
 
 
 def settled(kind: EvidenceKind, state: EvidenceState) -> EvidenceFinding:
-    """One piece of shared evidence, settled once for the whole claim (FR-1a.3)."""
     return EvidenceFinding(
         kind=kind,
         state=state,
@@ -279,20 +224,10 @@ def settled(kind: EvidenceKind, state: EvidenceState) -> EvidenceFinding:
 
 
 def state_of(result: ClaimFindings, kind: EvidenceKind) -> EvidenceState:
-    """What the finished investigation says about one of the four pieces of evidence."""
     return findings_by_kind(result.evidence)[kind].state
 
 
-# --- A well-evidenced product (FR-1.14, FR-1.18, FR-1.21) -------------------
-
-
 async def test_a_well_evidenced_product_is_recommended_for_payment_at_the_policy_share() -> None:
-    """FR-1.14, FR-1.18: a claim with everything in hand is proposed for payment, priced.
-
-    The figure is the investigation's own judgement of what the damage is worth — $40.00
-    against a $52.00 item, deliberately not a share of the price. What the item cost is
-    shown beside it as context, and the email carries the figure that got past the cap.
-    """
     result = await investigate(a_run_that_concludes(a_conclusion()))
 
     assert result.outcome.recommendation is Recommendation.APPROVE
@@ -311,11 +246,6 @@ async def test_a_well_evidenced_product_is_recommended_for_payment_at_the_policy
 
 
 async def test_a_recommendation_is_never_presented_as_settled() -> None:
-    """FR-1.17: the email is a draft, and nothing in its own words says so.
-
-    That it is unsent is recorded beside the wording rather than inside it, so no such
-    marker can ever reach a merchant.
-    """
     result = await investigate(a_run_that_concludes(a_conclusion()))
 
     assert result.drafted_email is not None
@@ -325,27 +255,13 @@ async def test_a_recommendation_is_never_presented_as_settled() -> None:
 
 
 async def test_all_four_pieces_of_evidence_and_all_four_questions_are_reported() -> None:
-    """FR-2.2, FR-2.3: a representative sees what was found, not what was left out.
-
-    All four pieces of evidence come back in the fixed reporting order whatever
-    happened, so nothing has to be inferred from silence.
-    """
     result = await investigate(a_run_that_concludes(a_conclusion()))
 
     assert tuple(finding.kind for finding in result.evidence) == REQUIRED_EVIDENCE
     assert tuple(answer.name for answer in result.assessments) == REQUIRED_ASSESSMENTS
 
 
-# --- Evidence that is short, or that we could not read (FR-1.6, NFR-4) ------
-
-
 async def test_a_missing_piece_of_evidence_sends_the_claim_back_to_the_merchant() -> None:
-    """FR-1.6: nothing is approved partially — what is missing is asked for and the claim waits.
-
-    The investigation recommended paying anyway, which is exactly the case the rule
-    exists for: it is applied to the answer afterwards rather than being an instruction
-    the model was asked to follow.
-    """
     conclusion = a_conclusion(
         evidence=evidence_all_in_hand(outer_packaging_photo=EvidenceState.MISSING),
         **an_email_with_no_figure(),
@@ -361,7 +277,6 @@ async def test_a_missing_piece_of_evidence_sends_the_claim_back_to_the_merchant(
 
 
 async def test_a_specific_identification_detail_can_be_requested_from_the_merchant() -> None:
-    """The request-info path supports actionable gaps beyond the four evidence items."""
     detail = "a clear photograph showing the full product label and SKU"
     conclusion = a_conclusion(
         recommendation=Recommendation.REQUEST_INFO,
@@ -377,12 +292,6 @@ async def test_a_specific_identification_detail_can_be_requested_from_the_mercha
 
 
 async def test_an_image_we_could_not_read_goes_to_a_person_and_not_to_the_merchant() -> None:
-    """NFR-4, FR-1.7: our own failure is never turned into a request the merchant cannot act on.
-
-    The claim settled that the invoice image could not be read by us. Asking the merchant
-    to send it again would be asking them to fix our download, so the line goes to a
-    person instead.
-    """
     conclusion = a_conclusion(**an_email_with_no_figure())
 
     result = await investigate(
@@ -397,11 +306,6 @@ async def test_an_image_we_could_not_read_goes_to_a_person_and_not_to_the_mercha
 
 
 async def test_a_question_answered_no_is_not_the_same_as_one_never_answered() -> None:
-    """FR-1.12: a failed judgement asks the representative to clarify what is wrong.
-
-    A question nobody answered is the other thing entirely — an unfinished investigation
-    — so an answer of no is kept as an answer rather than being dropped.
-    """
     conclusion = a_conclusion(
         assessments=all_four_answered(damage_visible=False),
         **an_email_with_no_figure(),
@@ -418,12 +322,6 @@ async def test_a_question_answered_no_is_not_the_same_as_one_never_answered() ->
 
 
 async def test_a_question_the_run_never_answered_is_not_written_down_as_an_answer() -> None:
-    """FR-2.3, NFR-4: an unfinished investigation must never read as a clean one.
-
-    The run answered three of the four questions. The fourth is absent from the write-up
-    rather than being recorded as a no, because those two lead different places — one
-    back to the merchant, the other to a person.
-    """
     conclusion = a_conclusion(
         assessments=all_four_answered()[:3],
         **an_email_with_no_figure(),
@@ -436,11 +334,7 @@ async def test_a_question_the_run_never_answered_is_not_written_down_as_an_answe
     assert OverrideReason.INVESTIGATION_INCOMPLETE in result.outcome.overrides
 
 
-# --- Uncertainty and exhaustion (FR-1.15, FR-1.16) --------------------------
-
-
 async def test_an_investigation_records_which_wording_and_model_produced_it() -> None:
-    """NFR-1, NFR-5: two reports on one claim can be told apart by what asked the question."""
     conclusion = a_conclusion(**an_email_with_no_figure())
 
     result = await investigate(a_run_that_concludes(conclusion))
@@ -451,12 +345,6 @@ async def test_an_investigation_records_which_wording_and_model_produced_it() ->
 
 
 async def test_a_run_that_used_up_its_steps_asks_the_rep_with_findings_intact() -> None:
-    """FR-1.16: a representative is handed the work, not an empty result.
-
-    The run is given one step, spends it asking for the images, and has nothing left. The
-    evidence the claim had already settled is still in the write-up, and so is the record
-    of the one thing the run managed to do.
-    """
     model = scripted(
         AIMessage(
             content="",
@@ -487,13 +375,6 @@ async def test_a_run_that_used_up_its_steps_asks_the_rep_with_findings_intact() 
 
 
 async def test_a_model_that_cannot_be_reached_produces_a_write_up_rather_than_an_error() -> None:
-    """NFR-4: no failure path leads to an unreviewed approval or a dropped claim.
-
-    The provider fails on the very first turn, so nothing at all was established. The
-    line still comes back as a finished write-up recommending that a person look at it,
-    with the reason among its concerns and every piece of evidence shown as one we do not
-    have.
-    """
     result = await investigate(scripted(ModelConnectionError("the socket closed")))
 
     assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
@@ -506,16 +387,7 @@ async def test_a_model_that_cannot_be_reached_produces_a_write_up_rather_than_an
     assert result.concerns != ()
 
 
-# --- Which product, and what it is worth (FR-1.13, FR-1.19, FR-1.20, FR-1.21)
-
-
 def an_order_with_two_lines_of_one_name() -> Order:
-    """An order carrying the same product name twice at two different prices.
-
-    Constructed rather than taken from ShipBob's samples: none of the five sample orders
-    lists one name twice, and this is the situation the requirements single out as the
-    one the system must refuse to guess at (FR-1.13).
-    """
     return Order(
         order_id="334291211",
         user_id="334430",
@@ -537,11 +409,6 @@ def an_order_with_two_lines_of_one_name() -> Order:
 
 
 async def test_a_product_that_could_be_either_of_two_order_lines_is_never_priced() -> None:
-    """FR-1.13: the system asks which product was damaged rather than picking the likelier.
-
-    The two candidates cost different amounts, so choosing one would invent the payout.
-    Nothing is priced, and what is unclear is put in front of the representative.
-    """
     order = an_order_with_two_lines_of_one_name()
     line = claim_lines(
         ClaimedProduct(name="CleanBoss Multi Surface Cleaner 24oz", quantity=1), order=order
@@ -567,20 +434,13 @@ async def test_a_product_that_could_be_either_of_two_order_lines_is_never_priced
 
     assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert result.drafted_email is None
-    # The figure the investigation named is still shown; the rules withhold the payment,
-    # which is what stops it being made. Zeroing it would hide what was proposed.
+
     assert result.amount.components == ()
     assert result.amount.components == ()
     assert any("two of them" in concern for concern in result.concerns)
 
 
 async def test_an_ambiguous_product_is_judged_against_the_order_and_not_against_the_claim() -> None:
-    """FR-1.13, FR-1b.4: which products are on the order is the same however a claim is split.
-
-    The investigation recommended paying. It cannot be paid, because the damaged product
-    matches two lines on the order that carry different prices — a fact about the order,
-    which does not change when the same claim is divided differently.
-    """
     order = an_order_with_two_lines_of_one_name()
     line = claim_lines(
         ClaimedProduct(name="CleanBoss Multi Surface Cleaner 24oz", quantity=1), order=order
@@ -599,11 +459,6 @@ async def test_an_ambiguous_product_is_judged_against_the_order_and_not_against_
 
 
 async def test_a_product_that_is_not_on_the_order_cannot_be_paid_for() -> None:
-    """FR-1.10, FR-1a.2: a claim for something that was never ordered is a finding, not an error.
-
-    The line is still investigated and still reported on. It simply cannot be priced, so
-    it goes to a person with the reason said plainly.
-    """
     line = claim_lines(ClaimedProduct(name="Beef Trachea Chews", quantity=1))[0]
     assert line.match is MatchOutcome.NOT_ON_ORDER
 
@@ -617,19 +472,12 @@ async def test_a_product_that_is_not_on_the_order_cannot_be_paid_for() -> None:
     assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert OverrideReason.PRODUCT_NOT_PRICEABLE in result.outcome.overrides
     assert "not on the order" in result.outcome.explanation
-    # The figure the investigation named is still shown, and nothing is paid on it. Zeroing
-    # it would hide what was proposed; the rules withholding it is what stops the payment.
+
     assert result.amount.components == ()
     assert result.amount.proposed_usd == Decimal("40.00")
 
 
 async def test_only_the_damaged_items_are_covered_and_never_the_whole_order() -> None:
-    """FR-1.19: one crushed bottle in a two-product order reimburses one bottle.
-
-    The order comes to $90.00 and holds two products. The claim is for one of them, so
-    only that one is priced for context — a recommendation is never worked out from the
-    whole order.
-    """
     result = await investigate(a_run_that_concludes(a_conclusion()))
 
     assert result.amount.items_total_usd == Decimal("52.00")
@@ -637,13 +485,6 @@ async def test_only_the_damaged_items_are_covered_and_never_the_whole_order() ->
 
 
 async def test_the_amount_is_capped() -> None:
-    """FR-1.20: a claim worth more than the cap is recommended at the cap, and says so.
-
-    Easy to construct now that the investigation names the figure: it proposes $180.00 for
-    four badly damaged tubs, and the cap brings that back to $100.00. The cap is the only
-    thing standing between a judgement and a payout, which is why this matters more than it
-    used to.
-    """
     whey = OrderLineItem(
         name="2.5LBS White Chocolate Raspberry Huge Whey",
         sku="0159",
@@ -669,21 +510,13 @@ async def test_the_amount_is_capped() -> None:
     assert result.amount.cap_applied is True
     assert result.drafted_email is not None
     assert "$100.00" in result.drafted_email.body
-    # The merchant reads the figure that survived the cap, never the one proposed. This is
-    # the rule about money that did not change when FR-1.21 was reversed.
+
     assert "180.00" not in result.drafted_email.body
 
 
 async def test_the_figure_is_worked_out_from_the_invoice_and_never_from_what_the_model_wrote() -> (
     None
 ):
-    """FR-1.21: the model says what was damaged; code says how much.
-
-    The investigation is scripted to claim a figure of its own in its reasoning. It has
-    no field to put one in, and nothing reads one out of its words: the recommended
-    amount is the invoice's price for the product it named, and the figure in the email
-    is that one.
-    """
     conclusion = a_conclusion(
         reasoning="The bottle is crushed. I would put it at about $12.00.",
         concerns=("I am not certain the $12.00 I have in mind is the right price.",),
@@ -695,18 +528,13 @@ async def test_the_figure_is_worked_out_from_the_invoice_and_never_from_what_the
     assert result.amount.priced_from == "INV-342578703"
     assert [component.unit_price for component in result.amount.components] == [Decimal("52.00")]
     assert result.drafted_email is not None
-    # The figure comes from the amount field, never from a number said in passing.
+
     assert "12.00" not in result.drafted_email.body
     assert "$40.00" in result.drafted_email.body
     assert "$40.00" in result.drafted_email.body
 
 
 async def test_an_email_carrying_a_figure_the_model_wrote_is_refused_and_goes_to_a_person() -> None:
-    """FR-1.21, NFR-4: wording that breaks the money rule is refused rather than repaired.
-
-    A representative is never shown the wording, the line goes to a person, and what the
-    investigation recommended is kept beside it so the refusal can be understood.
-    """
     conclusion = a_conclusion(
         email_body="We have looked at your claim and will refund $52.00 for the collagen."
     )
@@ -721,7 +549,6 @@ async def test_an_email_carrying_a_figure_the_model_wrote_is_refused_and_goes_to
 
 
 async def test_an_approval_withheld_for_missing_evidence_requests_it_without_money() -> None:
-    """FR-1.6, FR-1.21: a merchant request never promises an unapproved amount."""
     conclusion = a_conclusion(
         evidence=evidence_all_in_hand(customer_confirmation=EvidenceState.MISSING)
     )
@@ -735,17 +562,7 @@ async def test_an_approval_withheld_for_missing_evidence_requests_it_without_mon
     assert "$40.00" not in result.drafted_email.body
 
 
-# --- The shared evidence is settled once for the claim (FR-1a.3) ------------
-
-
 async def test_what_the_claim_settled_about_the_parcel_stands_over_this_run_s_own_read() -> None:
-    """FR-1a.3: two products on one claim can never disagree about the same photograph.
-
-    The invoice, the customer confirmation and the photograph of the box describe the
-    parcel rather than any one product, so they are settled once and every product is
-    handed the same answer. Where this run read one of them differently, the claim's
-    answer stands and the disagreement is reported rather than dropped.
-    """
     conclusion = a_conclusion(**an_email_with_no_figure())
 
     result = await investigate(
@@ -759,11 +576,6 @@ async def test_what_the_claim_settled_about_the_parcel_stands_over_this_run_s_ow
 
 
 async def test_the_photographs_of_the_damage_are_this_product_s_own() -> None:
-    """FR-1a.3: only three of the four are settled for the whole claim.
-
-    Photographs of the damage are per product, so what this run found about them is what
-    is recorded, even when a caller hands over a settled answer about them by mistake.
-    """
     result = await investigate(
         a_run_that_concludes(a_conclusion()),
         shared_evidence=(settled(EvidenceKind.DAMAGED_PRODUCT_PHOTO, EvidenceState.MISSING),),
@@ -773,16 +585,7 @@ async def test_the_photographs_of_the_damage_are_this_product_s_own() -> None:
     assert result.outcome.recommendation is Recommendation.APPROVE
 
 
-# --- One claim, every product on it (FR-1b.1, FR-1b.2, FR-1b.3, FR-1b.4) ----
-
-
 async def test_fr_1b_1_one_run_sees_the_whole_claim_and_answers_for_all_of_it() -> None:
-    """FR-1b.1, FR-1b.2: the merchant's account, the order and every product all go in.
-
-    A photograph can show two broken items and the description is the only account
-    anybody has of what happened, so the run is shown everything — and answers for all
-    of it, once.
-    """
     lines = the_collagen_beside(five_other_products())
     model = a_run_that_concludes(a_conclusion())
 
@@ -796,30 +599,17 @@ async def test_fr_1b_1_one_run_sees_the_whole_claim_and_answers_for_all_of_it() 
 
 
 async def test_fr_1b_3_a_claim_of_six_products_gets_one_recommendation_and_one_email() -> None:
-    """FR-1b.3: one next action, one figure and one merchant email, however many products.
-
-    This is the fault the merged run exists to fix. Six damaged products used to mean six
-    investigations and six emails to one merchant about one parcel; now the claim is
-    answered once.
-    """
     lines = the_collagen_beside(five_other_products())
 
     result = await investigate(a_run_that_concludes(a_conclusion()), lines=lines)
 
     assert result.outcome.recommendation is Recommendation.REQUEST_REP_CLARIFICATION
     assert len(result.lines) == 6
-    # Five of the six are not on the order, so nothing on the claim can be priced and the
-    # whole claim goes to a person rather than part of it being paid.
+
     assert OverrideReason.PRODUCT_NOT_PRICEABLE in result.outcome.overrides
 
 
 async def test_fr_1b_3_one_unpriceable_product_withholds_the_whole_claim() -> None:
-    """FR-1b.3, FR-1.13: a claim recommends one figure, so part of it having no price stops it.
-
-    The collagen on its own is perfectly payable. Beside a product that is on no line of
-    the order, there is no honest figure for the claim — and paying for the collagen alone
-    would settle a claim nobody has established the shape of.
-    """
     lines = claim_lines(
         ClaimedProduct(name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU),
         ClaimedProduct(name="Beef Trachea Chews", quantity=1),
@@ -840,12 +630,6 @@ async def test_fr_1b_3_one_unpriceable_product_withholds_the_whole_claim() -> No
 
 
 async def test_fr_1b_4_the_report_names_every_product_and_what_each_cost() -> None:
-    """FR-1b.4, FR-2.4: one figure does not mean one undifferentiated total.
-
-    Two damaged products, both on the order, both priced. The claim recommends a single
-    amount and the working names each product separately, so a representative can see
-    which product the money is for.
-    """
     lines = claim_lines(
         ClaimedProduct(name=COLLAGEN, quantity=1, sku=COLLAGEN_SKU),
         ClaimedProduct(name=AMPOULE, quantity=1, sku="AMPOULE1"),
@@ -870,12 +654,6 @@ async def test_fr_1b_4_the_report_names_every_product_and_what_each_cost() -> No
 
 
 async def test_fr_1b_3_the_claim_cap_applies_to_the_whole_claim_by_being_one_figure() -> None:
-    """FR-1.20 with FR-1b.3: three products at fifty each are a claim capped at a hundred.
-
-    The old shape had to add three separate figures up afterwards and then withdraw the
-    approvals it had already granted. One run proposes one figure and the cap holds it,
-    which is the whole reason the reading of FR-1.20 is now settled.
-    """
     tubs = OrderLineItem(
         name="2.5LBS White Chocolate Raspberry Huge Whey",
         sku="0159",
@@ -903,11 +681,6 @@ async def test_fr_1b_3_the_claim_cap_applies_to_the_whole_claim_by_being_one_fig
 
 
 async def test_nfr_1_the_order_the_products_arrive_in_is_the_order_they_are_described_in() -> None:
-    """NFR-1: the question is built from the split, so the same split asks the same question.
-
-    Nothing here re-sorts the products. The split settles their order and the wording
-    follows it, which is what makes the same claim ask identically twice.
-    """
     lines = the_collagen_beside(five_other_products())
 
     once = a_run_that_concludes(a_conclusion())
@@ -918,31 +691,14 @@ async def test_nfr_1_the_order_the_products_arrive_in_is_the_order_they_are_desc
     assert once.asked[0].text == again.asked[0].text
 
 
-# --- The same claim, twice (NFR-1) ------------------------------------------
-
-
 async def test_the_same_claim_investigated_twice_produces_the_same_write_up() -> None:
-    """NFR-1: the same claim, investigated twice, produces the same report.
-
-    Everything after the model's answer is arithmetic and rules, so two runs given the
-    same answer agree on every part of the write-up: the findings, the judgements, the
-    recommendation, the figure, the concerns and the email.
-    """
     first = await investigate(a_run_that_concludes(a_conclusion()))
     second = await investigate(a_run_that_concludes(a_conclusion()))
 
     assert first == second
 
 
-# --- Narrating the run (NFR-3) ----------------------------------------------
-
-
 async def test_the_run_says_what_it_started_on_and_what_it_recommends() -> None:
-    """NFR-3: somebody watching can tell what is being worked on, and how it ended.
-
-    No message carries a figure: money reaches a screen only in a finished write-up, where
-    it was arithmetic rather than wording.
-    """
     events = EventStream()
 
     await investigate(a_run_that_concludes(a_conclusion()), events=events)
@@ -956,11 +712,7 @@ async def test_the_run_says_what_it_started_on_and_what_it_recommends() -> None:
     assert "52.00" not in said[EventKind.INVESTIGATION_FINISHED].summary
 
 
-# --- The run is told how alike claims were decided (FR-S.6) -----------------
-
-
 def a_closed_claim(**overrides: object) -> PrecedentRecord:
-    """One past claim, already decided by a representative."""
     fields: dict[str, object] = {
         "precedent_id": "PREC-CASE-0900-L01",
         "case_id": "CASE-0900",
@@ -985,7 +737,6 @@ def a_closed_claim(**overrides: object) -> PrecedentRecord:
 
 
 def a_precedent_set(*records: PrecedentRecord) -> PrecedentSet:
-    """A retrieved set carrying the given closed claims."""
     return PrecedentSet(
         retrieved=tuple(
             RetrievedPrecedent(
@@ -1001,17 +752,10 @@ def a_precedent_set(*records: PrecedentRecord) -> PrecedentSet:
 
 
 def what_the_model_was_asked(model: ScriptedModel) -> str:
-    """Every word the run put in front of the model on its opening turn."""
     return model.asked[0].text
 
 
 async def test_fr_s_6_a_run_is_handed_the_closed_claims_most_like_its_product() -> None:
-    """FR-S.6: precedent arrives with the claim; the model never goes looking for it.
-
-    This is the wiring the whole feature turns on. Everything else can work — the store,
-    the comparison, the endpoint — and the investigation still be none the wiser, which
-    is exactly where this stood before.
-    """
     model = a_run_that_concludes(a_conclusion())
 
     await investigate(model, precedent=a_precedent_set(a_closed_claim()))
@@ -1024,18 +768,14 @@ async def test_fr_s_6_a_run_is_handed_the_closed_claims_most_like_its_product() 
 
 
 async def test_fr_s_13_a_run_told_nothing_about_precedent_is_not_told_there_is_none() -> None:
-    """FR-S.13: "nobody looked" and "we looked and found none" must not read alike."""
     model = a_run_that_concludes(a_conclusion())
 
     await investigate(model, precedent=None)
 
-    # The heading, not the phrase: the fixed rules always mention similar claims, and
-    # this is about whether any records were put under them.
     assert "## SIMILAR CLAIMS HANDLED BEFORE" not in what_the_model_was_asked(model)
 
 
 async def test_fr_s_13_a_run_is_told_when_the_store_was_read_and_held_nothing() -> None:
-    """FR-S.13: an empty answer is a fact about the store, and the run is told it."""
     model = a_run_that_concludes(a_conclusion())
 
     await investigate(model, precedent=a_precedent_set())
@@ -1044,14 +784,6 @@ async def test_fr_s_13_a_run_is_told_when_the_store_was_read_and_held_nothing() 
 
 
 async def test_fr_1_21_what_past_claims_were_settled_for_is_shown_to_the_model() -> None:
-    """FR-1.21, FR-S.6: the model decides the amount, so it is shown what alike claims paid.
-
-    This is the reverse of what it used to assert. While no figure could come from model
-    output, past amounts were stored and deliberately never rendered — a model forbidden to
-    write a figure must not be shown one. The model now decides the amount and is asked to
-    weigh how comparable claims were settled, so withholding the figures would leave that
-    instruction with nothing behind it.
-    """
     model = a_run_that_concludes(a_conclusion())
 
     await investigate(
@@ -1067,17 +799,6 @@ async def test_fr_1_21_what_past_claims_were_settled_for_is_shown_to_the_model()
 
 
 async def test_fr_1_8_to_fr_1_11_all_four_judgements_come_back_with_their_reasoning() -> None:
-    """FR-1.8, FR-1.9, FR-1.10, FR-1.11: four questions, each answered and each explained.
-
-    Is the damage actually visible; can the damaged product be identified; does that
-    product appear on the invoice; was the outer packaging photographed. They are
-    assessments the system reports with its reasoning, not verdicts that settle the
-    claim, so every one of them has to arrive with words a representative can disagree
-    with (FR-2.3, NFR-3).
-
-    All four are reported whatever they found, in a fixed order, so a representative
-    sees what was considered rather than inferring it from silence.
-    """
     result = await investigate(a_run_that_concludes(a_conclusion(assessments=all_four_answered())))
 
     answered = {assessment.name: assessment for assessment in result.assessments}
@@ -1089,11 +810,6 @@ async def test_fr_1_8_to_fr_1_11_all_four_judgements_come_back_with_their_reason
 
 
 async def test_fr_1_9_a_product_that_cannot_be_identified_is_not_paid_for() -> None:
-    """FR-1.9, FR-1.13: if the damaged product cannot be told apart, the amount cannot be worked out.
-
-    So the claim goes back to the merchant naming what would settle it, rather than the
-    likelier of two candidates being chosen. Choosing would invent the payout.
-    """
     result = await investigate(
         a_run_that_concludes(
             a_conclusion(

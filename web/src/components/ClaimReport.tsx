@@ -1,4 +1,3 @@
-/** Render one claim's canonical report data. No report prose is supplied by the backend. */
 import { formatDayCount, formatMoney, humanise } from "../display";
 import type {
   Assessment,

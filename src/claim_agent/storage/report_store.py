@@ -20,14 +20,12 @@ ON CONFLICT (report_id, version) DO UPDATE SET
 
 _SELECT_ONE_VERSION = "SELECT record FROM reports WHERE report_id = ? AND version = ?"
 
-# Highest version first, so the first row is the one in force. There is no tie to break: a
-# version numbers a report and two rows cannot share one.
+
 _SELECT_LATEST = "SELECT record FROM reports WHERE report_id = ? ORDER BY version DESC LIMIT 1"
 
 _SELECT_VERSIONS = "SELECT record FROM reports WHERE report_id = ? ORDER BY version"
 
-# The highest version of the claim's report, and never every version of it. A claim has one
-# report, so without the grouping a claim reworked twice would come back three times over.
+
 _SELECT_FOR_CASE = """
 SELECT record
 FROM reports
@@ -40,42 +38,14 @@ ORDER BY created_at, report_id
 
 
 class ReportStore:
-    """Reads and writes the reports representatives decide from.
-
-    Everything lives in the one database file the rest of the service uses, created the first time
-    this class is used. Each call opens the file, does its one piece of work, and closes it again —
-    the same shape as the stores beside it, and for the same reason: these reads take microseconds
-    and a shared connection invites a class of bug that is hard to reproduce.
-
-    Nothing in this class judges a claim, writes a report, or decides anything about one. It keeps
-    them and hands them back.
-    """
+    """Reads and writes the reports representatives decide from."""
 
     def __init__(self, database_path: Path) -> None:
-        """Point the store at a database file.
-
-        Nothing is read or written here, and the file does not have to exist yet: building the
-        store is cheap, and the first call that needs the file creates it.
-
-        Args:
-            database_path: Where the database file lives, from the settings.
-        """
+        """Point the store at a database file."""
         self._database_path = database_path
 
     def record(self, report: Report) -> None:
-        """Write one version of one report down.
-
-        Writing the same version twice replaces it rather than adding a second copy. That is what
-        makes investigating a claim again safe — the second run writes over the first report
-        instead of leaving two that disagree — and it is how a report's review state moves on,
-        by writing the row again with a new copy of the report (FR-C.4).
-
-        Args:
-            report: The report, and which version of it this is.
-
-        Raises:
-            StorageError: The database could not be reached or written.
-        """
+        """Write one version of one report down."""
         initialise(self._database_path)
         with connect(self._database_path) as connection:
             connection.execute(
@@ -92,23 +62,7 @@ class ReportStore:
             )
 
     def get(self, report_id: str, *, version: int | None = None) -> Report | None:
-        """Read one report, by default the version in force.
-
-        Args:
-            report_id: Which report.
-            version: Which telling of it. `None` — the usual case — asks for the highest version
-                there is, which is the one a representative is deciding on. Naming one is how an
-                earlier version is read back, which is what keeps the record of how a decision was
-                reached (FR-R.13).
-
-        Returns:
-            The report, or `None` if there is no such report or no such version of it. `None` is
-            an answer about this store and never about whether the database could be read — that
-            fails instead.
-
-        Raises:
-            StorageError: The database could not be reached or read.
-        """
+        """Read one report, by default the version in force."""
         initialise(self._database_path)
         with connect(self._database_path) as connection:
             row = (
@@ -121,36 +75,14 @@ class ReportStore:
         return Report.model_validate_json(row["record"])
 
     def versions_of(self, report_id: str) -> Sequence[Report]:
-        """Every version of one report, oldest first (FR-R.13, NFR-5).
-
-        This is the record of how a decision was reached: what was first put in front of a
-        representative, what they sent back, and what came back to them.
-
-        Returns:
-            The versions, oldest first. Empty for a report that does not exist.
-
-        Raises:
-            StorageError: The database could not be reached or read.
-        """
+        """Every version of one report, oldest first (FR-R.13, NFR-5)."""
         initialise(self._database_path)
         with connect(self._database_path) as connection:
             rows = connection.execute(_SELECT_VERSIONS, (report_id,)).fetchall()
         return [Report.model_validate_json(row["record"]) for row in rows]
 
     def for_case(self, case_id: str) -> ClaimView:
-        """The claim's report, at the version in force (FR-2.9b).
-
-        A claim has at most one report, covering every damaged product on it, so this answers
-        with none or one.
-
-        Returns:
-            The claim's report. An empty list means nobody has asked about this claim yet, which
-            is an ordinary answer — a claim whose report could not be read raises instead, so the
-            two can never be mistaken for one another.
-
-        Raises:
-            StorageError: The database could not be reached or read.
-        """
+        """The claim's report, at the version in force (FR-2.9b)."""
         initialise(self._database_path)
         with connect(self._database_path) as connection:
             rows = connection.execute(_SELECT_FOR_CASE, (case_id,)).fetchall()

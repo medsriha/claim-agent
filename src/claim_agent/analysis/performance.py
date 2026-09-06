@@ -25,31 +25,19 @@ CENTS = Decimal("0.01")
 
 MINUTES_IN_AN_HOUR = Decimal("60")
 
-# The confidence bands a candidate gate may be built on. The lowest band is left out because the
-# system already refuses to recommend paying there (FR-1.15) — a rule that let claims through
-# below the level at which the rules withhold payment would be arguing with itself.
+
 GATE_CONFIDENCE_BANDS = tuple(name for name, _low, _high in CONFIDENCE_BANDS[1:])
 
 
 def share(part: int, whole: int) -> float | None:
-    """What fraction of `whole` is `part`, or `None` when there is nothing to divide.
-
-    Returning `None` rather than zero is the point of this function. Nought out of nought is not
-    nought per cent; it is a question with no answer, and every chart and tile downstream draws a
-    gap for it rather than a value.
-    """
+    """What fraction of `whole` is `part`, or `None` when there is nothing to divide."""
     if whole == 0:
         return None
     return part / whole
 
 
 def band_for(value: float, bands: Sequence[tuple[str, float, float]]) -> str | None:
-    """Which band a figure falls in, or `None` if it falls outside all of them.
-
-    The upper edge of a band is excluded so that neighbouring bands cannot both claim a figure —
-    except on the last band, where it is included, so that something the system was completely
-    sure of still has somewhere to go.
-    """
+    """Which band a figure falls in, or `None` if it falls outside all of them."""
     for position, (name, low, high) in enumerate(bands):
         is_last = position == len(bands) - 1
         if low <= value < high or (is_last and value == high):
@@ -58,11 +46,7 @@ def band_for(value: float, bands: Sequence[tuple[str, float, float]]) -> str | N
 
 
 def value_band_for(amount: Decimal | None) -> str | None:
-    """Which order-value band a claim falls in, or `None` when the order could not be read.
-
-    An order whose value is unknown is left out of the value bands rather than guessed into the
-    cheapest one. It is not the same as an order worth nothing.
-    """
+    """Which order-value band a claim falls in, or `None` when the order could not be read."""
     if amount is None:
         return None
     for name, low, high in VALUE_BANDS:
@@ -72,11 +56,7 @@ def value_band_for(amount: Decimal | None) -> str | None:
 
 
 class Tally(BaseModel):
-    """How many decisions of one kind there were, and how they broke down.
-
-    Counts only. Every rate is worked out from these by the caller, so that a rate over nothing
-    can be reported as nothing rather than as zero.
-    """
+    """How many decisions of one kind there were, and how they broke down."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -112,14 +92,7 @@ def _manual_minutes_for(stage: DecisionStage) -> int:
 
 
 def tally_of(decisions: Iterable[DecisionRecord]) -> Tally:
-    """Count a group of decisions.
-
-    The four ways a decision can go are counted so that they add up to the total exactly once
-    each: taken as it stood, taken after only the wording changed, taken after the outcome or the
-    amount changed, or sent back. A stacked chart of those four is only honest if nothing can
-    land in two of them, which is why they are decided here in one place rather than by four
-    separate filters.
-    """
+    """Count a group of decisions."""
     counts = {
         "decisions": 0,
         "direct_approvals": 0,
@@ -184,12 +157,7 @@ class Week(BaseModel):
 
 
 class ConfidenceBandStats(BaseModel):
-    """How often people agreed, among decisions the system said it was this sure about.
-
-    This is the comparison the whole screen exists for. `stated_low` and `stated_high` are what
-    the system claimed; `agreed` out of `decisions` is what actually happened. Nothing in this
-    project has ever put those two numbers side by side before.
-    """
+    """How often people agreed, among decisions the system said it was this sure about."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -236,17 +204,7 @@ class Segment(BaseModel):
 
 
 class SegmentGroup(BaseModel):
-    """One way of cutting the claims up, and what each part of it looks like.
-
-    Three cuts are reported, and they answer the same question three ways: *which claims come back
-    ready, and which need work?* Grouping by what the system recommended says whether some kinds
-    of answer are harder to get right than others; by what the order was worth says whether
-    expensive claims are harder; by how sure the system said it was says whether it knows in
-    advance which is which.
-
-    Every part is reported even when nothing fell into it, so a reader sees an untested corner
-    rather than inferring it from a missing row.
-    """
+    """One way of cutting the claims up, and what each part of it looks like."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -255,13 +213,7 @@ class SegmentGroup(BaseModel):
 
     @property
     def spread(self) -> float | None:
-        """How far apart the readiest and least ready parts are, or nothing to compare.
-
-        This is the number that says whether a cut is worth anything. A group whose parts all
-        come back ready about as often tells nobody which claims to expect trouble from; one that
-        spreads widely is a way of sorting the work before anybody starts on it. Reporting it
-        means a flat group reads as a finding rather than as bars somebody has to eyeball.
-        """
+        """How far apart the readiest and least ready parts are, or nothing to compare."""
         rates = [segment.readiness for segment in self.segments if segment.readiness is not None]
         if len(rates) < 2:
             return None
@@ -269,13 +221,7 @@ class SegmentGroup(BaseModel):
 
 
 class GateScore(BaseModel):
-    """One candidate rule, scored on how much it would cover and how often people agreed.
-
-    **Scored, never chosen, and never switched on.** FR-2.9 says a report leaves review in
-    exactly one way — a person approving it — and that no confidence level changes that. FR-3.1
-    calls the same thing a hard invariant. `meets_bar` says a rule cleared a bar we invented; it
-    does not say anybody may act on it.
-    """
+    """One candidate rule, scored on how much it would cover and how often people agreed."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -293,11 +239,7 @@ class GateScore(BaseModel):
 
 
 class Savings(BaseModel):
-    """What the time saved is worth, and what it cost to save it.
-
-    Every figure is money and every figure is a `Decimal`. The hours behind them are whole
-    minutes divided by sixty, so nothing here has ever been a floating-point number.
-    """
+    """What the time saved is worth, and what it cost to save it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -325,25 +267,14 @@ class Performance(BaseModel):
 
 
 def week_starting(moment: datetime) -> datetime:
-    """The midnight beginning the Monday of this moment's week, in UTC.
-
-    Weeks start on Monday because that is what a business week means to the people reading this,
-    and they are cut in UTC because every other time in this system is. A machine in another
-    timezone therefore buckets a decision exactly the same way, which is what stops the same data
-    producing two different charts (NFR-1).
-    """
+    """The midnight beginning the Monday of this moment's week, in UTC."""
     at_utc = moment.astimezone(UTC)
     midnight = at_utc.replace(hour=0, minute=0, second=0, microsecond=0)
     return midnight - timedelta(days=midnight.weekday())
 
 
 def _weeks_between(starts_at: datetime, ends_at: datetime) -> list[datetime]:
-    """Every week start from `starts_at` up to but not including `ends_at`.
-
-    Built from the calendar rather than from the decisions, so a week nobody decided anything in
-    still appears — as a gap. Leaving it out would quietly close the space and make a quiet
-    fortnight look like a busy one.
-    """
+    """Every week start from `starts_at` up to but not including `ends_at`."""
     weeks: list[datetime] = []
     cursor = week_starting(starts_at)
     while cursor < ends_at:
@@ -353,23 +284,14 @@ def _weeks_between(starts_at: datetime, ends_at: datetime) -> list[datetime]:
 
 
 def _median_minutes(decisions: Sequence[DecisionRecord]) -> float | None:
-    """The middle review time, or `None` when nobody reviewed anything.
-
-    The middle rather than the average: one claim that sat in somebody's queue over a weekend
-    would drag an average somewhere no real review ever was.
-    """
+    """The middle review time, or `None` when nobody reviewed anything."""
     if not decisions:
         return None
     return median(decision.rep_minutes for decision in decisions)
 
 
 def _confidence_bands(decisions: Sequence[DecisionRecord]) -> tuple[ConfidenceBandStats, ...]:
-    """Group investigated decisions by how sure the system said it was, and count agreement.
-
-    Decisions with no stated confidence are left out rather than counted as unsure. A screening
-    decision has no confidence because nothing was asked of the AI, and putting it in the bottom
-    band would invent an opinion nobody offered.
-    """
+    """Group investigated decisions by how sure the system said it was, and count agreement."""
     per_band: dict[str, list[DecisionRecord]] = {name: [] for name, _low, _high in CONFIDENCE_BANDS}
     for decision in decisions:
         if decision.stated_confidence is None:
@@ -391,11 +313,7 @@ def _confidence_bands(decisions: Sequence[DecisionRecord]) -> tuple[ConfidenceBa
 
 
 def _outcomes(decisions: Sequence[DecisionRecord]) -> tuple[OutcomeStats, ...]:
-    """Count disagreement against each of the next actions that can be proposed.
-
-    Every one is always reported, including any nobody recommended, so a reader sees what did not
-    happen rather than inferring it from a missing row.
-    """
+    """Count disagreement against each of the next actions that can be proposed."""
     stats: list[OutcomeStats] = []
     for outcome in Recommendation:
         matching = [d for d in decisions if d.recommended.outcome is outcome]
@@ -423,21 +341,7 @@ def _by(
     investigated: Sequence[DecisionRecord],
     of: Callable[[DecisionRecord], str | None],
 ) -> SegmentGroup:
-    """Cut the claims by one property, readiest part first.
-
-    Ordered by how ready each part came back rather than by name or by size, so the group reads
-    as a run from the claims that look after themselves down to the ones that do not. That is the
-    only thing anybody is trying to see here, and leaving it to be eyeballed off unordered bars is
-    what makes a chart like this hard to read. How many claims each part holds is printed beside
-    it, so a small part cannot pass itself off as an important one.
-
-    These properties have no natural order of their own — one carrier is not "more" than another —
-    which is what makes sorting them by the measure the right thing to do. A property that *is*
-    ordered, such as how sure the system said it was, keeps its own order instead.
-
-    Claims the property is unknown for are left out rather than gathered into a part of their own,
-    which would be a group named after a gap in the data.
-    """
+    """Cut the claims by one property, readiest part first."""
     parts: dict[str, list[DecisionRecord]] = {}
     for decision in investigated:
         value = of(decision)
@@ -449,22 +353,7 @@ def _by(
 
 
 def _readiness(investigated: Sequence[DecisionRecord]) -> tuple[SegmentGroup, ...]:
-    """Cut the investigated claims four ways, and count how ready each part came back.
-
-    **Three of the four are known before anybody looks at the claim** — what the merchant said
-    was damaged, what they said caused it, and who carried the parcel. That is deliberate: a cut
-    by something the investigation produced, such as what it ended up recommending, can only
-    describe work already done. These say something about work about to arrive.
-
-    The fourth, how sure the system said it was, is the investigation's own opinion. It is here
-    because it is the strongest signal there is, and because comparing it with the other three is
-    the whole question — if it tracks them, it is reading the claim; if it beats them, it is
-    seeing something they do not.
-
-    Only investigated claims, deliberately. A claim the quick checks stopped is decided by fixed
-    rules and almost always accepted, so folding those in would put a large, easy population into
-    every cut and flatten the differences this is meant to show.
-    """
+    """Cut the investigated claims four ways, and count how ready each part came back."""
     return (
         _by("What the merchant reported", investigated, lambda one: one.defect_type),
         _by("What they said caused it", investigated, lambda one: one.damage_type),
@@ -488,12 +377,7 @@ def _readiness(investigated: Sequence[DecisionRecord]) -> tuple[SegmentGroup, ..
 
 
 def _gates(investigated: Sequence[DecisionRecord]) -> tuple[GateScore, ...]:
-    """Score every candidate rule: an order-value band crossed with a confidence band.
-
-    Coverage is measured against every investigated decision, including those whose order value
-    could not be read, because coverage answers "how much of the work would this rule take on"
-    and work nobody could price is still work.
-    """
+    """Score every candidate rule: an order-value band crossed with a confidence band."""
     total = len(investigated)
     scores: list[GateScore] = []
     for value_name, _low, _high in VALUE_BANDS:
@@ -525,15 +409,7 @@ def _gates(investigated: Sequence[DecisionRecord]) -> tuple[GateScore, ...]:
 
 
 def _savings(totals: StageTallies) -> Savings:
-    """Turn minutes saved into money, and take off what the AI cost.
-
-    The arithmetic is deliberately dull and entirely in `Decimal`: minutes saved, divided by
-    sixty, multiplied by an hourly rate, less a cost for each claim the AI actually investigated.
-    A claim the quick checks stopped is charged nothing, because no AI was asked about it.
-
-    Both the rate and the per-claim cost are figures we chose. They travel to the screen with
-    their own explanation so that a reader can see what the total rests on.
-    """
+    """Turn minutes saved into money, and take off what the AI cost."""
     minutes_saved = totals.overall.manual_minutes - totals.overall.rep_minutes
     hours_saved = (Decimal(minutes_saved) / MINUTES_IN_AN_HOUR).quantize(CENTS, ROUND_HALF_UP)
     gross = (hours_saved * REP_HOURLY_RATE_USD).quantize(CENTS, ROUND_HALF_UP)
@@ -551,21 +427,7 @@ def _savings(totals: StageTallies) -> Savings:
 def summarise(
     decisions: Sequence[DecisionRecord], starts_at: datetime, ends_at: datetime
 ) -> Performance:
-    """Work out every figure the analysis screen shows, for one stretch of time.
-
-    Args:
-        decisions: Every decision taken in the window, in any order. Decisions outside the window
-            are ignored rather than rejected, so a caller that reads a little too widely still
-            gets a correct answer.
-        starts_at: The first moment the window covers, in UTC.
-        ends_at: The first moment it does not, in UTC.
-
-    Returns:
-        The counts, the weekly series, the confidence comparison, the candidate rules and the
-        savings. Everything is present even when nothing was decided: the weeks come from the
-        calendar and the bands and outcomes from their own definitions, so an empty period is an
-        empty chart rather than a missing one.
-    """
+    """Work out every figure the analysis screen shows, for one stretch of time."""
     inside = [d for d in decisions if starts_at <= d.decided_at < ends_at]
     by_week: dict[datetime, list[DecisionRecord]] = {}
     for decision in inside:

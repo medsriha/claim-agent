@@ -1,19 +1,3 @@
-/**
- * The shell every chart on the analysis screen is drawn inside.
- *
- * It owns the parts that must be the same everywhere: the heading, the switch between the chart
- * and the same figures as a table, the legend, the box the drawing is measured into, the tooltip,
- * and the line of text under the plot that says what is picked out.
- *
- * Two of those are not decoration. **The table is the same figures without the picture**, so no
- * value on this screen is only reachable by hovering — which also covers the reader for whom a
- * pale fill on white is hard to see. And **the readout is the tooltip in words**, updated when
- * the keyboard moves rather than when the pointer does, because a spoken region driven by mouse
- * movement is unusable and a pointer user can already see the tooltip.
- *
- * The drawing is never scaled: the box is measured and the picture drawn at exactly that size,
- * so the type inside it is the size the stylesheet asked for. See `useChartWidth`.
- */
 import { useId, useState } from "react";
 
 import { PLOT, scaleY } from "./plot";
@@ -22,26 +6,22 @@ import { useChartTooltip } from "./useChartTooltip";
 import type { Active } from "./useChartTooltip";
 import { useChartWidth } from "./useChartWidth";
 
-/** One entry in a chart's key: a coloured mark and the word beside it. */
 export interface LegendItem {
   readonly name: string;
   readonly token: string;
 }
 
-/** One row of a tooltip: a coloured mark, what it is, and the figure. */
 export interface TipRow {
   readonly token: string | null;
   readonly name: string;
   readonly value: string;
 }
 
-/** The same figures as a table, which is what stops a value being reachable only by hovering. */
 export interface TableTwin {
   readonly columns: readonly string[];
   readonly rows: readonly (readonly string[])[];
 }
 
-/** What a chart is given to draw its marks into. */
 export interface Surface {
   readonly plot: Plot;
   readonly active: Active | null;
@@ -51,29 +31,24 @@ export interface Surface {
 
 interface ChartFrameProps {
   title: string;
-  /** The service's sentence about the whole chart, shown when nothing is picked out. */
+
   summary: string;
-  /** Whether to show the static summary below the chart. Interactive point readouts remain. */
+
   showSummary?: boolean;
-  /** Fixed, and **including the band the x-axis labels sit in**, so no card grows a scrollbar. */
+
   height: number;
-  /**
-   * How much room to leave under the plot for the labels.
-   *
-   * A chart writing two lines under each position needs more than one writing a single date, and
-   * getting this wrong does not clip the text — it lets the marks run over it.
-   */
+
   axisBand: number;
-  /** How many positions there are along the chart, for the arrow keys and the nearest-point find. */
+
   count: number;
-  /** Empty for a single series: there is one colour, and the title already says what it is. */
+
   legend: readonly LegendItem[];
   gridlines: readonly { at: number; label: string }[];
   domain: { minimum: number; maximum: number };
   table: TableTwin;
-  /** Where along the plot the position at `index` sits, so the tooltip can find it. */
+
   xFor: (plot: Plot, index: number) => number;
-  /** What the tooltip says about a position. */
+
   tipFor: (index: number) => { heading: string; rows: readonly TipRow[] };
   children: (surface: Surface) => React.ReactNode;
 }
@@ -149,7 +124,6 @@ export function ChartFrame({
               </svg>
             )}
 
-            {/* One focus stop for the whole chart. The arrow keys walk the points. */}
             <div
               className="chart-focus"
               tabIndex={0}
@@ -196,7 +170,6 @@ export function ChartFrame({
   );
 }
 
-/** Keep the tooltip inside the card by flipping it past the halfway point. */
 function tipPosition(x: number, width: number): React.CSSProperties {
   return x > width / 2
     ? { right: `${String(Math.round(width - x))}px` }

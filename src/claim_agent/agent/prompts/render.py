@@ -28,23 +28,15 @@ from claim_agent.domain.reimbursement import AmountDerivation
 from claim_agent.preflight.models import ClaimContext
 from claim_agent.storage.precedent_store import PrecedentSet, RetrievedPrecedent
 
-# --- Marking text we did not write ------------------------------------------
-
 _UNTRUSTED_LOOKALIKE = compile_pattern(r"<(\s*/?\s*untrusted)", IGNORECASE)
 """Anything in somebody else's text that could pass for one of our own markers."""
 
 
 def quote_untrusted(label: str, text: str) -> str:
-    """Wrap text from outside ShipBob in a marked block, so it reads as evidence, not orders.
-
-    A look-alike closing marker inside the text is escaped, so the block cannot be closed
-    from within. Empty text is wrapped like any other: "they wrote nothing" is a fact.
-    """
+    """Wrap text from outside ShipBob in a marked block, so it reads as evidence, not orders."""
     safe = _UNTRUSTED_LOOKALIKE.sub(r"&lt;\1", text)
     return f'<untrusted source="{label}">\n{safe}\n</untrusted>'
 
-
-# --- Asking the provider to keep the stable prefix (NFR-8) --------------------
 
 _KEEP_WARM: Final = {"type": "ephemeral"}
 
@@ -73,20 +65,13 @@ def section(heading: str, body: str) -> str:
 
 
 class EarlierExchange(BaseModel):
-    """One earlier round of a report's conversation, as the prompt needs it (FR-R.12).
-
-    Deliberately not the shape the report stores, so a change to one cannot silently
-    reword the other.
-    """
+    """One earlier round of a report's conversation, as the prompt needs it (FR-R.12)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     feedback: str
     reply: str
     changed: tuple[str, ...] = ()
-
-
-# --- The claim and its records ----------------------------------------------
 
 
 def render_case(case: Case, context: ClaimContext) -> str:
@@ -247,9 +232,6 @@ def _finding(finding: EvidenceFinding) -> str:
     return f"- {finding.kind.value}: {finding.state.value}{where} — {finding.observed}{problem}"
 
 
-# --- The report as it stands, and the conversation about it -----------------
-
-
 def render_report_as_it_stands(
     *,
     recommendation: Recommendation,
@@ -391,15 +373,8 @@ def render_feedback(feedback: str) -> str:
     return section("WHAT THE REPRESENTATIVE HAS JUST SAID", body)
 
 
-# --- Past claims and past corrections ---------------------------------------
-
-
 def render_precedent(precedent: PrecedentSet | None) -> list[str]:
-    """Past claims most like this one. Three answers, said three ways (FR-S.6, FR-S.13).
-
-    No section when nobody looked; a plain sentence when the store held nothing alike; its own
-    sentence when the store could not be read, which must never read as "none found".
-    """
+    """Past claims most like this one. Three answers, said three ways (FR-S.6, FR-S.13)."""
     if precedent is None:
         return []
     if not precedent.was_read:

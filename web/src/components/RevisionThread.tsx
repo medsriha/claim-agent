@@ -1,21 +1,6 @@
-/**
- * The conversation between a representative and the agent about one report (FR-R.13).
- *
- * Drawn as a chat, because that is what it is: the representative types something, the agent
- * answers, and it goes round as many times as they like. Their messages sit on the right,
- * the agent's on the left, oldest first.
- *
- * Every sentence in it comes from the service. The screen adds who said what and nothing
- * else — it never summarises a round, reorders one, or offers an opinion on whether the
- * answer was any good.
- *
- * What the agent changed and what it left alone hang under its message as a short aside,
- * because they are supporting detail for a reply rather than the reply itself.
- */
 import type { RevisionTurn } from "../api/types";
 import { PAGE_WORDS } from "../chat/pageWords";
 
-/** Every round so far, or nothing at all for a report nobody has written back about. */
 export function RevisionThread({
   revisions,
 }: {
@@ -50,7 +35,6 @@ export function RevisionThread({
   );
 }
 
-/** A short list under the agent's message, drawn only when the service sent one. */
 function Listed({
   heading,
   items,

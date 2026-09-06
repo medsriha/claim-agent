@@ -21,7 +21,6 @@ WRONG_ITEM_ENTIRELY = "The wrong item was sent to the customer. Nothing was brok
 
 
 def a_record(**overrides: Any) -> PrecedentRecord:
-    """One past claim, so a test writes down only the part it is about."""
     fields: dict[str, Any] = {
         "precedent_id": "PREC-CASE-0900-L01",
         "case_id": "CASE-0900",
@@ -50,7 +49,6 @@ def a_record(**overrides: Any) -> PrecedentRecord:
 
 
 def a_query(**overrides: Any) -> PrecedentQuery:
-    """The claim in hand, defaulting to something like the record above."""
     fields: dict[str, Any] = {
         "merchant_account": CRUSHED_IN_A_BAD_BOX,
         "product_name": "Liposomal Tripeptide Collagen",
@@ -62,22 +60,16 @@ def a_query(**overrides: Any) -> PrecedentQuery:
 
 
 def a_store(tmp_path: Path) -> PrecedentStore:
-    """A store on a throwaway database file."""
     return PrecedentStore(tmp_path / "claims.db")
 
 
 def search(store: PrecedentStore, query: PrecedentQuery | None = None, **kwargs: Any) -> Any:
-    """Run a retrieval with the thresholds a test does not care about filled in."""
     options: dict[str, Any] = {"limit": 5, "minimum_similarity": 0.35}
     options.update(kwargs)
     return store.similar_to(query or a_query(), **options)
 
 
-# --- Writing a claim down (FR-S.1) -------------------------------------------
-
-
 def test_a_captured_claim_comes_back_exactly_as_it_was_written(tmp_path: Path) -> None:
-    """FR-S.1: what an investigation concluded has to survive the round trip unchanged."""
     store = a_store(tmp_path)
     written = a_record()
 
@@ -87,7 +79,6 @@ def test_a_captured_claim_comes_back_exactly_as_it_was_written(tmp_path: Path) -
 
 
 def test_investigating_the_same_line_again_replaces_its_record(tmp_path: Path) -> None:
-    """FR-S.1: one account of a claim line, not two that disagree with each other."""
     store = a_store(tmp_path)
     store.record(a_record(outcome=Recommendation.REQUEST_INFO))
 
@@ -100,15 +91,10 @@ def test_investigating_the_same_line_again_replaces_its_record(tmp_path: Path) -
 
 
 def test_a_record_nobody_wrote_reads_back_as_nothing(tmp_path: Path) -> None:
-    """FR-S.13: an absent record is an ordinary answer, not a failure."""
     assert a_store(tmp_path).get("PREC-NOTHING") is None
 
 
-# --- What a representative said about the decision (FR-S.3) ------------------
-
-
 def test_the_note_a_rep_left_is_kept_with_the_record(tmp_path: Path) -> None:
-    """FR-S.3: why a claim closed the way it did is what a later claim learns from."""
     store = a_store(tmp_path)
     store.record(a_record(rep_note="Paid the ampoule duo only; the collagen was undamaged."))
 
@@ -120,7 +106,6 @@ def test_the_note_a_rep_left_is_kept_with_the_record(tmp_path: Path) -> None:
 def test_the_more_recently_closed_of_two_equally_alike_records_comes_first(
     tmp_path: Path,
 ) -> None:
-    """FR-S.5, NFR-1: recency settles a tie, and every tie is settled the same way twice."""
     store = a_store(tmp_path)
     store.record(a_record(precedent_id="PREC-OLD", case_id="CASE-OLD", closed_at=WRITTEN_AT))
     store.record(
@@ -134,11 +119,7 @@ def test_the_more_recently_closed_of_two_equally_alike_records_comes_first(
     assert search(store).retrieved[0].record.case_id == "CASE-NEW"
 
 
-# --- Finding claims like this one (FR-S.4, FR-S.5) ---------------------------
-
-
 def test_a_similar_past_claim_is_found(tmp_path: Path) -> None:
-    """FR-S.5: the whole point — a new claim sees how a claim like it was handled."""
     store = a_store(tmp_path)
     store.record(a_record())
 
@@ -151,7 +132,6 @@ def test_a_similar_past_claim_is_found(tmp_path: Path) -> None:
 def test_a_claim_about_something_else_entirely_is_not_offered_as_precedent(
     tmp_path: Path,
 ) -> None:
-    """FR-S.5: a record that is not close enough does not come back at all."""
     store = a_store(tmp_path)
     store.record(
         a_record(
@@ -165,7 +145,6 @@ def test_a_claim_about_something_else_entirely_is_not_offered_as_precedent(
 
 
 def test_only_as_many_records_as_asked_for_come_back(tmp_path: Path) -> None:
-    """FR-S.5: a long list buries the closest match, so the count is a policy value."""
     store = a_store(tmp_path)
     for index in range(6):
         store.record(
@@ -178,7 +157,6 @@ def test_only_as_many_records_as_asked_for_come_back(tmp_path: Path) -> None:
 
 
 def test_the_most_alike_record_comes_first(tmp_path: Path) -> None:
-    """FR-S.5: ordering is by resemblance, so the best guide is the one read first."""
     store = a_store(tmp_path)
     store.record(
         a_record(
@@ -197,7 +175,6 @@ def test_the_most_alike_record_comes_first(tmp_path: Path) -> None:
 def test_two_searches_of_the_same_store_return_the_same_records_in_the_same_order(
     tmp_path: Path,
 ) -> None:
-    """NFR-1: retrieval must not be a source of run-to-run variance."""
     store = a_store(tmp_path)
     for index in range(4):
         store.record(
@@ -212,7 +189,6 @@ def test_two_searches_of_the_same_store_return_the_same_records_in_the_same_orde
 
 
 def test_a_claim_never_finds_itself(tmp_path: Path) -> None:
-    """FR-S.5: a re-run must not rate its own earlier record its best precedent."""
     store = a_store(tmp_path)
     store.record(a_record())
 
@@ -222,7 +198,6 @@ def test_a_claim_never_finds_itself(tmp_path: Path) -> None:
 def test_a_search_reports_which_merchant_a_precedent_came_from_but_never_matches_on_it(
     tmp_path: Path,
 ) -> None:
-    """FR-S.4: a claim's closest precedent usually belongs to a different merchant."""
     store = a_store(tmp_path)
     store.record(a_record(user_id="111111"))
 
@@ -231,11 +206,7 @@ def test_a_search_reports_which_merchant_a_precedent_came_from_but_never_matches
     assert result.record.user_id == "111111"
 
 
-# --- Nothing found, and nothing readable, are different (FR-S.13) ------------
-
-
 def test_an_empty_store_reports_finding_nothing_rather_than_failing(tmp_path: Path) -> None:
-    """FR-S.13: the normal answer for the first claim ever filed."""
     result = search(a_store(tmp_path))
 
     assert result.retrieved == ()
@@ -246,7 +217,6 @@ def test_an_empty_store_reports_finding_nothing_rather_than_failing(tmp_path: Pa
 def test_a_store_that_cannot_be_read_says_so_instead_of_saying_there_is_nothing(
     tmp_path: Path,
 ) -> None:
-    """FR-S.13: telling a rep there is no history when nobody looked is worse than silence."""
     not_a_database = tmp_path / "claims.db"
     not_a_database.write_text("this is not a database at all")
 
@@ -258,26 +228,20 @@ def test_a_store_that_cannot_be_read_says_so_instead_of_saying_there_is_nothing(
 
 
 def test_a_broken_store_never_stops_the_claim(tmp_path: Path) -> None:
-    """FR-S.13, NFR-4: retrieval failing must not fail the investigation."""
     not_a_database = tmp_path / "claims.db"
     not_a_database.write_text("this is not a database at all")
 
-    search(PrecedentStore(not_a_database))  # raises nothing
+    search(PrecedentStore(not_a_database))
 
 
 def test_a_claim_with_nothing_to_search_on_is_not_a_failure(tmp_path: Path) -> None:
-    """FR-S.13: no words to match is an empty answer, not a broken store."""
     result = search(a_store(tmp_path), a_query(merchant_account=None, product_name="1234"))
 
     assert result.retrieved == ()
     assert result.was_read is True
 
 
-# --- Taking a bad precedent back out (FR-S.14) -------------------------------
-
-
 def test_a_withdrawn_record_is_never_offered_as_precedent_again(tmp_path: Path) -> None:
-    """FR-S.14: an approval can be wrong, and once it is precedent it is repeated."""
     store = a_store(tmp_path)
     store.record(a_record())
 
@@ -287,7 +251,6 @@ def test_a_withdrawn_record_is_never_offered_as_precedent_again(tmp_path: Path) 
 
 
 def test_withdrawing_a_record_does_not_destroy_it(tmp_path: Path) -> None:
-    """FR-S.14, NFR-5: the claim's own audit record has to survive being withdrawn."""
     store = a_store(tmp_path)
     store.record(a_record())
 
@@ -299,14 +262,12 @@ def test_withdrawing_a_record_does_not_destroy_it(tmp_path: Path) -> None:
 
 
 def test_withdrawing_a_record_nobody_wrote_says_so_rather_than_failing(tmp_path: Path) -> None:
-    """FR-S.14: a missing record is not an error here."""
     assert a_store(tmp_path).withdraw("PREC-NOTHING") is False
 
 
 def test_a_search_word_that_is_also_a_search_operator_is_treated_as_a_word(
     tmp_path: Path,
 ) -> None:
-    """FR-S.5: a merchant's wording must never be read as an instruction to the database."""
     store = a_store(tmp_path)
     store.record(a_record(merchant_account="The parcel arrived damaged AND the box was NOT sealed"))
 
@@ -318,14 +279,6 @@ def test_a_search_word_that_is_also_a_search_operator_is_treated_as_a_word(
 def test_a_record_with_no_words_worth_searching_is_stored_but_never_found(
     tmp_path: Path,
 ) -> None:
-    """FR-S.4: nothing is indexed on identifiers, so a record made only of them is unfindable.
-
-    A claim with no description, for a product named in digits alone, has nothing that
-    could make it resemble anything. It is still written down — a representative can
-    open it, and it is still part of the audit record — but no search will surface it.
-    Storing it and quietly failing to index it is the honest outcome; refusing to store
-    it would lose the claim.
-    """
     store = a_store(tmp_path)
     store.record(a_record(merchant_account=None, product_name="1234"))
 
@@ -334,7 +287,6 @@ def test_a_record_with_no_words_worth_searching_is_stored_but_never_found(
 
 
 def test_the_store_is_created_on_first_use_without_anyone_setting_it_up(tmp_path: Path) -> None:
-    """NFR-6: the system must be demonstrable with nothing installed and nothing prepared."""
     database = tmp_path / "nested" / "claims.db"
 
     PrecedentStore(database).record(a_record())

@@ -8,11 +8,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict
 
 _MAX_DATE_TEXT: Final = 200
-"""How much text is scanned for a date.
-
-Text read off a photograph is untrusted and could be any length. A date is never two
-hundred characters long, and cutting the rest off costs nothing.
-"""
+"""How much text is scanned for a date."""
 
 _MONTHS: Final = {
     name: number
@@ -28,59 +24,32 @@ _WEEKDAYS: Final = {
 }
 """Weekday names by their first three letters, numbered the way Python numbers them."""
 
-# `2026-02-11`. Year first, so there is nothing to settle.
+
 _ISO_PATTERN: Final = re.compile(r"\b(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})\b")
 
-# `February 22, 2026` and `Feb 22 2026` — the shape ShipBob's own case descriptions use.
+
 _SPELLED_PATTERN: Final = re.compile(
     r"\b(?P<month>[A-Za-z]{3,9})\.?\s+(?P<day>\d{1,2})(?:st|nd|rd|th)?,?\s+(?P<year>\d{4})\b"
 )
 
-# `11/02/2026` and `11-02-2026`. The shape that can mean two different days.
+
 _SLASHED_PATTERN: Final = re.compile(
     r"\b(?P<first>\d{1,2})[/-](?P<second>\d{1,2})[/-](?P<year>\d{4})\b"
 )
 
-# A weekday written beside the date, as in `Wed 11/02/2026`. Free evidence.
+
 _WEEKDAY_PATTERN: Final = re.compile(r"\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b", re.IGNORECASE)
 
 
 def whole_days_between(earlier: datetime, later: datetime) -> int:
-    """Count whole calendar days from one moment to the other, on the UTC clock.
-
-    This is how long a merchant waited before filing: delivery goes in, the
-    moment the case was opened goes in, and the number that comes out decides
-    whether the claim is too old to reimburse (FR-0.2).
-
-    Calendar days, not elapsed twenty-four hour stretches. A parcel delivered at
-    23:59 and a claim filed two minutes later, after midnight, counts as one day
-    apart, because that is how a person reading the two dates would count it.
-    Both moments are moved to UTC first, so a claim is counted the same way
-    wherever the two dates were originally written (FR-0.6).
-
-    The result is negative when `later` is in fact the earlier of the two — a
-    case created before its own delivery date, which does happen in real data.
-    That is handed back as it is rather than hidden, because deciding what a
-    negative age means is a judgement, not arithmetic.
-
-    Raises `ValueError` if either moment arrives without a timezone. A time with
-    no timezone would be read as the clock of whichever machine happens to run
-    this, so the same case could be judged differently in two places, and the
-    promise that the pre-flight screen is deterministic would quietly break
-    (FR-0.6).
-    """
+    """Count whole calendar days from one moment to the other, on the UTC clock."""
     if earlier.utcoffset() is None or later.utcoffset() is None:
         raise ValueError("Both moments need a timezone before their days apart can be counted.")
     return (later.astimezone(UTC).date() - earlier.astimezone(UTC).date()).days
 
 
 class DateReadingKind(StrEnum):
-    """How a written date was laid out, which is what decides whether it is ambiguous.
-
-    `ISO` and `SPELLED_MONTH` can only be read one way. `SLASHED` is the troublesome one:
-    `11/02/2026` is 11 February to most of the world and 2 November in the United States,
-    and nothing inside the text itself settles which.
-    """
+    """How a written date was laid out, which is what decides whether it is ambiguous."""
 
     ISO = "iso"
     SPELLED_MONTH = "spelled_month"
@@ -89,23 +58,7 @@ class DateReadingKind(StrEnum):
 
 
 class WrittenDate(BaseModel):
-    """A date read off a document, with every reading it could honestly have.
-
-    Attributes:
-        text: What was read, exactly as it appeared.
-        kind: How it was laid out.
-        preferred: The reading the region asks for, or the only possible one. `None` when
-            the text is not a date at all.
-        alternative: The other reading of an ambiguous date. **Never thrown away**, even
-            though `preferred` is the one a caller will usually take — a caller that
-            silently took one reading of `11/02/2026` and never saw the other is the bug
-            this exists to prevent.
-        is_ambiguous: True when both readings are real dates and nothing ruled one out.
-        ruled_out_by_weekday: True when the text named a weekday and that weekday
-            eliminated one of the two readings. This is the happy case: it settles an
-            ambiguous date without anybody guessing.
-        reason: One plain sentence a representative can agree or disagree with.
-    """
+    """A date read off a document, with every reading it could honestly have."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -119,42 +72,7 @@ class WrittenDate(BaseModel):
 
 
 def read_written_date(text: str, *, region: str) -> WrittenDate:
-    """Read a date off a document, keeping every reading it could honestly have.
-
-    Documents a merchant photographs write dates however their software felt like it. Most
-    of those are unambiguous and this simply reads them. One shape is not: a date written
-    with slashes or dashes where both halves are twelve or under can be read two ways, and
-    the two can be months apart.
-
-    **This is not a theoretical problem.** One sample claim's evidence carries the email
-    header `Wed 11/02/2026`. Read day-first that is 11 February 2026, which agrees with
-    ShipBob's own delivery date and with a parcel that went by Royal Mail. Read month-first
-    it is 2 November 2026 — a date in the future. The age limit on a claim (FR-0.2) is
-    measured from a date like this one, so which reading you take decides whether the claim
-    is inside it.
-
-    Three things happen, in order:
-
-    1. **A named weekday settles it for free.** `Wed` is a fact the document itself
-       supplies. 11 February 2026 was a Wednesday and 2 November 2026 was a Monday, so the
-       weekday eliminates one reading without anybody having to guess. When a weekday is
-       present and matches exactly one reading, the date is no longer ambiguous.
-    2. **Otherwise the region breaks the tie, and both readings are kept.** The region's
-       reading becomes `preferred`, and the other stays on `alternative` where a caller
-       cannot miss it.
-    3. **A date that can only be read one way is answered plainly**, with nothing on
-       `alternative` and `is_ambiguous` false.
-
-    Args:
-        text: The date as the document wrote it, optionally with a weekday in front.
-        region: `"GB"` to read the day first, anything else to read the month first. This
-            comes from `policy.default_date_region`, so the default is a setting rather
-            than a number buried here (FR-0.7, NFR-7).
-
-    Returns:
-        Every reading the text honestly supports. Text that is not a date comes back saying
-        so rather than raising: most text on a document is not a date (NFR-4).
-    """
+    """Read a date off a document, keeping every reading it could honestly have."""
     tidied = " ".join(text[:_MAX_DATE_TEXT].split())
     if not tidied:
         return WrittenDate(
@@ -190,10 +108,7 @@ def _read_iso(text: str) -> WrittenDate | None:
 
 
 def _read_spelled_month(text: str) -> WrittenDate | None:
-    """Read `February 22, 2026`, the shape ShipBob's own case descriptions use.
-
-    A spelled-out month cannot be confused with a day, so there is nothing to settle.
-    """
+    """Read `February 22, 2026`, the shape ShipBob's own case descriptions use."""
     found = _SPELLED_PATTERN.search(text)
     if found is None:
         return None
@@ -221,9 +136,6 @@ def _read_slashed(text: str, *, region: str) -> WrittenDate | None:
     day_first = _date_or_none(year, second, first)
     month_first = _date_or_none(year, first, second)
 
-    # One half over twelve leaves only one arrangement that is a real date, which is what
-    # makes such a date unambiguous. Written as two separate checks rather than one so the
-    # reader — and the type checker — can see that both readings survive past here.
     if day_first is not None and month_first is None:
         return _the_only_reading(text, found[0], day_first)
     if month_first is not None and day_first is None:
@@ -280,21 +192,13 @@ def _the_only_reading(text: str, written: str, only: date) -> WrittenDate:
 
 
 def _weekday_in(text: str) -> int | None:
-    """The weekday named in the text, as Monday-is-zero, or `None` if none is named.
-
-    A weekday on a document is a free fact: it was printed by the system that knew the real
-    date, so it can eliminate a reading that nothing else could.
-    """
+    """The weekday named in the text, as Monday-is-zero, or `None` if none is named."""
     found = _WEEKDAY_PATTERN.search(text)
     return None if found is None else _WEEKDAYS[found[1][:3].lower()]
 
 
 def _date_or_none(year: int, month: int, day: int) -> date | None:
-    """Build a date, answering `None` for an arrangement that is not a real one.
-
-    `None` is how a month of 13 or a 31st of February is rejected, which is exactly what
-    makes a date with a number over twelve in it unambiguous.
-    """
+    """Build a date, answering `None` for an arrangement that is not a real one."""
     try:
         return date(year, month, day)
     except ValueError:
